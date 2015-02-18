@@ -73,7 +73,7 @@ class ScriptRunner(DBApp):
         extract.get_target_boundary(bbox)
         extract.extract()
 
-    def set_login(self, passwork=None):
+    def set_login(self, password=None):
         op = self.options
         self.login = Login(host=op.host,
                            port=op.port,
