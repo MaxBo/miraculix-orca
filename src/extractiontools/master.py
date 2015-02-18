@@ -4,6 +4,7 @@
 from argparse import ArgumentParser
 from datetime import datetime
 import subprocess
+import sys
 
 from extractiontools.ausschnitt import BBox, ExtractMeta, logger
 from extractiontools.connection import Connection, DBApp
@@ -31,6 +32,18 @@ class ScriptRunner(DBApp):
     """
     def __init__(self, options):
         self.options = options
+        self.set_pg_path()
+
+    def get_os(self):
+        """
+        determine if run from linux or windows
+        """
+    def set_pg_path(self):
+        """"""
+        if sys.platform.startswith('win'):
+            self.SHELL = False
+        else:
+            self.SHELL = True
 
     def run(self):
         """
@@ -128,7 +141,7 @@ script {name} finished at {time} with returncode {ret}'''
                 self.run_query(started_sql, values={'sc': row.scriptcode,
                                                     'time': starttime})
                 self.conn.commit()
-                pipe = subprocess.Popen(command)
+                pipe = subprocess.Popen(command, shell=self.SHELL)
                 ret = pipe.wait()
 
                 endtime = datetime.now()
