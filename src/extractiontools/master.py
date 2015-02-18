@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 from extractiontools.ausschnitt import BBox, ExtractMeta, logger
-from extractiontools.connection import Connection, DBApp
+from extractiontools.connection import Connection, DBApp, Login
 
 
 class ScriptError(BaseException):
@@ -49,6 +49,7 @@ class ScriptRunner(DBApp):
         """
         run the scripts
         """
+        self.set_login()
         if self.options.recreate_db:
             self.create_db()
         self.choose_scripts()
@@ -72,7 +73,13 @@ class ScriptRunner(DBApp):
         extract.get_target_boundary(bbox)
         extract.extract()
 
-        self.login = extract.login1
+    def set_login(self, passwork=None):
+        op = self.options
+        self.login = Login(host=op.host,
+                           port=op.port,
+                           user=op.user,
+                           password=password,
+                           db=op.destination_db)
 
     def choose_scripts(self):
         """
