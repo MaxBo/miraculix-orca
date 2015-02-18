@@ -3,7 +3,7 @@
 
 from argparse import ArgumentParser
 
-from extractiontools.build_network import BuildNetwork
+from extractiontools.build_network_car import BuildNetwork
 
 class BuildNetworkWalkCycle(BuildNetwork):
     """
