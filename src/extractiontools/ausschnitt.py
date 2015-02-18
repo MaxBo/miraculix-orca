@@ -447,7 +447,7 @@ SELECT * FROM {schema}.dependencies;
         sql = '''
 UPDATE {temp}.scripts
 SET started=False, finished=False, todo=False;
-        '''
+        '''.format(temp=self.temp)
         cursor.execute(sql)
 
 
