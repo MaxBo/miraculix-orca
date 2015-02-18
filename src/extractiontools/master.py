@@ -18,7 +18,7 @@ class ScriptError(BaseException):
 # neue DB anlegen
 # bbox anlegen
 # metadaten-Tabelle kopieren
-# die auszuführenden auf selected setzen
+# die auszuführenden auf todo setzen
 # gehe die Metadaten-Tabelle durch,
 # checke dependencies und setze diese ggf. auch auf aktiv
 # führe alle scripte der Reihe nach aus
@@ -49,7 +49,8 @@ class ScriptRunner(DBApp):
         """
         run the scripts
         """
-        self.create_db()
+        if self.options.recreate_db:
+            self.create_db()
         self.choose_scripts()
         self.run_scripts()
 
@@ -80,12 +81,12 @@ class ScriptRunner(DBApp):
         with Connection(login=self.login) as conn:
             self.conn = conn
             sql = '''
-UPDATE meta.scripts SET selected = False;
+UPDATE meta.scripts SET todo = False;
             '''
             self.run_query(sql)
 
             sql = '''
-UPDATE meta.scripts SET selected = True WHERE scriptcode = %(sc)s
+UPDATE meta.scripts SET todo = True WHERE scriptcode = %(sc)s
             '''
             cursor = self.conn.cursor()
             for script in self.options.scripts:
@@ -94,12 +95,12 @@ UPDATE meta.scripts SET selected = True WHERE scriptcode = %(sc)s
 
     def run_scripts(self):
         """
-        go through the scripts table and run the selected scripts
+        go through the scripts table and run the scripts to be done
         """
         sql = """
 SELECT id, scriptcode, scriptname, parameter
 FROM meta.scripts
-WHERE selected
+WHERE todo
 ORDER BY id
         """
         started_sql = """
@@ -110,7 +111,7 @@ WHERE scriptcode = %(sc)s;
 
         finished_sql = """
 UPDATE meta.scripts
-SET finished = True, endtime = %(time)s
+SET finished = True, endtime = %(time)s, todo = False
 WHERE scriptcode = %(sc)s;
             """
 
@@ -157,27 +158,6 @@ script {name} finished at {time} with returncode {ret}'''
                 logger.info(msg_end.format(name=row.scriptname,
                                            time=endtime,
                                            ret=ret))
-
-
-
-
-def test():
-    befehl = 'python ausschnitt.py -n {name} --top {top} --bottom {bottom} --srid {srid}'
-
-    class Options(object):
-        pass
-
-    options = Options
-    options.name = 'mvv'
-    options.bottom = 53.2
-    options.top = 99.9
-
-    options.srid = 31467
-    options.run_frnetz = False
-    options.run_kfznetz = True
-    befehl.format(options.__dict__)
-    befehl.format(**options.__dict__)
-    'python ausschnitt.py -n mvv --top 99.9 --bottom 53.2 --srid 31467'
 
 
 if __name__ == '__main__':
@@ -236,6 +216,9 @@ if __name__ == '__main__':
                         nargs='+',
                         dest="scripts")
 
+    parser.add_argument('--recreate', action="store_true",
+                       help="Erzeuge Zieldatenbank neu",
+                       dest="recreate_db")
 
 
 

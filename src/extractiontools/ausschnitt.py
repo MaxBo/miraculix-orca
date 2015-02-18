@@ -318,13 +318,14 @@ CREATE OR REPLACE FUNCTION {temp}.select_dependent_scripts()
 $BODY$
 DECLARE
 BEGIN
-  IF NEW.selected
+  IF NEW.todo
   THEN
   UPDATE meta.scripts s
-  SET selected = TRUE
+  SET todo = TRUE
   FROM meta.dependencies d
   WHERE d.needs_script = s.scriptcode
-  AND d.scriptcode = NEW.scriptcode;
+  AND d.scriptcode = NEW.scriptcode
+  AND NOT s.finished;
   END IF;
   RETURN NEW;
 
@@ -342,10 +343,10 @@ CREATE OR REPLACE FUNCTION {temp}.unselect_dependent_scripts()
 $BODY$
 DECLARE
 BEGIN
-  IF NEW.selected IS False
+  IF NOT NEW.todo AND NOT NEW.finished
   THEN
   UPDATE meta.scripts s
-  SET selected = False
+  SET todo = False
   FROM meta.dependencies d
   WHERE d.scriptcode = s.scriptcode
   AND d.needs_script = NEW.scriptcode;
@@ -393,11 +394,11 @@ CREATE TABLE {temp}.scripts
   scriptname text,
   desctiption text,
   parameter text,
-  started boolean,
-  finished boolean,
+  started boolean NOT NULL DEFAULT false,
+  finished boolean NOT NULL DEFAULT false,
   starttime timestamp with time zone,
   endtime timestamp with time zone,
-  selected boolean,
+  todo boolean NOT NULL DEFAULT false,
   CONSTRAINT scripts_pkey PRIMARY KEY (id),
   CONSTRAINT scripts_scriptcode_key UNIQUE (scriptcode)
 );
@@ -415,13 +416,13 @@ CREATE TABLE {temp}.dependencies
 );
 
 CREATE TRIGGER scripts_select_trigger
-  AFTER INSERT OR UPDATE OF selected
+  AFTER INSERT OR UPDATE OF todo
   ON {temp}.scripts
   FOR EACH ROW
   EXECUTE PROCEDURE {temp}.select_dependent_scripts();
 
 CREATE TRIGGER scripts_unselect_trigger
-  AFTER UPDATE OF selected
+  AFTER UPDATE OF todo
   ON {temp}.scripts
   FOR EACH ROW
   EXECUTE PROCEDURE {temp}.unselect_dependent_scripts();
