@@ -444,6 +444,12 @@ SELECT * FROM {schema}.dependencies;
 '''.format(schema=self.schema, temp=self.temp)
         self.run_query(sql, conn=self.conn0)
 
+        sql = '''
+UPDATE {temp}.scripts
+SET started=False, finished=False, todo=False;
+        '''
+        cursor.execute(sql)
+
 
 if __name__ == '__main__':
 
