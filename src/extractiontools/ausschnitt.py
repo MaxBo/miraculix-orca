@@ -399,6 +399,7 @@ CREATE TABLE {temp}.scripts
   starttime timestamp with time zone,
   endtime timestamp with time zone,
   todo boolean NOT NULL DEFAULT false,
+  category text,
   CONSTRAINT scripts_pkey PRIMARY KEY (id),
   CONSTRAINT scripts_scriptcode_key UNIQUE (scriptcode)
 );
