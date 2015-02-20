@@ -290,20 +290,12 @@ FROM {network}.links l;
 CREATE OR REPLACE VIEW {network}.walk_cycle_network AS
 SELECT l.*
 FROM
-  {network}.links l,
-  {network}.edges_reached e
-WHERE l.fromnode=e.fromnode AND l.tonode=e.tonode;
+  links_reached_without_planned l;
 
-CREATE OR REPLACE VIEW {network}.unaccessible_links AS
-SELECT lt.road_category, l.*
+CREATE OR REPLACE VIEW {network}.walk_cycle_network_only_by_planned AS
+SELECT l.*
 FROM
-  classifications.linktypes lt,
-  {network}.links l LEFT JOIN
-  {network}.edges_reached e
-  ON l.fromnode=e.fromnode AND l.tonode=e.tonode
-WHERE e.id IS NULL
-AND l.linktype=lt.id;
-
+  links_reached_only_by_planned l;
 """.format(network=self.network)
         self.run_query(sql)
 

@@ -33,19 +33,24 @@ class BuildNetwork(DBApp):
         Build the network
         """
         with Connection(login=self.login) as conn:
+            # preparation
             self.conn = conn
             self.get_srid()
             self.create_views()
+            # select roads and junctions
             self.create_roads()
             self.create_junctions()
             self.conn.commit()
+            # create functions
             self.create_functions()
             self.conn.commit()
+            # create links
             self.fill_link_points_and_create_links()
             self.create_chunks()
             self.create_links()
             self.fill_links()
             self.conn.commit()
+            # update link attributes
             self.update_linktypes()
             self.update_oneway()
             self.update_lanes()
@@ -54,6 +59,7 @@ class BuildNetwork(DBApp):
             self.update_time()
             self.create_index()
             self.conn.commit()
+            # prepare the search for accessible links
             self.create_pgrouting_network()
             self.conn.commit()
             self.update_egde_table()
@@ -61,7 +67,15 @@ class BuildNetwork(DBApp):
             self.create_topology()
             self.create_edge_reached()
             self.conn.commit()
+            # search accessible links including links reached by planned roads
             self.try_startvertices(n=20)
+            self.copy_edge_reached_with_planned()
+            # search links accessible only by existing roads
+            self.update_edge_table_with_construction()
+            self.try_startvertices(n=20)
+
+            # create the final views
+            self.create_view_accessible_links()
             self.create_views_roadtypes()
             self.conn.commit()
 
@@ -891,6 +905,41 @@ CLUSTER {network}.links USING idx_links_geom;
         """.format(network=self.network)
         self.run_query(sql)
 
+    def create_view_accessible_links(self):
+        """
+        Create the views for the accessible links
+        """
+        sql = """
+CREATE OR REPLACE VIEW {network}.links_reached_without_planned AS
+SELECT l.*, lt.road_category
+FROM
+  {network}.links l,
+  classifications.linktypes lt,
+  {network}.edges_reached e
+WHERE l.fromnode=e.fromnode AND l.tonode=e.tonode;
+
+CREATE OR REPLACE VIEW {network}.links_reached_only_by_planned AS
+SELECT l.*, lt.road_category
+FROM
+  {network}.links l,
+  classifications.linktypes lt,
+  {network}.edges_reached_with_planned ep
+  LEFT JOIN {network}.edges_reached ON ep.id = e.id
+WHERE l.fromnode=e.fromnode AND l.tonode=e.tonode
+AND e.id IS NULL;
+
+CREATE OR REPLACE VIEW {network}.unaccessible_links AS
+SELECT lt.road_category, l.*
+FROM
+  classifications.linktypes lt,
+  {network}.links l LEFT JOIN
+  {network}.edges_reached_with_planned e
+  ON l.fromnode=e.fromnode AND l.tonode=e.tonode
+WHERE e.id IS NULL
+AND l.linktype=lt.id;
+""".format(network=self.network)
+        self.run_query(sql)
+
     def create_views_roadtypes(self):
         """
         """
@@ -899,48 +948,51 @@ CLUSTER {network}.links USING idx_links_geom;
 CREATE OR REPLACE VIEW {network}.autobahn AS
 SELECT l.*
 FROM
-  {network}.links l,
-  classifications.linktypes lt,
-  {network}.edges_reached e
-WHERE l.linktype=lt.id and lt.road_category='A'
-AND l.fromnode=e.fromnode AND l.tonode=e.tonode;
+  links_reached_without_planned l
+  WHERE road_category='A';
 
 CREATE OR REPLACE VIEW {network}.hauptstr AS
 SELECT l.*
 FROM
-  {network}.links l,
-  classifications.linktypes lt,
-  {network}.edges_reached e
-WHERE l.linktype=lt.id and lt.road_category='B'
-AND l.fromnode=e.fromnode AND l.tonode=e.tonode;
+  links_reached_without_planned l
+  WHERE road_category='B';
 
 CREATE OR REPLACE VIEW {network}.nebennetz AS
 SELECT l.*
 FROM
-  {network}.links l,
-  classifications.linktypes lt,
-  {network}.edges_reached e
-WHERE l.linktype=lt.id and lt.road_category='C'
-AND l.fromnode=e.fromnode AND l.tonode=e.tonode;
+  links_reached_without_planned l
+  WHERE road_category='C';
 
 CREATE OR REPLACE VIEW {network}.faehren AS
 SELECT l.*
 FROM
-  {network}.links l,
-  classifications.linktypes lt,
-  {network}.edges_reached e
-WHERE l.linktype=lt.id and lt.road_category='D'
-AND l.fromnode=e.fromnode AND l.tonode=e.tonode;
+  links_reached_without_planned l
+  WHERE road_category='D';
 
-CREATE OR REPLACE VIEW {network}.unaccessible_links AS
-SELECT lt.road_category, l.*
+CREATE OR REPLACE VIEW {network}.autobahn_accessible_only_by_planned AS
+SELECT l.*
 FROM
-  classifications.linktypes lt,
-  {network}.links l LEFT JOIN
-  {network}.edges_reached e
-  ON l.fromnode=e.fromnode AND l.tonode=e.tonode
-WHERE e.id IS NULL
-AND l.linktype=lt.id;
+  links_reached_only_by_planned l
+  WHERE road_category='A';
+
+CREATE OR REPLACE VIEW {network}.hauptstr_accessible_by_planned AS
+SELECT l.*
+FROM
+  links_reached_only_by_planned l
+  WHERE road_category='B';
+
+CREATE OR REPLACE VIEW {network}.nebennetz_accessible_by_planned AS
+SELECT l.*
+FROM
+  links_reached_only_by_planned l
+  WHERE road_category='C';
+
+CREATE OR REPLACE VIEW {network}.faehren_accessible_by_planned AS
+SELECT l.*
+FROM
+  links_reached_only_by_planned l
+  WHERE road_category='D';
+
         """.format(network=self.network)
         self.run_query(sql)
 
@@ -966,6 +1018,20 @@ CREATE INDEX edge_table_target_idx ON {network}.edge_table USING btree("target")
 """.format(srid=self.srid, network=self.network)
         self.run_query(sql)
 
+    def update_edge_table_with_construction(self):
+        """
+        close edges with construction or planned
+        """
+        sql = """
+UPDATE {network}.edge_table e
+FROM {network}.links l
+SET cost = -1, reverse_cost = -1
+WHERE
+e.fromnode=l.fromnode AND e.tonode=l.tonode AND
+(l.planned OR l.construction);
+        """.format(network=self.network)
+        self.run_query(sql)
+
     def update_egde_table(self):
         """
         Updates the edge_table
@@ -980,7 +1046,7 @@ SELECT
   fromnode,
   tonode,
   l.geom,
-  l.t_kfz AS cost,
+  CASE WHEN l.t_kfz AS cost,
   CASE WHEN l.oneway THEN -1 ELSE l.t_kfz END AS reverse_cost
 FROM {network}.links l;
         """.format(network=self.network)
@@ -1034,6 +1100,15 @@ WITH NO DATA;
 CREATE INDEX idx_id_edges_reached ON {network}.edges_reached
 USING btree(id);
 CREATE INDEX idx_nodes_edges_reached ON {network}.edges_reached
+USING btree(fromnode, tonode);
+
+DROP TABLE IF EXISTS {network}.edges_reached_with_planned CASCADE;
+CREATE TABLE {network}.edges_reached_with_planned
+(id integer primary key,
+fromnode bigint,
+tonode bigint);
+CREATE INDEX idx_nodes_edges_reached_with_planned
+ON {network}.edges_reached_with_planned
 USING btree(fromnode, tonode);
 
 CREATE OR REPLACE VIEW {network}.vertexes_reached AS
@@ -1128,6 +1203,17 @@ FROM pgr_drivingDistance(
 """.format(startvertex=startvertex, maxcosts=maxcosts, network=self.network)
         self.run_query(sql)
 
+    def copy_edge_reached_with_planned(self):
+        """
+        copy edge_reached into new table
+        """
+        sql = """
+TRUNCATE {network}.edges_reached_with_planned;
+INSERT INTO {network}.edges_reached_with_planned (id, fromnode, tonode)
+SELECT e.id, e.fromnode, e.tonode
+FROM {network}.edgee_reached e;
+            """.format(network=self.network)
+        self.run_query(sql)
 
 if __name__ == '__main__':
 
