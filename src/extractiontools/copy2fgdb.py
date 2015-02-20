@@ -28,7 +28,10 @@ class Copy2FGDB(object):
         """
         cmd = '{OGR2OGR} -overwrite -geomfield geom -nln {layer} -a_srs EPSG:{srid} -lco FEATURE_DATASET="{dest_schema}" -f "FileGDB" {path} PG:"host={host} port={port} user={user} dbname={db}" "{schema}.{layer}"'
 
-        gdbname = '{db}.gdb'.format(db=self.options.destination_db)
+        if self.options.gdbname is None:
+            gdbname = '{db}.gdb'.format(db=self.options.destination_db)
+        else:
+            gdbname = self.options.gdbname
         path = os.path.join(self.folder, gdbname)
 
         full_cmd = cmd.format(OGR2OGR=self.OGR2OGRPATH,
@@ -96,6 +99,9 @@ if __name__ == '__main__':
     parser.add_argument('--destschema', action="store",
                         help="destination schema in the FileGDB",
                         dest="dest_schema", default='network_car')
+    parser.add_argument('--gdbname', action="store",
+                        help="Name of the FileGDB to create",
+                        dest="gdbname")
     parser.add_argument('--layers', action='store',
                         help='layers to copy,',
                         dest='layers',
