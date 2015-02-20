@@ -114,6 +114,7 @@ WHERE (w.tags @> wtl.tags
 -- Nimm auch geplante oder im Bau befindliche Straßen mit
 OR (w.tags @> wtc.tag1 AND w.tags @> wtc.tag2))
 AND wtl.linktype_id=lt.id
+AND wtc.linktype_id=lt.id
 GROUP BY w.id;
 CREATE INDEX streets_idx ON {network}.streets USING btree(id);
 ANALYZE {network}.streets;
