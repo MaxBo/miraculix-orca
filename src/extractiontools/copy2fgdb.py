@@ -26,7 +26,7 @@ class Copy2FGDB(object):
         ----------
         layer : str
         """
-        cmd = '{OGR2OGR} -overwrite -geomfield geom -nln {layer} -a_srs {srid} -lco FEATURE_DATASET="{dest_schema}" -f "FileGDB" {path} PG:"host={host} port={port} user={user} dbname={db}" "{schema}.{layer}"'
+        cmd = '{OGR2OGR} -overwrite -geomfield geom -nln {layer} -a_srs EPSG:{srid} -lco FEATURE_DATASET="{dest_schema}" -f "FileGDB" {path} PG:"host={host} port={port} user={user} dbname={db}" "{schema}.{layer}"'
 
         gdbname = '{db}.gdb'.format(db=self.options.destination_db)
         path = os.path.join(self.folder, gdbname)
