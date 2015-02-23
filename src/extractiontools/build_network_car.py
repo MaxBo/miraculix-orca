@@ -1024,8 +1024,8 @@ CREATE INDEX edge_table_target_idx ON {network}.edge_table USING btree("target")
         """
         sql = """
 UPDATE {network}.edge_table e
-FROM {network}.links l
 SET cost = -1, reverse_cost = -1
+FROM {network}.links l
 WHERE
 e.fromnode=l.fromnode AND e.tonode=l.tonode AND
 (l.planned OR l.construction);
