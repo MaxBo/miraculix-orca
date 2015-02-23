@@ -925,8 +925,9 @@ FROM
   classifications.linktypes lt,
   {network}.edges_reached_with_planned ep
   LEFT JOIN {network}.edges_reached e ON ep.id = e.id
-WHERE l.fromnode=e.fromnode AND l.tonode=e.tonode
-AND e.id IS NULL;
+WHERE l.fromnode=ep.fromnode AND l.tonode=ep.tonode
+AND e.id IS NULL
+AND l.linktype = lt.id;
 
 CREATE OR REPLACE VIEW {network}.unaccessible_links AS
 SELECT lt.road_category, l.*
