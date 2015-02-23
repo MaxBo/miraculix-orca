@@ -924,7 +924,7 @@ FROM
   {network}.links l,
   classifications.linktypes lt,
   {network}.edges_reached_with_planned ep
-  LEFT JOIN {network}.edges_reached ON ep.id = e.id
+  LEFT JOIN {network}.edges_reached e ON ep.id = e.id
 WHERE l.fromnode=e.fromnode AND l.tonode=e.tonode
 AND e.id IS NULL;
 
