@@ -948,49 +948,49 @@ AND l.linktype=lt.id;
 CREATE OR REPLACE VIEW {network}.autobahn AS
 SELECT l.*
 FROM
-  links_reached_without_planned l
+  {network}.links_reached_without_planned l
   WHERE road_category='A';
 
 CREATE OR REPLACE VIEW {network}.hauptstr AS
 SELECT l.*
 FROM
-  links_reached_without_planned l
+  {network}.links_reached_without_planned l
   WHERE road_category='B';
 
 CREATE OR REPLACE VIEW {network}.nebennetz AS
 SELECT l.*
 FROM
-  links_reached_without_planned l
+  {network}.links_reached_without_planned l
   WHERE road_category='C';
 
 CREATE OR REPLACE VIEW {network}.faehren AS
 SELECT l.*
 FROM
-  links_reached_without_planned l
+  {network}.links_reached_without_planned l
   WHERE road_category='D';
 
 CREATE OR REPLACE VIEW {network}.autobahn_accessible_only_by_planned AS
 SELECT l.*
 FROM
-  links_reached_only_by_planned l
+  {network}.links_reached_only_by_planned l
   WHERE road_category='A';
 
 CREATE OR REPLACE VIEW {network}.hauptstr_accessible_by_planned AS
 SELECT l.*
 FROM
-  links_reached_only_by_planned l
+  {network}.links_reached_only_by_planned l
   WHERE road_category='B';
 
 CREATE OR REPLACE VIEW {network}.nebennetz_accessible_by_planned AS
 SELECT l.*
 FROM
-  links_reached_only_by_planned l
+  {network}.links_reached_only_by_planned l
   WHERE road_category='C';
 
 CREATE OR REPLACE VIEW {network}.faehren_accessible_by_planned AS
 SELECT l.*
 FROM
-  links_reached_only_by_planned l
+  {network}.links_reached_only_by_planned l
   WHERE road_category='D';
 
         """.format(network=self.network)

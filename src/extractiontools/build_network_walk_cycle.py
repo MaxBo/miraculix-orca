@@ -290,12 +290,12 @@ FROM {network}.links l;
 CREATE OR REPLACE VIEW {network}.walk_cycle_network AS
 SELECT l.*
 FROM
-  links_reached_without_planned l;
+  {network}.links_reached_without_planned l;
 
 CREATE OR REPLACE VIEW {network}.walk_cycle_network_only_by_planned AS
 SELECT l.*
 FROM
-  links_reached_only_by_planned l;
+  {network}.links_reached_only_by_planned l;
 """.format(network=self.network)
         self.run_query(sql)
 
