@@ -1046,7 +1046,7 @@ SELECT
   fromnode,
   tonode,
   l.geom,
-  CASE WHEN l.t_kfz AS cost,
+  l.t_kfz AS cost,
   CASE WHEN l.oneway THEN -1 ELSE l.t_kfz END AS reverse_cost
 FROM {network}.links l;
         """.format(network=self.network)
