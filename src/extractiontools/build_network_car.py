@@ -1211,7 +1211,7 @@ FROM pgr_drivingDistance(
 TRUNCATE {network}.edges_reached_with_planned;
 INSERT INTO {network}.edges_reached_with_planned (id, fromnode, tonode)
 SELECT e.id, e.fromnode, e.tonode
-FROM {network}.edgee_reached e;
+FROM {network}.edges_reached e;
             """.format(network=self.network)
         self.run_query(sql)
 
