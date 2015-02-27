@@ -916,7 +916,8 @@ FROM
   {network}.links l,
   classifications.linktypes lt,
   {network}.edges_reached e
-WHERE l.fromnode=e.fromnode AND l.tonode=e.tonode;
+WHERE l.fromnode=e.fromnode AND l.tonode=e.tonode
+AND l.linktype = lt.id;
 
 CREATE OR REPLACE VIEW {network}.links_reached_only_by_planned AS
 SELECT l.*, lt.road_category
