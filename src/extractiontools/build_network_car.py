@@ -683,6 +683,7 @@ SET
 FROM osm.ways w, classifications.wt2lt_construction lt
 WHERE l.wayid = w.id
 AND w.tags ? 'proposed'
+AND w.tags @> lt.tag1
 AND w.tags @> lt.tag2;
 
 UPDATE {network}.links l
@@ -692,6 +693,7 @@ SET
 FROM osm.ways w, classifications.wt2lt_construction lt
 WHERE l.wayid = w.id
 AND w.tags ? 'construction'
+AND w.tags @> lt.tag1
 AND w.tags @> lt.tag2;
 """.format(network=self.network)
         self.run_query(sql)
