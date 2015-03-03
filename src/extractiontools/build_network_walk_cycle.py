@@ -299,6 +299,52 @@ CREATE OR REPLACE VIEW {network}.barriers_cycle AS
          HAVING bool_or(a.sperre_bike) OR (bool_or(a.oeffne_bike) IS NULL)
          ) b
 ;
+
+CREATE OR REPLACE VIEW {network}.line_barriers_foot AS
+ SELECT b.id,
+    b.geom,
+    COALESCE(b.closed, false) AS explicitly_closed,
+    b.tags -> 'barrier'::text AS barrier_type,
+    b.tags -> 'note'::text AS note,
+    b.tags
+   FROM ( SELECT w.id,
+            w.tags,
+            bool_or(a.sperre_walk) AS closed,
+            bool_or(a.oeffne_walk) AS opened,
+            w.linestring AS geom
+           FROM {network}.link_points lp,
+            osm.way_nodes wn,
+            osm.ways w
+             LEFT JOIN classifications.access_walk_cycle a ON w.tags @> a.tags
+          WHERE w.id = wn.way_id AND wn.node_id = lp.nodeid
+          AND w.tags ? 'barrier'::text
+          GROUP BY w.id
+         HAVING bool_or(a.sperre_walk) OR (bool_or(a.oeffne_walk) IS NULL)
+         )b
+;
+CREATE OR REPLACE VIEW {network}.line_barriers_cycle AS
+ SELECT b.id,
+    b.geom,
+    COALESCE(b.closed, false) AS explicitly_closed,
+    b.tags -> 'barrier'::text AS barrier_type,
+    b.tags -> 'note'::text AS note,
+    b.tags
+   FROM ( SELECT w.id,
+            w.tags,
+            bool_or(a.sperre_bike) AS closed,
+            bool_or(a.oeffne_bike) AS opened,
+            w.linestring AS geom
+           FROM {network}.link_points lp,
+            osm.way_nodes wn,
+            osm.ways w
+             LEFT JOIN classifications.access_walk_cycle a ON w.tags @> a.tags
+          WHERE w.id = wn.way_id AND wn.node_id = lp.nodeid
+          AND w.tags ? 'barrier'::text
+          GROUP BY w.id
+         HAVING bool_or(a.sperre_bike) OR (bool_or(a.oeffne_bike) IS NULL)
+         ) b
+;
+
         """.format(network=self.network)
         self.run_query(sql)
 
