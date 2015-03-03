@@ -10,6 +10,8 @@ logger.level = logging.DEBUG
 import sys
 import os
 import subprocess
+import psycopg2
+from extractiontools.connection import Login, Connection
 
 
 class Copy2FGDB(object):
@@ -18,6 +20,10 @@ class Copy2FGDB(object):
         """"""
         self.options = options
         self.check_platform()
+        self.login = Login(self.options.host,
+                           self.options.port,
+                           self.options.user,
+                           db=self.options.destination_db)
 
     def copy_layer(self, layer):
         """
@@ -26,6 +32,7 @@ class Copy2FGDB(object):
         ----------
         layer : str
         """
+
         cmd = '{OGR2OGR} -overwrite -geomfield geom -nln {layer} -a_srs EPSG:{srid} -lco FEATURE_DATASET="{dest_schema}" -f "FileGDB" {path} PG:"host={host} port={port} user={user} dbname={db}" "{schema}.{layer}"'
 
         if self.options.gdbname is None:
@@ -50,12 +57,33 @@ class Copy2FGDB(object):
         if ret:
             raise IOError('Layer {layer} could copied to FGDB'.format(layer=layer))
 
+    def check_if_features(self, layer):
+        """
+        copy layer
+        Parameters
+        ----------
+        layer : str
+        """
+        with Connection(self.login) as conn:
+            cur = conn.cursor()
+            sql = '''
+SELECT * FROM {schema}.{layer} LIMIT 1;
+            '''.format(schema=self.options.schema,
+                       layer=layer)
+            cur.execute(sql)
+            return cur.rowcount
+
     def copy_layers(self):
         """
         copy all layers in option.layers
         """
         for layer in self.options.layers:
-            self.copy_layer(layer)
+            has_features = self.check_if_features(layer)
+            if has_features:
+                self.copy_layer(layer)
+            else:
+                logger.info('layer %s has no rows, will not be copied' % layer)
+
 
 
     def check_platform(self):
@@ -63,13 +91,18 @@ class Copy2FGDB(object):
         check the platform
         """
         if sys.platform.startswith('win'):
-            self.OGR2OGRPATH = r'C:\Program Files\QGIS Brighton\bin\ogr2ogr.exe'
+            self.ORG_FOLDER = r'C:\Program Files\QGIS Brighton\bin'
+            self.OGR2OGRPATH = os.path.join(self.ORG_FOLDER, 'ogr2ogr.exe')
+            self.OGRINFO = os.path.join(self.ORG_FOLDER, 'ogrinfo.exe')
             self.folder = r'C:\temp'
             self.SHELL = False
         else:
-            self.OGR2OGRPATH = '/usr/bin/ogr2ogr'
+            self.ORG_FOLDER = '/usr/bin'
+            self.OGR2OGRPATH = os.path.join(self.ORG_FOLDER, 'ogr2ogr')
+            self.OGRINFO = os.path.join(self.ORG_FOLDER, 'ogrinfo')
             self.folder = '/home/mb/gis'
             self.SHELL = True
+
 
 if __name__ == '__main__':
 
