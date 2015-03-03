@@ -899,7 +899,7 @@ COMMIT;
         sql = """
 CREATE OR REPLACE VIEW {network}.barriers_car AS
  SELECT b.id,
-    b.geom,
+    b.geom::geometry(POINT, {srid}) AS geom,
     COALESCE(b.closed, false) AS explicitly_closed,
     b.tags -> 'barrier'::text AS barrier_type,
     b.tags -> 'note'::text AS note,
@@ -920,7 +920,7 @@ CREATE OR REPLACE VIEW {network}.barriers_car AS
 
 CREATE OR REPLACE VIEW {network}.line_barriers_car AS
  SELECT b.id,
-    b.geom,
+    b.geom::geometry(LINESTRING, {srid}) AS geom,
     COALESCE(b.closed, false) AS explicitly_closed,
     b.tags -> 'barrier'::text AS barrier_type,
     b.tags -> 'note'::text AS note,

@@ -78,13 +78,12 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
         copy all layers in option.layers
         """
         for layer in self.options.layers:
-            has_features = self.check_if_features(layer)
-            if has_features:
-                self.copy_layer(layer)
-            else:
-                logger.info('layer %s has no rows, will not be copied' % layer)
-
-
+            self.copy_layer(layer)
+            #has_features = self.check_if_features(layer)
+            #if has_features:
+                #self.copy_layer(layer)
+            #else:
+                #logger.info('layer %s has no rows, will not be copied' % layer)
 
     def check_platform(self):
         """
