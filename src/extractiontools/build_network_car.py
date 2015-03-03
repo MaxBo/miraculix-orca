@@ -940,7 +940,7 @@ CREATE OR REPLACE VIEW {network}.line_barriers_car AS
          HAVING bool_or(a.sperre_pkw) OR (bool_or(a.oeffne_pkw) IS NULL)
         ) b
 ;
-        """.format(network=self.network)
+        """.format(network=self.network, srid=self.options.srid)
         self.run_query(sql)
 
     def create_index(self):
