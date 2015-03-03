@@ -345,7 +345,7 @@ CREATE OR REPLACE VIEW {network}.line_barriers_cycle AS
          ) b
 ;
 
-        """.format(network=self.network, srid=self.options.srid)
+        """.format(network=self.network, srid=self.srid)
         self.run_query(sql)
 
     def update_egde_table(self):
