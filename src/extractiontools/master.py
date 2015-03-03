@@ -112,13 +112,13 @@ ORDER BY id
         """
         started_sql = """
 UPDATE meta.scripts
-SET started = True, finished=False, starttime = %(time)s
+SET started = True, finished=False, starttime = %(time)s, endtime=NULL
 WHERE scriptcode = %(sc)s;
         """
 
         finished_sql = """
 UPDATE meta.scripts
-SET finished = True, endtime = %(time)s, todo = False
+SET finished = True, started=False, endtime = %(time)s, todo = False
 WHERE scriptcode = %(sc)s;
             """
 
