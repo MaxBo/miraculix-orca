@@ -58,6 +58,7 @@ class BuildNetwork(DBApp):
             self.update_speed()
             self.update_time()
             self.create_index()
+            self.create_barriers()
             self.conn.commit()
             # prepare the search for accessible links
             self.create_pgrouting_network()
@@ -889,6 +890,57 @@ ALTER TABLE {network}.wayid_chunk ADD PRIMARY KEY(id);
 COMMIT;
 
         """.format(chunksize=self.options.chunksize, network=self.network)
+        self.run_query(sql)
+
+    def create_barriers(self):
+        """
+        Create Barriers
+        """
+        sql = """
+CREATE OR REPLACE VIEW {network}.barriers_car AS
+ SELECT b.id,
+    b.geom,
+    COALESCE(b.closed, false) AS explicitly_closed,
+    b.tags -> 'barrier'::text AS barrier_type,
+    b.tags -> 'note'::text AS note,
+    b.tags
+   FROM ( SELECT n.id,
+            n.tags,
+            bool_or(a.sperre_pkw) AS closed,
+            bool_or(a.oeffne_pkw) AS opened,
+            n.geom
+           FROM {network}.link_points lp,
+            osm.nodes n
+             LEFT JOIN classifications.access_types a ON n.tags @> a.tags
+          WHERE n.id = lp.nodeid AND n.tags ? 'barrier'::text
+          GROUP BY n.id
+         HAVING bool_or(a.sperre_pkw) OR (bool_or(a.oeffne_pkw) IS NULL)
+         )b
+;
+
+CREATE OR REPLACE VIEW {network}.line_barriers_car AS
+ SELECT b.id,
+    b.geom,
+    COALESCE(b.closed, false) AS explicitly_closed,
+    b.tags -> 'barrier'::text AS barrier_type,
+    b.tags -> 'note'::text AS note,
+    b.tags
+   FROM ( SELECT w.id,
+            w.tags,
+            bool_or(a.sperre_pkw) AS closed,
+            bool_or(a.oeffne_pkw) AS opened,
+            w.linestring AS geom
+           FROM {network}.link_points lp,
+            osm.way_nodes wn,
+            osm.ways w
+             LEFT JOIN classifications.access_types a ON w.tags @> a.tags
+          WHERE w.id = wn.way_id AND
+          wn.node_id = lp.nodeid AND w.tags ? 'barrier'::text
+          GROUP BY w.id
+         HAVING bool_or(a.sperre_pkw) OR (bool_or(a.oeffne_pkw) IS NULL)
+        ) b
+;
+        """.format(network=self.network)
         self.run_query(sql)
 
     def create_index(self):

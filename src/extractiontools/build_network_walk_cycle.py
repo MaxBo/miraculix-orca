@@ -254,6 +254,54 @@ WHERE l.wayid = g.wayid AND l.segment = g.segment;
         """
         """
 
+    def create_barriers(self):
+        """
+        Create Barriers
+        """
+        sql = """
+CREATE OR REPLACE VIEW {network}.barriers_foot AS
+ SELECT b.id,
+    b.geom,
+    COALESCE(b.closed, false) AS explicitly_closed,
+    b.tags -> 'barrier'::text AS barrier_type,
+    b.tags -> 'note'::text AS note,
+    b.tags
+   FROM ( SELECT n.id,
+            n.tags,
+            bool_or(a.sperre_walk) AS closed,
+            bool_or(a.oeffne_walk) AS opened,
+            n.geom
+           FROM {network}.link_points lp,
+            osm.nodes n
+             LEFT JOIN classifications.access_walk_cycle a ON n.tags @> a.tags
+          WHERE n.id = lp.nodeid AND n.tags ? 'barrier'::text
+          GROUP BY n.id
+         HAVING bool_or(a.sperre_walk) OR (bool_or(a.oeffne_walk) IS NULL)
+         )b
+;
+CREATE OR REPLACE VIEW {network}.barriers_cycle AS
+ SELECT b.id,
+    b.geom,
+    COALESCE(b.closed, false) AS explicitly_closed,
+    b.tags -> 'barrier'::text AS barrier_type,
+    b.tags -> 'note'::text AS note,
+    b.tags
+   FROM ( SELECT n.id,
+            n.tags,
+            bool_or(a.sperre_bike) AS closed,
+            bool_or(a.oeffne_bike) AS opened,
+            n.geom
+           FROM {network}.link_points lp,
+            osm.nodes n
+             LEFT JOIN classifications.access_walk_cycle a ON n.tags @> a.tags
+          WHERE n.id = lp.nodeid AND n.tags ? 'barrier'::text
+          GROUP BY n.id
+         HAVING bool_or(a.sperre_bike) OR (bool_or(a.oeffne_bike) IS NULL)
+         ) b
+;
+        """.format(network=self.network)
+        self.run_query(sql)
+
     def update_egde_table(self):
         """
         Updates the edge_table
