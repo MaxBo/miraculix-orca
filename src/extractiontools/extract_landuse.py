@@ -12,6 +12,7 @@ class ExtractLanduse(Extract):
     """
     tables = {}
     schema = 'landuse'
+    role = 'group_osm'
 
     def additional_stuff(self):
         """

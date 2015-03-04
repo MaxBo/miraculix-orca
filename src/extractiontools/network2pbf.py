@@ -41,7 +41,7 @@ class CopyNetwork2Pbf(DBApp):
             self.reset_authorization(self.conn)
         self.copy2pbf()
 
-    def create_view(self):
+    def create_views(self):
         """"""
         sql = """
 DROP SCHEMA IF EXISTS {schema} CASCADE;
@@ -132,8 +132,9 @@ CREATE OR REPLACE VIEW {schema}.users AS
             self.folder = r'C:\temp'
             self.SHELL = False
         else:
-            self.OSM_FOLDER = '/home/mb/osm/osmosis'
-            self.OSMOSISPATH = os.path.join(self.OSM_FOLDER, 'osmosis', 'bin')
+            self.OSM_FOLDER = '/home/mb/osm'
+            self.OSMOSISPATH = os.path.join(self.OSM_FOLDER, 'osmosis',
+                                            'bin', 'osmosis')
             self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
             self.folder = '/home/mb/gis'
             self.SHELL = True
@@ -142,7 +143,7 @@ CREATE OR REPLACE VIEW {schema}.users AS
         """
         copy the according schema to a pbf with osmosis
         """
-        cmd = '{OSMOSIS} -v --read-pgsql authfile={authfile} host={host} port={port} user={user} database={db} --write-pbf file={pbf_file}'
+        cmd = '{OSMOSIS} -v --read-pgsql authFile={authfile} host={host} user={user} database={db} --write-pbf file={pbf_file}'
 
         fn = '{db}_{network}.pbf'.format(db=self.options.destination_db,
                                          network=self.options.network)
@@ -151,10 +152,9 @@ CREATE OR REPLACE VIEW {schema}.users AS
         full_cmd = cmd.format(OSMOSIS=self.OSMOSISPATH,
                               authfile=self.AUTHFILE,
                               host=self.options.host,
-                              port=self.options.port,
                               user=self.options.user,
                               db=self.options.destination_db,
-                              pbf=pbf,
+                              pbf_file=pbf_file,
                               )
         logger.info(full_cmd)
         ret = subprocess.call(full_cmd, shell=self.SHELL)
