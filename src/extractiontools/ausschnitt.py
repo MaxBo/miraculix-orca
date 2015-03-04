@@ -75,6 +75,7 @@ class Extract(DBApp):
         with Connection(login=self.login0) as conn0, Connection(login=self.login1) as conn1:
             self.conn0 = conn0
             self.conn1 = conn1
+            self.set_session_authorization(self.conn0)
             self.set_search_path('conn0')
             self.create_temp_schema()
             self.create_target_boundary()
@@ -82,7 +83,7 @@ class Extract(DBApp):
                 self.extract_table(tn, geom)
             self.additional_stuff()
             self.conn0.commit()
-            self.reset_role(self.conn0)
+            self.reset_authorization(self.conn0)
             self.conn1.commit()
 
             self.copy_temp_schema_to_target_db(schema=self.temp)
@@ -145,13 +146,6 @@ t.{geom} && tb.geom
         """
         Creates a temporary schema
         """
-        # if a role is defined, create this schema with this role and also
-        # perform all queries during this transaction with this role
-        if self.role:
-            sql = "SET SESSION SESSION AUTHORIZATION '{role}';"
-            self.run_query(sql.format(role=self.role),
-                           self.conn0)
-
         sql = '''
 DROP SCHEMA IF EXISTS {temp} CASCADE;
 CREATE SCHEMA {temp};
@@ -163,11 +157,6 @@ CREATE SCHEMA {temp};
 DROP SCHEMA IF EXISTS {schema} CASCADE;
         """.format(schema=self.schema)
         self.run_query(sql, conn=self.conn1)
-
-    def reset_role(self, conn):
-        """Reset role to Login Role"""
-        sql = """RESET SESSION AUTHORIZATION;"""
-        self.run_query(sql, conn)
 
     def get_target_boundary(self, bbox):
         """

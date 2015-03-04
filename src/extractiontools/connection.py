@@ -97,6 +97,7 @@ class DBApp(object):
     """
 
     """
+    role = None
     def __init__(self, schema='osm'):
         """
         """
@@ -147,4 +148,19 @@ class DBApp(object):
         sql = 'show search_path ;'
         cur.execute(sql)
         rows = cur.fetchall()
-        print rows
+        logger.info(rows)
+
+    def set_session_authorization(self, conn):
+        """
+        Set session authorization to self.role, if exists
+        """
+        # if a role is defined, create this schema with this role and also
+        # perform all queries during this transaction with this role
+        if self.role:
+            sql = "SET SESSION SESSION AUTHORIZATION '{role}';"
+            self.run_query(sql.format(role=self.role), conn)
+
+    def reset_authorization(self, conn):
+        """Reset role to Login Role"""
+        sql = """RESET SESSION AUTHORIZATION;"""
+        self.run_query(sql, conn)

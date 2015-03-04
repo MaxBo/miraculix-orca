@@ -15,6 +15,8 @@ class BuildNetwork(DBApp):
     """
     Build Network Analyst-Data in the target Database...
     """
+    role = 'group_osm'
+
     def __init__(self,
                  options,
                  schema='osm',
@@ -36,6 +38,7 @@ class BuildNetwork(DBApp):
             # preparation
             self.conn = conn
             self.get_srid()
+            self.set_session_authorization(self.conn)
             self.create_views()
             # select roads and junctions
             self.create_roads()
@@ -79,6 +82,7 @@ class BuildNetwork(DBApp):
             self.create_view_accessible_links()
             self.create_views_roadtypes()
             self.conn.commit()
+            self.reset_authorization(self.conn)
 
     def spatial_ref_systems(self):
         """
