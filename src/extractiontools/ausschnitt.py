@@ -42,6 +42,7 @@ class Extract(DBApp):
     extracts data from an existing database into a new database
     """
     tables = {}
+    role = None
 
     def __init__(self,
                  destination_db='extract',
@@ -143,6 +144,12 @@ t.{geom} && tb.geom
         """
         Creates a temporary schema
         """
+        # if a role is defined, create this schema with this role and also
+        # perform all queries during this transaction with this role
+        if self.role:
+            sql = "SET LOCAL AUTHORIZATION '{role}';".format(role=self.role)
+            self.run_query(sql, self.conn0)
+
         sql = '''
 DROP SCHEMA IF EXISTS {temp} CASCADE;
 CREATE SCHEMA {temp};
