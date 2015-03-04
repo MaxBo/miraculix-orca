@@ -263,9 +263,11 @@ ALTER TABLE osm.relations
 
     def further_stuff(self):
         """
+        Copy the osm classifications and osm-view in wgs84
+        to destination database
         """
         self.copy_temp_schema_to_target_db(schema='classifications')
-
+        self.copy_temp_schema_to_target_db(schema='osm84')
 
 if __name__ == '__main__':
 
