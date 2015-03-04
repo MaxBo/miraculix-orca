@@ -222,6 +222,7 @@ UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
 ALTER DATABASE {db} OWNER TO {role};
         """
         with Connection(login=self.login0) as conn0:
+            self.conn0 = conn0
             self.run_query(sql.format(db=login.db,
                                       role=self.role))
 
