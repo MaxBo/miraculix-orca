@@ -147,8 +147,9 @@ t.{geom} && tb.geom
         # if a role is defined, create this schema with this role and also
         # perform all queries during this transaction with this role
         if self.role:
-            sql = "SET LOCAL AUTHORIZATION '{role}';".format(role=self.role)
-            self.run_query(sql, self.conn0)
+            sql = "SET LOCAL SESSION AUTHORIZATION '{role}';"
+            self.run_query(sql.format(role=self.role),
+                           self.conn0)
 
         sql = '''
 DROP SCHEMA IF EXISTS {temp} CASCADE;
