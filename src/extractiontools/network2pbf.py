@@ -41,85 +41,6 @@ class CopyNetwork2Pbf(DBApp):
             self.reset_authorization(self.conn)
         self.copy2pbf()
 
-    def create_views_filtered(self):
-        """"""
-        sql = """
-DROP SCHEMA IF EXISTS {schema} CASCADE;
-CREATE SCHEMA {schema};
-
-CREATE OR REPLACE VIEW {schema}.actions AS
- SELECT a.data_type,
-    a.action,
-    a.id
-   FROM osm.actions a;
-
-CREATE OR REPLACE VIEW {schema}.boundary AS
- SELECT b.id,
-    st_transform(b.geom, {srid}) AS geom
-   FROM osm.boundary b;
-
-CREATE OR REPLACE VIEW {schema}.ways AS
- SELECT w.id,
-    w.version,
-    w.user_id,
-    w.tstamp,
-    w.changeset_id,
-    w.tags,
-    w.nodes,
-    st_transform(w.bbox, {srid}) AS bbox,
-    st_transform(w.linestring, {srid}) AS linestring
-   FROM osm.ways w, {network}.links l
-   WHERE w.id = l.wayid;
-
-
-CREATE OR REPLACE VIEW {schema}.schema_info AS
- SELECT s.version
-   FROM osm.schema_info s;
-
-CREATE OR REPLACE VIEW {schema}.way_nodes AS
- SELECT wn.way_id,
-    wn.node_id,
-    wn.sequence_id
-   FROM osm.way_nodes wn, {schema}.ways w
-   WHERE wn.way_id = w.id;
-
-CREATE OR REPLACE VIEW {schema}.nodes AS
- SELECT n.id,
-    n.version,
-    n.user_id,
-    n.tstamp,
-    n.changeset_id,
-    n.tags,
-    st_transform(n.geom, {srid}) AS geom
-   FROM osm.nodes n, (SELECT DISTICT node_id FROM {schema}.way_nodes) wn
-   WHERE n.id = wn.node_id;
-
-CREATE OR REPLACE VIEW {schema}.relation_members AS
- SELECT rm.relation_id,
-    rm.member_id,
-    rm.member_type,
-    rm.member_role,
-    rm.sequence_id
-   FROM osm.relation_members rm;
-
-CREATE OR REPLACE VIEW {schema}.relations AS
- SELECT r.id,
-    r.version,
-    r.user_id,
-    r.tstamp,
-    r.changeset_id,
-    r.tags
-   FROM osm.relations r;
-
-CREATE OR REPLACE VIEW {schema}.users AS
- SELECT u.id,
-    u.name
-   FROM osm.users u;
-
-        """.format(schema=self.options.user,
-                   network=self.options.network,
-                   srid=self.options.srid)
-
     def create_views(self):
         """"""
         sql = """
@@ -147,7 +68,9 @@ CREATE OR REPLACE VIEW {schema}.ways AS
     w.nodes,
     st_transform(w.bbox, {srid}) AS bbox,
     st_transform(w.linestring, {srid}) AS linestring
-   FROM osm.ways w;
+   FROM osm.ways w, {network}.links_reached_without_planned l
+--   FROM osm.ways w, {network}.links l
+   WHERE w.id = l.wayid;
 
 
 CREATE OR REPLACE VIEW {schema}.schema_info AS
@@ -158,7 +81,8 @@ CREATE OR REPLACE VIEW {schema}.way_nodes AS
  SELECT wn.way_id,
     wn.node_id,
     wn.sequence_id
-   FROM osm.way_nodes wn;
+   FROM osm.way_nodes wn, {schema}.ways w
+   WHERE wn.way_id = w.id;
 
 CREATE OR REPLACE VIEW {schema}.nodes AS
  SELECT n.id,
@@ -168,15 +92,39 @@ CREATE OR REPLACE VIEW {schema}.nodes AS
     n.changeset_id,
     n.tags,
     st_transform(n.geom, {srid}) AS geom
-   FROM osm.nodes n;
+   FROM osm.nodes n, (SELECT DISTINCT node_id FROM {schema}.way_nodes) wn
+   WHERE n.id = wn.node_id;
 
-CREATE OR REPLACE VIEW {schema}.relation_members AS
- SELECT rm.relation_id,
-    rm.member_id,
-    rm.member_type,
-    rm.member_role,
-    rm.sequence_id
-   FROM osm.relation_members rm;
+CREATE TABLE {schema}.active_relations (id integer primary key);
+
+INSERT INTO {schema}.active_relations
+SELECT DISTINCT r.id
+FROM osm.relations r,
+osm.relation_members rm,
+{schema}.nodes n
+WHERE r.id = rm.relation_id
+AND rm.member_type = 'N'
+AND rm.member_id = n.id;
+
+INSERT INTO {schema}.active_relations
+SELECT DISTINCT r.id
+FROM osm.relations r,
+osm.relation_members rm,
+{schema}.ways w
+WHERE r.id = rm.relation_id
+AND rm.member_type = 'W'
+AND rm.member_id = w.id
+AND NOT EXISTS (SELECT 1 FROM {schema}.active_relations ar WHERE r.id = ar.id);
+
+INSERT INTO {schema}.active_relations
+SELECT DISTINCT r.id
+FROM osm.relations r,
+osm.relation_members rm,
+{schema}.active_relations ar
+WHERE r.id = rm.relation_id
+AND rm.member_type = 'R'
+AND rm.member_id = ar.id
+AND NOT EXISTS (SELECT 1 FROM {schema}.active_relations ar WHERE r.id = ar.id);
 
 CREATE OR REPLACE VIEW {schema}.relations AS
  SELECT r.id,
@@ -185,24 +133,44 @@ CREATE OR REPLACE VIEW {schema}.relations AS
     r.tstamp,
     r.changeset_id,
     r.tags
-   FROM osm.relations r;
+   FROM osm.relations r,
+   {schema}.active_relations ar
+   WHERE r.id = ar.id;
+
+CREATE OR REPLACE VIEW {schema}.relation_members AS
+ SELECT rm.relation_id,
+    rm.member_id,
+    rm.member_type,
+    rm.member_role,
+    rm.sequence_id
+   FROM osm.relation_members rm,
+   {schema}.active_relations ar
+   WHERE rm.relation_id = ar.id;
 
 CREATE OR REPLACE VIEW {schema}.users AS
  SELECT u.id,
     u.name
-   FROM osm.users u;
+   FROM osm.users u
+   WHERE EXISTS
+   (SELECT 1 FROM {schema}.relations r WHERE u.id = r.user_id)
+   OR EXISTS
+   (SELECT 1 FROM {schema}.ways w WHERE u.id = w.user_id)
+   OR EXISTS
+   (SELECT 1 FROM {schema}.nodes n WHERE u.id = n.user_id);
 
         """.format(schema=self.options.user,
                    network=self.options.network,
                    srid=self.options.srid)
+        self.run_query(sql)
 
     def check_platform(self):
         """
         check the platform
         """
         if sys.platform.startswith('win'):
-            self.OSM_FOLDER = r'C:\Program Files\QGIS Brighton\bin'
-            self.OSMOSISPATH = os.path.join(self.OSM_FOLDER, 'osmosis.exe')
+            self.OSM_FOLDER = r'E:\Modell\osmosis'
+            self.OSMOSISPATH = os.path.join(self.OSM_FOLDER, 'bin',
+                                            'osmosis.bat')
             self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
             self.folder = r'C:\temp'
             self.SHELL = False
@@ -218,15 +186,17 @@ CREATE OR REPLACE VIEW {schema}.users AS
         """
         copy the according schema to a pbf with osmosis
         """
-        cmd = '{OSMOSIS} -v --read-pgsql authFile={authfile} host={host} user={user} database={db} --write-pbf file={pbf_file}'
+        cmd = '{OSMOSIS} -v --read-pgsql authFile={authfile} host={host}:{port} user={user} database={db} --dataset-dump --write-pbf file={pbf_file}'
+        #cmd = '{OSMOSIS} -v --read-pgsql authFile={authfile} host={host}:{port} user={user} database={db} --dataset-dump --write-xml file={pbf_file}'
 
-        fn = '{db}_{network}.pbf'.format(db=self.options.destination_db,
+        fn = '{db}_{network}'.format(db=self.options.destination_db,
                                          network=self.options.network)
         pbf_file = os.path.join(self.folder, fn)
 
         full_cmd = cmd.format(OSMOSIS=self.OSMOSISPATH,
                               authfile=self.AUTHFILE,
                               host=self.options.host,
+                              port=self.options.port,
                               user=self.options.user,
                               db=self.options.destination_db,
                               pbf_file=pbf_file,
@@ -253,7 +223,7 @@ if __name__ == '__main__':
 
     parser.add_argument("-U", '--user', action="store",
                         help="database user",
-                        dest="user", default='osm84')
+                        dest="user", default='osm_wg84')
 
     parser.add_argument('--network', action="store",
                         help="network",
