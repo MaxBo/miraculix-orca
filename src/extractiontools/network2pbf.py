@@ -223,7 +223,7 @@ if __name__ == '__main__':
 
     parser.add_argument("-U", '--user', action="store",
                         help="database user",
-                        dest="user", default='osm_wg84')
+                        dest="user", default='osm84')
 
     parser.add_argument('--network', action="store",
                         help="network",
