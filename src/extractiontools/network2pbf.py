@@ -41,7 +41,7 @@ class CopyNetwork2Pbf(DBApp):
             self.reset_authorization(self.conn)
         self.copy2pbf()
 
-    def create_views(self):
+    def create_views_filtered(self):
         """"""
         sql = """
 DROP SCHEMA IF EXISTS {schema} CASCADE;
@@ -55,7 +55,7 @@ CREATE OR REPLACE VIEW {schema}.actions AS
 
 CREATE OR REPLACE VIEW {schema}.boundary AS
  SELECT b.id,
-    b.geom
+    st_transform(b.geom, {srid}) AS geom
    FROM osm.boundary b;
 
 CREATE OR REPLACE VIEW {schema}.ways AS
@@ -108,8 +108,83 @@ CREATE OR REPLACE VIEW {schema}.relations AS
     r.user_id,
     r.tstamp,
     r.changeset_id,
-    r.tags,
-    r.n_nw
+    r.tags
+   FROM osm.relations r;
+
+CREATE OR REPLACE VIEW {schema}.users AS
+ SELECT u.id,
+    u.name
+   FROM osm.users u;
+
+        """.format(schema=self.options.user,
+                   network=self.options.network,
+                   srid=self.options.srid)
+
+    def create_views(self):
+        """"""
+        sql = """
+DROP SCHEMA IF EXISTS {schema} CASCADE;
+CREATE SCHEMA {schema};
+
+CREATE OR REPLACE VIEW {schema}.actions AS
+ SELECT a.data_type,
+    a.action,
+    a.id
+   FROM osm.actions a;
+
+CREATE OR REPLACE VIEW {schema}.boundary AS
+ SELECT b.id,
+    st_transform(b.geom, {srid}) AS geom
+   FROM osm.boundary b;
+
+CREATE OR REPLACE VIEW {schema}.ways AS
+ SELECT w.id,
+    w.version,
+    w.user_id,
+    w.tstamp,
+    w.changeset_id,
+    w.tags,
+    w.nodes,
+    st_transform(w.bbox, {srid}) AS bbox,
+    st_transform(w.linestring, {srid}) AS linestring
+   FROM osm.ways w;
+
+
+CREATE OR REPLACE VIEW {schema}.schema_info AS
+ SELECT s.version
+   FROM osm.schema_info s;
+
+CREATE OR REPLACE VIEW {schema}.way_nodes AS
+ SELECT wn.way_id,
+    wn.node_id,
+    wn.sequence_id
+   FROM osm.way_nodes wn;
+
+CREATE OR REPLACE VIEW {schema}.nodes AS
+ SELECT n.id,
+    n.version,
+    n.user_id,
+    n.tstamp,
+    n.changeset_id,
+    n.tags,
+    st_transform(n.geom, {srid}) AS geom
+   FROM osm.nodes n;
+
+CREATE OR REPLACE VIEW {schema}.relation_members AS
+ SELECT rm.relation_id,
+    rm.member_id,
+    rm.member_type,
+    rm.member_role,
+    rm.sequence_id
+   FROM osm.relation_members rm;
+
+CREATE OR REPLACE VIEW {schema}.relations AS
+ SELECT r.id,
+    r.version,
+    r.user_id,
+    r.tstamp,
+    r.changeset_id,
+    r.tags
    FROM osm.relations r;
 
 CREATE OR REPLACE VIEW {schema}.users AS
