@@ -72,8 +72,6 @@ CREATE MATERIALIZED VIEW {schema}.ways AS
    FROM osm.ways w, {network}.links_reached_without_planned l
 --   FROM osm.ways w, {network}.links l
    WHERE w.id = l.wayid;
-ALTER TABLE {schema}.ways
-ADD PRIMARY KEY (id);
 CREATE INDEX way_id_idx ON {schema}.ways
 USING btree(id);
 
@@ -193,12 +191,16 @@ CREATE OR REPLACE VIEW {schema}.users AS
         """
         copy the according schema to a pbf with osmosis
         """
-        cmd = '{OSMOSIS} -v --read-pgsql authFile={authfile} host={host}:{port} user={user} database={db} --dataset-dump --write-pbf file={pbf_file}'
         #cmd = '{OSMOSIS} -v --read-pgsql authFile={authfile} host={host}:{port} user={user} database={db} --dataset-dump --write-xml file={pbf_file}'
 
         fn = '{db}_{network}'.format(db=self.options.destination_db,
                                          network=self.options.network)
-        pbf_file = os.path.join(self.folder, fn)
+        file_path = os.path.join(self.folder, fn)
+        if self.options.xml:
+            to_xml = ' --tee --write-xml file={xml_file}.osm.gz '.format(xml_file=file_path)
+        else:
+            to_xml = ''
+        cmd = '{OSMOSIS} -v --read-pgsql authFile={authfile} host={host}:{port} user={user} database={db} --dataset-dump {to_xml}--write-pbf file={fn}.pbf'
 
         full_cmd = cmd.format(OSMOSIS=self.OSMOSISPATH,
                               authfile=self.AUTHFILE,
@@ -206,7 +208,8 @@ CREATE OR REPLACE VIEW {schema}.users AS
                               port=self.options.port,
                               user=self.options.user,
                               db=self.options.destination_db,
-                              pbf_file=pbf_file,
+                              fn=file_path,
+                              to_xml=to_xml,
                               )
         logger.info(full_cmd)
         ret = subprocess.call(full_cmd, shell=self.SHELL)
@@ -241,7 +244,7 @@ if __name__ == '__main__':
                         dest="srid", default='4326')
 
     parser.add_argument('--xml', action="store_true",
-                        help="also export as xml", type=bool,
+                        help="also export as xml",
                         dest="xml", default='False')
 
     options = parser.parse_args()
