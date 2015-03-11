@@ -58,7 +58,8 @@ CREATE OR REPLACE VIEW {schema}.boundary AS
     st_transform(b.geom, {srid}) AS geom
    FROM osm.boundary b;
 
-CREATE OR REPLACE VIEW {schema}.ways AS
+DROP VIEW IF EXISTS {schema}.ways CASCADE;
+CREATE MATERIALIZED VIEW {schema}.ways AS
  SELECT w.id,
     w.version,
     w.user_id,
@@ -71,7 +72,10 @@ CREATE OR REPLACE VIEW {schema}.ways AS
    FROM osm.ways w, {network}.links_reached_without_planned l
 --   FROM osm.ways w, {network}.links l
    WHERE w.id = l.wayid;
-
+ALTER TABLE {schema}.ways
+ADD PRIMARY KEY (id);
+CREATE INDEX way_id_idx ON {schema}.ways
+USING btree(id);
 
 CREATE OR REPLACE VIEW {schema}.schema_info AS
  SELECT s.version
@@ -84,7 +88,8 @@ CREATE OR REPLACE VIEW {schema}.way_nodes AS
    FROM osm.way_nodes wn, {schema}.ways w
    WHERE wn.way_id = w.id;
 
-CREATE OR REPLACE VIEW {schema}.nodes AS
+DROP VIEW IF EXISTS {schema}.nodes CASCADE;
+CREATE MATERIALIZED VIEW {schema}.nodes AS
  SELECT n.id,
     n.version,
     n.user_id,
@@ -94,6 +99,8 @@ CREATE OR REPLACE VIEW {schema}.nodes AS
     st_transform(n.geom, {srid}) AS geom
    FROM osm.nodes n, (SELECT DISTINCT node_id FROM {schema}.way_nodes) wn
    WHERE n.id = wn.node_id;
+CREATE INDEX node_id_idx ON {schema}.nodes
+USING btree(id);
 
 CREATE TABLE {schema}.active_relations (id integer primary key);
 
@@ -232,6 +239,10 @@ if __name__ == '__main__':
     parser.add_argument("-s", '--srid', action="store",
                         help="srid of the target pbf", type=int,
                         dest="srid", default='4326')
+
+    parser.add_argument('--xml', action="store_true",
+                        help="also export as xml", type=bool,
+                        dest="xml", default='False')
 
     options = parser.parse_args()
 
