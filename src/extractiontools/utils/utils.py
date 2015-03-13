@@ -72,9 +72,6 @@ def seconds_time_string(seconds):
     return '%d:%02d:%02d' % (hours, minutes, seconds)
 
 
-
-
-
 def string_to_datetime(s):
     ''' Converts a string with a format like this DD:MM:YYYY:HH:MM into a datetime object
     '''
