@@ -21,6 +21,7 @@ from extractiontools.transit.table import Table, Tables, Base
 
 
 class DoubleComma(np.double):
+    '''np.double for comma separated values'''
     def __new__(cls, val):
         if isinstance(val, (str, unicode)):
             val = val.replace(',', '.')
@@ -28,16 +29,23 @@ class DoubleComma(np.double):
 
     def __repr__(self):
         """"""
-        return 'np.double for comma separated values'
+        string = super(DoubleComma, self).__repr__().replace('.', ',')
+        return string
+
+    def __str__(self):
+        return repr(self)
+
+    def __unicode__(self):
+        return unicode(repr(self))
 
 
-class DoubleCommaLength(np.double):
+class DoubleCommaLength(DoubleComma):
+    '''np.double for comma separated values in km'''
     def __new__(cls, val):
+        km = False
         if isinstance(val, (str, unicode)):
             if val.endswith('km'):
                 km = True
-            else:
-                km = False
             val = val.replace(',', '.').rstrip('km')
         self = super(DoubleCommaLength, cls).__new__(cls, val)
         if km:
@@ -46,13 +54,16 @@ class DoubleCommaLength(np.double):
 
     def __repr__(self):
         """"""
-        return 'np.double for comma separated values in km'
+        km = self / 1000
+        string = ('%0.3f' % (km)).replace('.', ',')
+        return string + 'km'
 
 
-class DoubleCommaTime(np.double):
+class DoubleCommaTime(DoubleComma):
+    '''np.double for comma separated values in min, sec or days'''
     def __new__(cls, val):
+        factor = 1
         if isinstance(val, (str, unicode)):
-            factor = 1
             if val.endswith('s') or val.endswith('sec'):
                 factor = 1
             elif val.endswith('m') or val.endswith('min'):
@@ -61,12 +72,15 @@ class DoubleCommaTime(np.double):
                 factor = 3600
             val = val.replace(',', '.').rstrip('smhecinr')
         self = super(DoubleCommaTime, cls).__new__(cls, val)
-        self *= factor
+        if factor != 1:
+            return self * factor
         return self
 
     def __repr__(self):
         """"""
-        return 'np.double for comma separated values in min, sec or days'
+        sec = self
+        string = ('%d' % (sec)).replace('.', ',')
+        return string + 's'
 
 
 def coord_to_wgs84(from_proj, x, y, z='0'):
@@ -159,6 +173,18 @@ class Visum(Base):
             current_line = self.next_line()
         return current_line
 
+    def write_tables(self):
+        """write the tables"""
+        with codecs.open(self.netfile, encoding='latin-1', mode='w') as f:
+            header = '$VISION\n'
+            f.writelines(header)
+            for table in self._tables.itervalues():
+                f.writelines(os.linesep)
+                f.writelines('*{0}\n'.format(table.tablename))
+                table.write_rows(f)
+
+
+
 
 class VisumTable(Table):
     """Base Class for a visum table"""
@@ -183,6 +209,21 @@ class VisumTable(Table):
 
     def write_rows(self, writer):
         """"""
+        cols = ';'.join(cn for cn in self.cols)
+        header = '${tn}:{cols}\n'.format(tn=self.tablename, cols=cols)
+        writer.write(header)
+        for row in self.rows:
+            l = []
+            vals = row.tolist()
+            mask = row.mask.tolist()
+            for c, colname in enumerate(self.cols):
+                if mask[c]:
+                    l.append('')
+                else:
+                    converter = self.cols.converters[c]
+                    l.append(converter(vals[c]))
+            line = ';'.join([unicode(x) for x in l])
+            writer.write(line+os.linesep)
 
 
 class Version(VisumTable):

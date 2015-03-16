@@ -29,6 +29,12 @@ class TestVisum(unittest.TestCase):
         visum.read_tables()
         print visum
 
+    def test_02_write(self):
+        visum = self.visum
+        folder = os.path.dirname(visum.netfile)
+        visum.netfile = os.path.join(folder, 'test.net')
+        visum.write_tables()
+
 
 
 
