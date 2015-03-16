@@ -19,7 +19,7 @@ from pyproj import Proj, transform
 from extractiontools.utils.utf8csv import UnicodeWriter
 from extractiontools.utils.utils import read_config, time_adder, coord_to_wgs84, eliminate_blank_lines
 
-
+pd = '+proj=merc +lat_ts=0 +lon_0=0 +k=1.000000 +x_0=0 +y_0=0 +a=6371000 +b=6371000 +units=m'
 # TODO: - error handling
 #       - documenting
 #       - read config file
@@ -43,8 +43,10 @@ class NetToGtf():
             folder = os.path.dirname(self.net_file)
             gtfs = os.path.join(folder, gtfs)
         self.output_file = os.extsep.join((os.path.splitext(gtfs)[0], 'zip'))
-        os.remove(self.output_file)
-        self.from_proj = Proj(init='epsg:{epsg}'.format(epsg=options.proj_code))
+        if os.path.exists(self.output_file):
+            os.remove(self.output_file)
+        #self.from_proj = Proj(init='epsg:{epsg}'.format(epsg=options.proj_code))
+        self.from_proj = Proj(pd)
         self.net_route_types_map = net_types_map
         self.calendar_types = calendar_types
         self.table_to_func_mapper = {
@@ -276,7 +278,6 @@ class NetToGtf():
                 break
             entry = line.split(';')
 
-            print entry
             self.vertex_to_stop_mapper[entry[vertex_id_column]] = entry[stop_id_column]
             self.stop_point_to_stop_mapper[entry[stop_point_id_column]] = entry[stop_id_column]
         return line
@@ -480,36 +481,36 @@ class NetToGtf():
 
     def _write_tranfers(self, table_header_line): # reads from $UEBERGANGSGEHZEITHSTBER
         if self.debug: print 'writing tranfers'
-        f = open('transfers.txt', 'w')
-        writer = UnicodeWriter(f, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        writer.writerow(( u'from_stop_id', u'to_stop_id', u'transfer_type', u'min_transfer_time' ))
-
-        columns = table_header_line.split(':')[1].split(';')
-        columns[-1] = columns[-1].split(self.eol)[0]
-
-        from_stop_id_column = columns.index('VONHSTBERNR')
-        to_stop_id_column = columns.index('NACHHSTBERNR')
-        time_column = columns.index('ZEIT')
-
-
-        while True:
-            line = self.get_line()
-            if line.startswith('$'):  # next section
-                break
-            entry = line.split(';')
-
-            transfer_time = entry[time_column][:-3] if len(self.eol) == 2 else entry[time_column][:-2]
-            writer.writerow(( entry[from_stop_id_column], entry[to_stop_id_column], '2', transfer_time ))
-
-        f.close()
-
         try:
-            zip_file = ZipFile(self.output_file, 'a')
-            zip_file.write('transfers.txt')
-        finally:
-            zip_file.close()
 
-        os.remove('transfers.txt')
+            with open('transfers.txt', 'w') as f:
+                writer = UnicodeWriter(f, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+                writer.writerow(( u'from_stop_id', u'to_stop_id', u'transfer_type', u'min_transfer_time' ))
+
+                columns = table_header_line.split(':')[1].split(';')
+                columns[-1] = columns[-1].split(self.eol)[0]
+
+                from_stop_id_column = columns.index('VONHSTBERNR')
+                to_stop_id_column = columns.index('NACHHSTBERNR')
+                time_column = columns.index('ZEIT')
+
+                while True:
+                    line = self.get_line()
+                    if line.startswith('$'):  # next section
+                        break
+                    entry = line.split(';')
+
+                    transfer_time = entry[time_column][:-3] if len(self.eol) == 2 else entry[time_column][:-2]
+                    writer.writerow(( entry[from_stop_id_column], entry[to_stop_id_column], '2', transfer_time ))
+
+        finally:
+            try:
+                zip_file = ZipFile(self.output_file, 'a')
+                zip_file.write('transfers.txt')
+            finally:
+                zip_file.close()
+
+            os.remove('transfers.txt')
         return line
 
 
@@ -568,6 +569,7 @@ class NetToGtf():
                     if current_line.startswith('$'):
                         table_name = current_line.split(':')[0]
                         if table_name in self.table_to_func_mapper:
+                            print table_name
                             current_line = self.table_to_func_mapper[table_name](current_line)
                         else:
                             current_line = self.get_line()
@@ -611,7 +613,10 @@ def main():
     options = parser.parse_args()
 
     try:
-        ntg = NetToGtf(options, net_types_map={},
+        ntg = NetToGtf(options, net_types_map={'Rail': 2,
+                                               'Bus': 3,
+                                               'AST': 6,
+                                               'Sonstiges': 4,},
                        calendar_types=None)
 
         ntg.write_gtf()
