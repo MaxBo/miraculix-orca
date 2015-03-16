@@ -179,8 +179,8 @@ class Agency(GTFSTable):
     def add_columns(self):
         self.add_column('agency_id', int)
         self.add_column('agency_name', np.dtype('U255'))
-        self.add_column('agency_url', np.dtype('U255'))
-        self.add_column('agency_timezone', np.dtype('U255'))
+        self.add_column('agency_url', np.dtype('U255'), 'www.example.com')
+        self.add_column('agency_timezone', np.dtype('U255'), u'Europe/Berlin')
 
 
 class Calendar(GTFSTable):

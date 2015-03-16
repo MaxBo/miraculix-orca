@@ -46,6 +46,11 @@ class TestGTFS(unittest.TestCase):
         row.end_date = '20201231'
         print calendar
 
+    def test_03_test_defaults(self):
+        agency = self.gtfs.agency
+        agency.add_rows(3)
+        print agency
+
     def test_02_write_table(self):
         if os.path.exists(self.gtfs.path):
             os.remove(self.gtfs.path)

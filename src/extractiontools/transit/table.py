@@ -138,7 +138,7 @@ class Table(object):
 
     @property
     def n_rows(self):
-        return self.rows.n_rows
+        return self.rows.shape[0]
 
     @property
     def header(self):
@@ -179,6 +179,11 @@ class Table(object):
     def add_rows(self, n_rows):
         if self.cols:
             self.rows = XRecArray.empty(n_rows, dtype=self.cols.dtype)
+            defaults = [self.defaults[colname] if self.defaults[colname] is not None
+                        else self.cols.converters[c](0)
+                        for c, colname
+                        in enumerate(self.cols)]
+            self.rows.fill(tuple(defaults))
 
     @abstractmethod
     def write_rows(self, writer):
