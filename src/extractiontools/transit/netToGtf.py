@@ -455,7 +455,10 @@ class NetToGtf():
             fzp = self.raw_stop_times[fzp_id]
             if self.debug: print 'writing trip: %s' % lr_id
 
-            t_writer.writerow(( entry[route_id_column], '1', str(lr_id), fzp_id if fzp_id in self.shapes else u'' )) # TODO: service_id
+            t_writer.writerow(( entry[route_id_column],
+                                '1',
+                                str(lr_id),
+                                fzp_id if fzp_id in self.shapes else u'' )) # TODO: service_id
 
             for stop in fzp:
                 arrival_time = time_adder(stop[2], entry[departure_column])

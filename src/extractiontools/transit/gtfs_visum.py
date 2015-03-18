@@ -5,18 +5,28 @@
 # Created: 13/03/2015
 
 
-from extractiontools.transit.gtfs import GTFS
+from extractiontools.transit.gtfs import GTFS, logger
 from extractiontools.transit.visum import Visum
-
+from extractiontools.transit.time_utils import (get_timedelta_from_arr,
+                                                timedelta_to_HHMMSS, )
+import numpy as np
+from simcommon.matrixio import XRecArray, XMaskedRecarray
+import os
 
 net_types_map={'Rail': 2,
                'Bus': 3,
                'AST': 6,
                'Sonstiges': 4,}
+def get_nettype(key):
+    return net_types_map.get(key, -1)
+
 
 class GTFSVISUM(object):
 
     def __init__(self, netfile, gtfs_folder, gtfs_filename='gtfs.zip'):
+        """
+        convert a visum netfile into a gtfs zipfile
+        """
         self.visum = Visum(netfile)
         self.gtfs = GTFS(gtfs_folder, gtfs_filename)
 
@@ -32,26 +42,37 @@ class GTFSVISUM(object):
         return self
 
     def visum2gtfs(self):
+        logger.info('read visum tables from {}'.format(self.visum.path))
         self.visum.read_tables()
+        logger.info('convert calendar')
         self.convert_calendar()
+        logger.info('convert betreiber')
         self.convert_betreiber()
+        logger.info('convert knoten')
+        self.convert_knoten()
+
+        logger.info('convert stops')
+        self.convert_stops()
+        logger.info('convert gehzeiten')
+        self.convert_gehzeiten()
+
+        logger.info('convert linienrouten')
+        self.convert_linienrouten()
+        logger.info('convert routes')
+        self.convert_routes()
+
+        logger.info('convert stop_times')
+        self.convert_stop_times()
+        logger.info('write gtfs tables to {}'.format(self.gtfs.path))
+        self.gtfs.write_tables()
+        logger.info('finished writing')
 
     def convert_calendar(self):
         visum_vt = self.visum.verkehrstag
         gtfs_cal = self.gtfs.calendar
         n_rows = visum_vt.n_rows
         gtfs_cal.add_rows(n_rows)
-        row = gtfs_cal.rows[0]
-        row.service_id = 1
-        row.monday = 1
-        row.tuesday = 1
-        row.wednesday = 1
-        row.thursday = 1
-        row.friday = 1
-        row.saturday = 1
-        row.sunday = 1
-        row.start_date = '20000101'
-        row.end_date = '20201231'
+        gtfs_cal.calc_start_date()
 
     def convert_betreiber(self):
         visum_betreiber = self.visum.betreiber
@@ -61,6 +82,256 @@ class GTFSVISUM(object):
         gtfs_agency.rows.agency_id = visum_betreiber.rows.NR
         gtfs_agency.rows.agency_name = visum_betreiber.rows.NAME
 
+    def convert_knoten(self):
+        knoten = self.visum.knoten
+        knoten.calc_lat_lon()
+
+    def convert_stops(self):
+        """convert haltestellen"""
+        gtfs_stops = self.gtfs.stops
+        visum_haltepunkt = self.visum.haltepunkt
+        gtfs_stops.add_rows(visum_haltepunkt.n_rows)
+        knoten = self.visum.knoten
+        hp_knoten_lat = knoten.get_rows_by_pkey('lat', visum_haltepunkt.KNOTNR)
+        hp_knoten_lon = knoten.get_rows_by_pkey('lon', visum_haltepunkt.KNOTNR)
+
+        #lat, lon = visum_haltepunkt.transform_to_latlon()
+        gtfs_stops.rows.stop_id = np.array('S', dtype='U1').view(np.chararray) + visum_haltepunkt.rows.NR.astype('U49')
+        gtfs_stops.rows.stop_name = visum_haltepunkt.rows.NAME
+        gtfs_stops.rows.stop_lat = hp_knoten_lat
+        gtfs_stops.rows.stop_lon = hp_knoten_lon
+        # station gets an 'S' in front of the station number
+        hst = gtfs_stops.rows.parent_station
+        station = (
+            np.full_like(hst, u'S') +
+            visum_haltepunkt.rows.HSTBERNR.astype(hst.dtype)).astype(hst.dtype)
+        hst[:] = station
+
+    def convert_gehzeiten(self):
+        """convert Uebergangsgehzeithstber"""
+        gz = self.visum.uebergangsgehzeithstber
+        tf = self.gtfs.transfers
+
+        # check if stops exists
+        stops = self.gtfs.stops
+        dtype = stops.stop_id.dtype
+        vh = np.array('S', dtype='U1').view(np.chararray) + gz.VONHSTBERNR.astype('U49')
+        vh_in_stops = ~stops.get_rows_by_pkey('location_type', vh).mask
+
+        nh = np.array('S', dtype='U1').view(np.chararray) + gz.NACHHSTBERNR.astype('U49')
+        #gz.NACHHSTBERNR.astype(dtype)
+        nh_in_stops = ~stops.get_rows_by_pkey('location_type', nh).mask
+
+        in_stops = vh_in_stops & nh_in_stops
+        n_rows = in_stops.sum()
+
+        tf.add_rows(n_rows)
+
+        tf.rows.from_stop_id = vh[in_stops]
+        tf.rows.to_stop_id = nh[in_stops]
+        tf.rows.min_transfer_time = gz.ZEIT[in_stops]
+
+    def convert_routes(self):
+        """convert routes"""
+        gtfs_routes = self.gtfs.routes
+        visum_linie = self.visum.linie
+        betreiber = self.visum.betreiber
+        gtfs_routes.add_rows(visum_linie.n_rows)
+        gtfs_routes.rows.route_id = visum_linie.rows.NAME
+
+        # agency
+        betreiber_id = visum_linie.rows.BETREIBERNR
+        gtfs_routes.rows.agency_id = betreiber_id
+
+        dt = gtfs_routes.rows.route_short_name.dtype
+        gtfs_routes.rows.route_short_name = visum_linie.rows.NAME.astype(dt)
+        gtfs_routes.rows.route_long_name = visum_linie.rows.NAME
+
+        # map VSYSCODE vectorized
+        line_vsyscode = visum_linie.rows.VSYSCODE
+        vsyscode =  self.visum.vsys.rows.CODE
+        vsysname = self.visum.vsys.rows.NAME
+        d = dict(zip(vsyscode, vsysname))
+        def get_gtfs_name(key):
+            name = d.get(key, -1)
+            gtfs_type = net_types_map.get(name, -1)
+            return gtfs_type
+        mp = np.vectorize(get_gtfs_name)
+        gtfs_vsyscode = np.ma.masked_equal(mp(line_vsyscode), -1)
+        gtfs_routes.rows.route_type = gtfs_vsyscode
+
+    def convert_linienrouten(self):
+        """convert linienrouten to trips, stop_times and shapes"""
+        lre = self.visum.linienroutenelement
+        visum_lr = self.visum.linienroute
+        lr, lr_idx, shape_id,lr_counts = np.unique(
+            lre.get_columns_by_names(visum_lr.pkey_cols),
+            return_index=True,
+            return_counts=True,
+            return_inverse=True,
+        )
+        visum_lr.add_rows(len(lr))
+        visum_lr.rows.data = lr
+        visum_lr.lr_idx = lr_idx
+        visum_lr.lr_counts = lr_counts
+        visum_lr.shape_id = np.arange(visum_lr.n_rows)
+        lre.shape_id = shape_id
+
+
+        fzpe = self.visum.fahrzeitprofilelement
+        visum_fp = self.visum.fahrzeitprofil
+        fp, fzpe_indx, fzpe_counts = np.unique(
+            fzpe.get_columns_by_names(visum_fp.pkey_cols),
+            return_index=True,
+            return_counts=True)
+        visum_fp.add_rows(len(fp))
+        visum_fp.rows.data = fp
+        visum_fp.fzpe_indx = fzpe_indx
+        visum_fp.fzpe_counts = fzpe_counts
+
+    def convert_stop_times(self):
+        """Stop times"""
+        knoten = self.visum.knoten
+        haltepunkt = self.visum.haltepunkt
+        fahrten = self.visum.fahrplanfahrt
+        fp = self.visum.fahrzeitprofil
+        fzpe = self.visum.fahrzeitprofilelement
+        linie = self.visum.linie
+        lr = self.visum.linienroute
+        lre = self.visum.linienroutenelement
+
+        logger.debug('add trips')
+        trips = self.gtfs.trips
+        stoptimes = self.gtfs.stoptimes
+
+        # trips
+        trips.add_rows(fahrten.n_rows)
+        # give new trip id as sequence
+        trips.rows.trip_id = fahrten.NR
+        trips.rows.route_id = fahrten.LINNAME
+
+        fzpe_profil_cols = fzpe.get_columns_by_names_hashable(lr.pkey_cols)
+        fzpe_rowidx_in_lre = lr.get_rows_by_pkey('lr_idx',
+                                                   fzpe_profil_cols)
+        fzpe_counts_in_lre = lr.get_rows_by_pkey('lr_counts',
+                                                   fzpe_profil_cols)
+
+
+        fahrt_profil_cols = fahrten.get_columns_by_names_hashable(fp.pkey_cols)
+        fahrt_rowidx_in_fzpe = fp.get_rows_by_pkey('fzpe_indx',
+                                                  fahrt_profil_cols)
+        fahrt_counts_in_fzpe = fp.get_rows_by_pkey('fzpe_counts',
+                                                   fahrt_profil_cols)
+
+        logger.debug('add shapes')
+        # get the unique shapes defined by lr and vonlreidx -> tolreidx
+
+        fahrt_von_fzpe_cols = fahrten.get_columns_by_names_hashable(fp.pkey_cols+
+                                                                    ['VONFZPELEMINDEX'])
+        fahrten_von_lridx = fzpe.get_rows_by_pkey('LRELEMINDEX',
+                                                   fahrt_von_fzpe_cols)
+
+        fahrt_nach_fzpe_cols = fahrten.get_columns_by_names_hashable(fp.pkey_cols+
+                                                                    ['NACHFZPELEMINDEX'])
+        fahrten_nach_lridx = fzpe.get_rows_by_pkey('LRELEMINDEX',
+                                                fahrt_nach_fzpe_cols)
+
+        fahrt_lr_cols = [getattr(fahrten, col) for col in lr.pkey_cols]
+        shape_idx = XRecArray.fromarrays(
+            fahrt_lr_cols + [fahrten_von_lridx, fahrten_nach_lridx],
+            names=['LINNAME', 'LINROUTENAME', 'RICHTUNGCODE',
+                   'VONLRIDX', 'NACHLRIDX'])
+
+        #sh, sh_idx, fahrt_shape_ids, lr_counts = np.unique(
+        sh, sh_idx, fahrt_shape_rows, lr_counts = np.unique(
+            shape_idx,
+            return_index=True,
+            return_counts=True,
+            return_inverse=True,
+        )
+        fahrt_shape_ids = fahrt_shape_rows + 1
+        shape_count_knoten = sh.NACHLRIDX - sh.VONLRIDX + 1
+        shapes = self.gtfs.shapes
+        shapes.add_rows(shape_count_knoten.sum())
+
+        knoten = self.visum.knoten
+        lre = self.visum.linienroutenelement
+        lre_knoten = lre.KNOTNR
+
+        lat = knoten.get_rows_by_pkey('lat', lre_knoten)
+        lon = knoten.get_rows_by_pkey('lon', lre_knoten)
+
+        shape_lr_key_col = sh[lr.pkey_cols]
+        shape_lr_key_col = shape_lr_key_col.view(dtype='S%s' %shape_lr_key_col.itemsize)
+        shape_lr_idx = lr.get_rows_by_pkey(
+            'lr_idx', shape_lr_key_col)
+
+        # loop over shapes
+        sh_von_idx = 0
+        for shape_row, shape in enumerate(sh):
+            shape_id = shape_row + 1
+            n_knoten = shape_count_knoten[shape_row]
+            sh_nach_idx = sh_von_idx + n_knoten
+            rows = shapes.rows[sh_von_idx:sh_nach_idx]
+            rows.shape_id = shape_id
+            rows.shape_pt_sequence = np.arange(1, n_knoten + 1)
+
+            lr_idx_start = (shape_lr_idx[shape_row] - 1) + shape.VONLRIDX
+            lr_idx_end = shape_lr_idx[shape_row] + shape.NACHLRIDX
+
+            rows.shape_pt_lat = lat[lr_idx_start:lr_idx_end]
+            rows.shape_pt_lon = lon[lr_idx_start:lr_idx_end]
+
+            # next shape
+            sh_von_idx = sh_nach_idx
+
+        # set trip shape_id
+        trips.rows.shape_id = fahrt_shape_ids
+
+        logger.debug('add stop_times')
+        # stop times
+        n_rows = (fahrten.NACHFZPELEMINDEX - fahrten.VONFZPELEMINDEX + 1).sum()
+
+        stoptimes.add_rows(n_rows)
+
+
+        st_von_idx = 0
+
+        # loop over fahrten
+        for f, fahrt in enumerate(fahrten.rows):
+            if not f % 500:
+                logger.debug('{}: fahrt {}'.format(f, fahrt))
+            start_idx = fahrt_rowidx_in_fzpe[f]
+            counts = fahrt_counts_in_fzpe[f]
+            end_idx = start_idx + counts
+            st_nach_idx = st_von_idx + counts
+            fahrt_st = stoptimes.rows[st_von_idx:st_nach_idx]
+
+            fzp = fzpe.rows[start_idx:end_idx]
+            fahrt_fzpe = fzp[fahrt.VONFZPELEMINDEX - 1 :
+                             fahrt.NACHFZPELEMINDEX]
+
+            fahrt_lre_idx_start = fzpe_rowidx_in_lre[start_idx]
+
+            fahrt_st.trip_id = fahrt.NR
+
+            # get absolute time from visum relative times
+            ankunft = get_timedelta_from_arr(fahrt_fzpe.ANKUNFT.filled())
+            abfahrt = get_timedelta_from_arr(fahrt_fzpe.ABFAHRT.filled())
+            fahrt_abfahrt = get_timedelta_from_arr(fahrt.ABFAHRT)
+
+            arrival = fahrt_abfahrt + ankunft
+            departure = fahrt_abfahrt + abfahrt
+            fahrt_st.arrival_time = timedelta_to_HHMMSS(arrival)
+            fahrt_st.departure_time = timedelta_to_HHMMSS(departure)
+            current_index = fahrt_fzpe.LRELEMINDEX + (fahrt_lre_idx_start - 1)
+            fahrt_st.stop_sequence = lre.INDEX.take(current_index)
+            fahrt_st.stop_id = np.array('S', dtype='U1').view(np.chararray) +  + lre.HPUNKTNR.take(current_index).astype('U49')
+            fahrt_st.pickup_type = (fahrt_fzpe.EIN == 0)
+            fahrt_st.drop_off_type = (fahrt_fzpe.AUS == 0)
+
+            # next trip
+            st_von_idx = st_nach_idx
 
 
 def main():
@@ -86,22 +357,8 @@ def main():
 
     options = parser.parse_args()
 
-    try:
-        ntg = NetToGtf(options, net_types_map={'Rail': 2,
-                                               'Bus': 3,
-                                               'AST': 6,
-                                               'Sonstiges': 4,},
-                                calendar_types=None)
-
-        ntg.write_gtf()
-    except InvalidInputException:
-        print u"Error: looks like the input file is not valid!\n"
-        parser.print_help()
-        exit(-1)
-    #except:
-        print u"something went wrong\n"
-        parser.print_help()
-        exit(-1)
+    gtfs2visum = GTFSVISUM.net2gtfs(options)
+    gtfs2visum.visum2gtfs()
 
 if __name__ == '__main__':
     main()

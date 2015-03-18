@@ -10,7 +10,13 @@ from collections import OrderedDict
 import os
 import numpy as np
 from simcommon.matrixio import XMaskedRecarray
-
+import logging
+logger = logging.getLogger()
+formatter = logging.Formatter('%(asctime)s %(message)s', datefmt='%H:%M:%S')
+sh = logging.StreamHandler()
+sh.setFormatter(formatter)
+logger.addHandler(sh)
+logger.level = logging.DEBUG
 
 class Base(object):
     """The base class for projects"""
@@ -65,8 +71,13 @@ class Columns(OrderedDict):
     """"""
     @property
     def dtype(self):
+        vals = self.values()
+        #formats = [getattr(v, 'dtype', v)
+                   #if isinstance(getattr(v, 'dtype', v), np.dtype)
+                   #else v
+                   #for v in vals]
         dtype = {'names': self.keys(),
-                'formats': self.values(),}
+                'formats': vals,}
         return dtype
 
     @property
@@ -140,6 +151,11 @@ class Table(object):
     def n_rows(self):
         return self.rows.shape[0]
 
+    def __getattr__(self, attr):
+        if attr in self.cols:
+            return getattr(self.rows, attr)
+        return super(Table, self).__getattribute__(attr)
+
     @property
     def header(self):
         """The file header of the output file"""
@@ -176,13 +192,70 @@ class Table(object):
         """add a row"""
         self.rows.append(row)
 
+    def add_pkey(self, *args):
+        """Add primary key columns
+
+        Parameters
+        ----------
+        colname [, colname [, colname...]]: str
+            the columns that form the primary key
+        """
+        assert [isinstance(p, (str, unicode)) for p in args]
+        self.pkey_cols = list(args)
+
+    def get_columns_by_names(self, colnames):
+        """
+        return columns defined by names
+        if colnames are several names, then return a list of
+        tuples, which are hashable
+        otherwise, return a XMaskedArray
+
+        Parameters
+        ----------
+        colnames : str or list/tuple of str
+            the colnames to return
+        """
+        if len(colnames) == 1:
+            return getattr(self.rows, colnames[0])
+        elif len(colnames) == 0:
+            raise ValueError('No key defined')
+
+        new_arr = np.rec.fromarrays((getattr(self.rows, col)
+                                  for col in colnames))
+        return new_arr
+
+    def get_columns_by_names_hashable(self, colnames):
+        """
+        return columns defined by names
+        if colnames are several names, then return a list of
+        tuples, which are hashable
+        otherwise, return a XMaskedArray
+
+        Parameters
+        ----------
+        colnames : str or list/tuple of str
+            the colnames to return
+        """
+        arr = self.get_columns_by_names(colnames)
+        if isinstance(arr, np.core.records.recarray):
+            return arr.view(type='S%s' %arr.itemsize)
+        return arr
+
+    @property
+    def pkey(self):
+        return self.get_columns_by_names(self.pkey_cols)
+
+    @property
+    def pkey_hashed(self):
+        return self.get_columns_by_names_hashable(self.pkey_cols)
+
     def add_rows(self, n_rows):
         if self.cols:
-            self.rows = XRecArray.empty(n_rows, dtype=self.cols.dtype)
             defaults = [self.defaults[colname] if self.defaults[colname] is not None
                         else self.cols.converters[c](0)
                         for c, colname
                         in enumerate(self.cols)]
+            self.rows = XRecArray.empty(n_rows, dtype=self.cols.dtype)
             self.rows.fill(tuple(defaults))
 
     @abstractmethod
@@ -221,6 +294,22 @@ class Table(object):
             table_column.mask[:] = mask
 
         self.set_data(recarr)
+
+    def get_rows_by_key(self, col_key, colname_value, data,
+                         missing_value=-1):
+        col_values = getattr(self, colname_value)
+        d = dict(zip(col_key, col_values))
+        def get_values(key):
+            name = d.get(key, missing_value)
+            return name
+        mp = np.vectorize(get_values, otypes=col_values.dtype.char)
+        val = mp(data.view(np.ndarray))
+        return np.ma.masked_equal(val, missing_value)
+
+    def get_rows_by_pkey(self, colname_value, data, missing_value=-1):
+        col_key = self.pkey_hashed
+        return self.get_rows_by_key(col_key, colname_value,
+                                    data, missing_value)
 
 
 def main():

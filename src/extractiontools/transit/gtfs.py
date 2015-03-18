@@ -14,11 +14,38 @@ import numpy as np
 from extractiontools.utils.utf8csv import UnicodeWriter, UnicodeReader
 from extractiontools.utils.file_in_zipfile import (ReadFileInZipfile,
                                                    WriteFileInZipfile)
-from extractiontools.transit.table import Table, Base
+from extractiontools.transit.table import Table, Base, logger
 
 __all__ = ('GTFS', 'GTFSTable',
            'Agency', 'Calendar', 'Trips', 'Stops', 'StopTimes',
            'Routes', 'Transfers')
+
+
+class Date_S8(np.datetime64):
+    '''np.datetime64 for values'''
+    unit = 'D'
+
+    def __new__(cls, val):
+        if isinstance(val, (str, unicode)):
+            if len(val) == 8:
+                val = '{Y}-{M}-{D}'.format(Y=val[:4], M=val[4:6], D=val[6:])
+            elif len(val) == 6:
+                val = '{Y}-{M}'.format(Y=val[:4], M=val[4:6])
+            else:
+                val = val.zfill(4)
+        self = super(Date_S8, cls).__new__(cls, val)
+        return self
+
+    def __repr__(self):
+        """"""
+        string = self.astype('M8[D]').__str__().replace('-', '')
+        return string
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __unicode__(self):
+        return self.__repr__()
 
 
 class GTFS(Base):
@@ -37,6 +64,7 @@ class GTFS(Base):
         self.add_table(Routes)
         self.add_table(Trips)
         self.add_table(Transfers)
+        self.add_table(Shapes)
 
     @property
     def path(self):
@@ -47,6 +75,13 @@ class GTFS(Base):
         """read all tables"""
         for table in self._tables.itervalues():
             table.read_file()
+
+    def write_tables(self):
+        """write the tables"""
+        if os.path.exists(self.path):
+            os.remove(self.path)
+        for table in self._tables.itervalues():
+            table.write_file()
 
 
 class GTFSTable(Table):
@@ -100,6 +135,8 @@ class Shapes(GTFSTable):
         self.add_column('shape_pt_lon', np.double)
         self.add_column('shape_pt_sequence', int)
 
+        self.add_pkey('shape_id')
+
 
 class StopTimes(GTFSTable):
     """"""
@@ -113,6 +150,10 @@ class StopTimes(GTFSTable):
         self.add_column('departure_time', np.dtype('S8'))
         self.add_column('stop_id', np.dtype('U50'))
         self.add_column('stop_sequence', int)
+        self.add_column('pickup_type', int, 0)
+        self.add_column('drop_off_type', int, 0)
+
+        self.add_pkey('trip_id', 'stop_sequence')
 
 
 class Trips(GTFSTable):
@@ -123,7 +164,7 @@ class Trips(GTFSTable):
 
     def add_columns(self):
         self.add_column('route_id', np.dtype('U50'))
-        self.add_column('service_id', int)
+        self.add_column('service_id', int, 1)
         self.add_column('trip_id', int)
         self.add_column('shape_id', int)
 
@@ -137,7 +178,7 @@ class Transfers(GTFSTable):
     def add_columns(self):
         self.add_column('from_stop_id', np.dtype('U50'))
         self.add_column('to_stop_id', np.dtype('U50'))
-        self.add_column('transfer_type', int)
+        self.add_column('transfer_type', int, 2)
         self.add_column('min_transfer_time', np.float32)
 
 
@@ -148,7 +189,7 @@ class Routes(GTFSTable):
         return 'routes.txt'
 
     def add_columns(self):
-        self.add_column('route_id', np.dtype('U50'))
+        self.add_column('route_id', np.dtype('U255'))
         self.add_column('agency_id', np.dtype('U50'))
         self.add_column('route_short_name', np.dtype('U50'))
         self.add_column('route_long_name', np.dtype('U255'))
@@ -164,10 +205,12 @@ class Stops(GTFSTable):
     def add_columns(self):
         self.add_column('stop_id', np.dtype('U50'))
         self.add_column('stop_name', np.dtype('U255'))
-        self.add_column('stop_lat', np.double)
-        self.add_column('stop_lon', np.double)
-        self.add_column('location_type', int)
-        self.add_column('parent_station', np.dtype('U50'))
+        self.add_column('stop_lat', np.dtype('f8'))
+        self.add_column('stop_lon', np.dtype('f8'))
+        self.add_column('location_type', int, 0)
+        self.add_column('parent_station', np.dtype('U50'), '')
+
+        self.add_pkey('stop_id')
 
 
 class Agency(GTFSTable):
@@ -190,16 +233,24 @@ class Calendar(GTFSTable):
         return 'calendar.txt'
 
     def add_columns(self):
-        self.add_column('service_id', int)
-        self.add_column('monday', int)
-        self.add_column('tuesday', int)
-        self.add_column('wednesday', int)
-        self.add_column('thursday', int)
-        self.add_column('friday', int)
-        self.add_column('saturday', int)
-        self.add_column('sunday', int)
-        self.add_column('start_date', np.dtype('S8'))
-        self.add_column('end_date', np.dtype('S8'))
+        self.add_column('service_id', int, 1)
+        self.add_column('monday', int, 1)
+        self.add_column('tuesday', int, 1)
+        self.add_column('wednesday', int, 1)
+        self.add_column('thursday', int, 1)
+        self.add_column('friday', int, 1)
+        self.add_column('saturday', int, 1)
+        self.add_column('sunday', int, 1)
+        self.add_column('start_date', np.dtype('S8'), '20000101')
+        self.add_column('end_date', np.dtype('S8'), '20201231')
+        #self.add_column('start_date', Date_S8, Date_S8('20000101'))
+        #self.add_column('end_date', Date_S8, Date_S8('20201231'))
+
+    def calc_start_date(self):
+        """Set start dates as datetime"""
+        row = self.rows[0].start_date
+        val = '{Y}-{M}-{D}'.format(Y=row[:4], M=row[4:6], D=row[6:])
+        self._start_date = np.datetime64(val)
 
 
 def main():

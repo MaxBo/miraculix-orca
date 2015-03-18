@@ -30,10 +30,11 @@ class TestGTFS2VISUM(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         """Remove the temp folder"""
-        shutil.rmtree(cls.converter)
+        shutil.rmtree(cls.gtfs_folder)
 
     def test_01_convert(self):
         self.converter.visum2gtfs()
+        print self.converter.gtfs
 
 
 

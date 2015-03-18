@@ -17,11 +17,13 @@ import numpy as np
 from extractiontools.utils.utf8csv import UnicodeWriter
 
 from collections import OrderedDict
-from extractiontools.transit.table import Table, Tables, Base
+from extractiontools.transit.table import Table, Tables, Base, logger
+from extractiontools.transit.projections import Transform
 
 
 class DoubleComma(np.double):
     '''np.double for comma separated values'''
+    dtype = 'f8'
     def __new__(cls, val):
         if isinstance(val, (str, unicode)):
             val = val.replace(',', '.')
@@ -114,7 +116,9 @@ class Visum(Base):
         self.add_table(Haltestellenbereich)
         self.add_table(Haltepunkt)
         self.add_table(Linie)
+        self.add_table(Linienroute)
         self.add_table(Linienroutenelement)
+        self.add_table(Fahrzeitprofil)
         self.add_table(Fahrzeitprofilelement)
         self.add_table(Fahrplanfahrt)
         self.add_table(Uebergangsgehzeithstber)
@@ -142,6 +146,7 @@ class Visum(Base):
                         # start with new block
                         header_line = current_line.strip().split(':')
                         tablename = header_line[0].lower().lstrip('$')
+                        logger.debug('start reading ${}'.format(tablename))
 
                         # check if real table with columns
                         if len(header_line) > 1:
@@ -164,7 +169,7 @@ class Visum(Base):
                 # finish the last block
                 if table_found:
                     table.read_file(header, lines)
-                print 'file completely read'
+                logger.info('file completely read')
 
     def next_line(self):
         """Get the next line, that is not empty or a comment"""
@@ -252,14 +257,18 @@ class Vsys(VisumTable):
         self.add_column('NAME', np.dtype('U255'))
         self.add_column('TYP', np.dtype('U255'))
 
+        self.add_pkey('CODE')
 
-class Knoten(VisumTable):
+
+class Knoten(VisumTable, Transform):
     """Verkehrssysteme"""
     def add_columns(self):
         self.add_column('NR', np.int64)
         self.add_column('STEUERUNGSTYP', int)
         self.add_column('XKOORD', DoubleComma)
         self.add_column('YKOORD', DoubleComma)
+
+        self.add_pkey('NR')
 
 
 class Betreiber(VisumTable):
@@ -268,8 +277,10 @@ class Betreiber(VisumTable):
         self.add_column('NR', np.int64)
         self.add_column('NAME', np.dtype('U255'))
 
+        self.add_pkey('NR')
 
-class Haltestelle(VisumTable):
+
+class Haltestelle(VisumTable, Transform):
     """Verkehrssysteme"""
     def add_columns(self):
         self.add_column('NR', np.int64)
@@ -278,8 +289,10 @@ class Haltestelle(VisumTable):
         self.add_column('XKOORD', DoubleComma)
         self.add_column('YKOORD', DoubleComma)
 
+        self.add_pkey('NR')
 
-class Haltestellenbereich(VisumTable):
+
+class Haltestellenbereich(VisumTable, Transform):
     """Verkehrssysteme"""
     def add_columns(self):
         self.add_column('NR', np.int64)
@@ -289,19 +302,22 @@ class Haltestellenbereich(VisumTable):
         self.add_column('XKOORD', DoubleComma)
         self.add_column('YKOORD', DoubleComma)
 
+        self.add_pkey('NR')
 
 class Haltepunkt(VisumTable):
     """Verkehrssysteme"""
     def add_columns(self):
         self.add_column('NR', np.int64)
         self.add_column('HSTBERNR', np.int64)
-        self.add_column('NAME', np.dtype('U50'))
+        self.add_column('CODE', np.dtype('U50'))
         self.add_column('NAME', np.dtype('U255'))
         self.add_column('GERICHTET', np.int8)
         self.add_column('KNOTNR', np.int64)
         self.add_column('VONKNOTNR', np.int64)
         self.add_column('STRNR', np.int64)
         self.add_column('RELPOS', DoubleComma)
+
+        self.add_pkey('NR')
 
 
 class Linie(VisumTable):
@@ -312,6 +328,16 @@ class Linie(VisumTable):
         self.add_column('TARIFSYSTEMMENGE', np.dtype('U50'))
         self.add_column('BETREIBERNR', np.int64)
 
+        self.add_pkey('NAME')
+
+class Linienroute(VisumTable):
+    """Verkehrssysteme"""
+    def add_columns(self):
+        self.add_column('LINNAME', np.dtype('U255'))
+        self.add_column('LINROUTENAME', np.dtype('U255'))
+        self.add_column('RICHTUNGCODE', np.dtype('U1'))
+
+        self.add_pkey('LINNAME', 'LINROUTENAME', 'RICHTUNGCODE')
 
 class Linienroutenelement(VisumTable):
     """Verkehrssysteme"""
@@ -324,6 +350,19 @@ class Linienroutenelement(VisumTable):
         self.add_column('KNOTNR', np.int64)
         self.add_column('HPUNKTNR', np.int64)
         self.add_column('NACHLAENGE', DoubleCommaLength)
+
+        self.add_pkey('LINNAME', 'LINROUTENAME', 'RICHTUNGCODE', 'INDEX')
+
+class Fahrzeitprofil(VisumTable):
+    """Verkehrssysteme"""
+    def add_columns(self):
+        self.add_column('LINNAME', np.dtype('U255'))
+        self.add_column('LINROUTENAME', np.dtype('U255'))
+        self.add_column('RICHTUNGCODE', np.dtype('U1'))
+        self.add_column('FZPROFILNAME', np.dtype('U255'))
+
+        self.add_pkey('LINNAME', 'LINROUTENAME', 'RICHTUNGCODE',
+                      'FZPROFILNAME')
 
 
 class Fahrzeitprofilelement(VisumTable):
@@ -340,6 +379,9 @@ class Fahrzeitprofilelement(VisumTable):
         self.add_column('ANKUNFT', np.dtype('S8'))
         self.add_column('ABFAHRT', np.dtype('S8'))
 
+        self.add_pkey('LINNAME', 'LINROUTENAME', 'RICHTUNGCODE',
+                      'FZPROFILNAME', 'INDEX')
+
 
 class Fahrplanfahrt(VisumTable):
     """Verkehrssysteme"""
@@ -355,6 +397,8 @@ class Fahrplanfahrt(VisumTable):
         self.add_column('NACHFZPELEMINDEX', np.int64)
         self.add_column('BETREIBERNR', np.int64)
 
+        self.add_pkey('NR')
+
 
 class Uebergangsgehzeithstber(VisumTable):
     """Verkehrssysteme"""
@@ -363,3 +407,5 @@ class Uebergangsgehzeithstber(VisumTable):
         self.add_column('NACHHSTBERNR', np.int64)
         self.add_column('VSYSCODE', np.dtype('U50'))
         self.add_column('ZEIT', DoubleCommaTime)
+
+        self.add_pkey('VONHSTBERNR', 'NACHHSTBERNR', 'VSYSCODE')

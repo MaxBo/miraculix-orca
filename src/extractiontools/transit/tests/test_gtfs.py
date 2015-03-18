@@ -29,7 +29,7 @@ class TestGTFS(unittest.TestCase):
         shutil.rmtree(cls.gtfs.folder)
 
     def test_01_dtypes(self):
-        print self.gtfs
+        #print self.gtfs
         calendar = self.gtfs.calendar
         print calendar.header
         calendar.add_rows(1)
@@ -45,6 +45,7 @@ class TestGTFS(unittest.TestCase):
         row.start_date = '20000101'
         row.end_date = '20201231'
         print calendar
+        print calendar.start_date
 
     def test_03_test_defaults(self):
         agency = self.gtfs.agency
