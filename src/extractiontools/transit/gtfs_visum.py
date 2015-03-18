@@ -89,22 +89,29 @@ class GTFSVISUM(object):
     def convert_stops(self):
         """convert haltestellen"""
         gtfs_stops = self.gtfs.stops
-        visum_haltepunkt = self.visum.haltepunkt
-        gtfs_stops.add_rows(visum_haltepunkt.n_rows)
+        hp = self.visum.haltepunkt
+        lre = self.visum.linienroutenelement
+        unique_hp = np.unique(lre.HPUNKTNR)
+        hp.is_angefahren = np.in1d(hp.NR, unique_hp, assume_unique=True)
+
+        hp_angefahren = hp.rows[hp.is_angefahren]
+        logger.debug('{} of {} hp angefahren'.format(len(hp_angefahren), hp.n_rows))
+
+        gtfs_stops.add_rows(len(hp_angefahren))
         knoten = self.visum.knoten
-        hp_knoten_lat = knoten.get_rows_by_pkey('lat', visum_haltepunkt.KNOTNR)
-        hp_knoten_lon = knoten.get_rows_by_pkey('lon', visum_haltepunkt.KNOTNR)
+        hp_knoten_lat = knoten.get_rows_by_pkey('lat', hp_angefahren.KNOTNR)
+        hp_knoten_lon = knoten.get_rows_by_pkey('lon', hp_angefahren.KNOTNR)
 
         #lat, lon = visum_haltepunkt.transform_to_latlon()
-        gtfs_stops.rows.stop_id = np.array('S', dtype='U1').view(np.chararray) + visum_haltepunkt.rows.NR.astype('U49')
-        gtfs_stops.rows.stop_name = visum_haltepunkt.rows.NAME
+        gtfs_stops.rows.stop_id = np.array('S', dtype='U1').view(np.chararray) + hp_angefahren.NR.astype('U49')
+        gtfs_stops.rows.stop_name = hp_angefahren.NAME
         gtfs_stops.rows.stop_lat = hp_knoten_lat
         gtfs_stops.rows.stop_lon = hp_knoten_lon
         # station gets an 'S' in front of the station number
         hst = gtfs_stops.rows.parent_station
         station = (
             np.full_like(hst, u'S') +
-            visum_haltepunkt.rows.HSTBERNR.astype(hst.dtype)).astype(hst.dtype)
+            hp_angefahren.HSTBERNR.astype(hst.dtype)).astype(hst.dtype)
         hst[:] = station
 
     def convert_gehzeiten(self):
@@ -326,7 +333,7 @@ class GTFSVISUM(object):
             fahrt_st.departure_time = timedelta_to_HHMMSS(departure)
             current_index = fahrt_fzpe.LRELEMINDEX + (fahrt_lre_idx_start - 1)
             fahrt_st.stop_sequence = lre.INDEX.take(current_index)
-            fahrt_st.stop_id = np.array('S', dtype='U1').view(np.chararray) +  + lre.HPUNKTNR.take(current_index).astype('U49')
+            fahrt_st.stop_id = np.array('S', dtype='U1').view(np.chararray) + lre.HPUNKTNR.take(current_index).astype('U49')
             fahrt_st.pickup_type = (fahrt_fzpe.EIN == 0)
             fahrt_st.drop_off_type = (fahrt_fzpe.AUS == 0)
 
