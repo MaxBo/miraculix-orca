@@ -123,7 +123,6 @@ class GTFSVISUM(object):
         stops = self.gtfs.stops
         dtype = stops.stop_id.dtype
 
-        print stops.get_dictlist_by_non_unique_key(stops.parent_station, 'stop_id', np.array(['H1493', 'F999'], dtype='U50') )
         hstber_prefix = np.array('H', dtype='U1').view(np.chararray)
 
         vhstber = hstber_prefix + gz.VONHSTBERNR.astype('U49')
