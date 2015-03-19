@@ -18,6 +18,27 @@ sh.setFormatter(formatter)
 logger.addHandler(sh)
 logger.level = logging.DEBUG
 
+
+class Dictlist(dict):
+
+    @classmethod
+    def from_keys_values(cls, keys, values):
+        """create a DictList from keys and values"""
+        self = Dictlist()
+        length = len(keys)
+        assert length == len(values), 'there must be as many keys as values'
+        for i in xrange(length):
+            self[keys[i]] = values[i]
+        return self
+
+    def __setitem__(self, key, value):
+        try:
+            self[key]
+        except KeyError:
+            super(Dictlist, self).__setitem__(key, [])
+        self[key].append(value)
+
+
 class Base(object):
     """The base class for projects"""
     __metaclass__ = ABCMeta
@@ -304,7 +325,26 @@ class Table(object):
             return name
         mp = np.vectorize(get_values, otypes=col_values.dtype.char)
         val = mp(data.view(np.ndarray))
-        return np.ma.masked_equal(val, missing_value)
+        # mask the values nor found
+        ma = np.ma.array(val)
+        ma.mask = (val == np.array(missing_value, dtype=val.dtype))
+        return ma
+
+    def get_dictlist_by_non_unique_key(self, col_key, colname_value, data):
+        """
+        for each row in data, check if value exists in col_key
+        if yes, return for this entry a list of all values in colname_value
+        return a list of lists for all valid rows with the values found
+        and a bool array of length data which is True, if values where found
+
+        """
+        col_values = getattr(self, colname_value)
+        d = Dictlist.from_keys_values(col_key, col_values)
+        val = [d.get(k, ) for k in data]
+        found = np.array([x is not None for x in val])
+        return val, found
+
+
 
     def get_rows_by_pkey(self, colname_value, data, missing_value=-1):
         col_key = self.pkey_hashed

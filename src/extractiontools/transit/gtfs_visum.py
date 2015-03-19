@@ -108,11 +108,11 @@ class GTFSVISUM(object):
         gtfs_stops.rows.stop_lat = hp_knoten_lat
         gtfs_stops.rows.stop_lon = hp_knoten_lon
         # station gets an 'S' in front of the station number
-        hst = gtfs_stops.rows.parent_station
+        hp_hstber = gtfs_stops.rows.parent_station
         station = (
-            np.full_like(hst, u'S') +
-            hp_angefahren.HSTBERNR.astype(hst.dtype)).astype(hst.dtype)
-        hst[:] = station
+            np.full_like(hp_hstber, u'H') +
+            hp_angefahren.HSTBERNR.astype(hp_hstber.dtype))
+        hp_hstber[:] = station
 
     def convert_gehzeiten(self):
         """convert Uebergangsgehzeithstber"""
@@ -122,21 +122,40 @@ class GTFSVISUM(object):
         # check if stops exists
         stops = self.gtfs.stops
         dtype = stops.stop_id.dtype
-        vh = np.array('S', dtype='U1').view(np.chararray) + gz.VONHSTBERNR.astype('U49')
-        vh_in_stops = ~stops.get_rows_by_pkey('location_type', vh).mask
 
-        nh = np.array('S', dtype='U1').view(np.chararray) + gz.NACHHSTBERNR.astype('U49')
+        print stops.get_dictlist_by_non_unique_key(stops.parent_station, 'stop_id', np.array(['H1493', 'F999'], dtype='U50') )
+        hstber_prefix = np.array('H', dtype='U1').view(np.chararray)
+
+        vhstber = hstber_prefix + gz.VONHSTBERNR.astype('U49')
+        von_hp, vh_in_stops = stops.get_dictlist_by_non_unique_key(stops.parent_station,
+                                                                  'stop_id', vhstber)
+
+        nhstber = hstber_prefix + gz.NACHHSTBERNR.astype('U49')
         #gz.NACHHSTBERNR.astype(dtype)
-        nh_in_stops = ~stops.get_rows_by_pkey('location_type', nh).mask
+        nach_hp,nh_in_stops = stops.get_dictlist_by_non_unique_key(stops.parent_station,
+                                                                   'stop_id', nhstber)
 
         in_stops = vh_in_stops & nh_in_stops
-        n_rows = in_stops.sum()
+
+        result = []
+        transfer_type = tf.defaults['transfer_type']
+        min_transfer_times = gz.ZEIT
+        for i in xrange(gz.n_rows):
+            if in_stops[i]:
+                min_transfer_time = min_transfer_times[i]
+                for von_stop in von_hp[i]:
+                    for nach_stop in nach_hp[i]:
+                        row = (von_stop, nach_stop,
+                               transfer_type, min_transfer_time)
+                        result.append(row)
+
+        data = XRecArray(result, dtype=tf.cols.dtype)
+        unique_data = np.unique(data)
+        n_rows = len(unique_data)
+
 
         tf.add_rows(n_rows)
-
-        tf.rows.from_stop_id = vh[in_stops]
-        tf.rows.to_stop_id = nh[in_stops]
-        tf.rows.min_transfer_time = gz.ZEIT[in_stops]
+        tf.rows[:] = unique_data
 
     def convert_routes(self):
         """convert routes"""
