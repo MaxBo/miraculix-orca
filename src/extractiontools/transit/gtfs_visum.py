@@ -110,7 +110,7 @@ class GTFSVISUM(object):
         # station gets an 'S' in front of the station number
         hp_hstber = gtfs_stops.rows.parent_station
         station = (
-            np.full_like(hp_hstber, u'H') +
+            np.full_like(hp_hstber, u'S') +
             hp_angefahren.HSTBERNR.astype(hp_hstber.dtype))
         hp_hstber[:] = station
 
@@ -123,7 +123,7 @@ class GTFSVISUM(object):
         stops = self.gtfs.stops
         dtype = stops.stop_id.dtype
 
-        hstber_prefix = np.array('H', dtype='U1').view(np.chararray)
+        hstber_prefix = np.array('S', dtype='U1').view(np.chararray)
 
         vhstber = hstber_prefix + gz.VONHSTBERNR.astype('U49')
         von_hp, vh_in_stops = stops.get_dictlist_by_non_unique_key(stops.parent_station,
