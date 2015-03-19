@@ -272,9 +272,6 @@ ON a.nodeid = e.id
 
 CREATE INDEX pk_junctions_z ON {network}.junctions_z USING btree(nodeid);
 
-CREATE OR REPLACE VIEW view_junctions_z AS
-SELECT j.nodeid, st_makepoint(st_x(j.geom), st_y(j.geom), COALESCE(jz.z, -99999)) AS geom
-FROM {network}.junctions j LEFT JOIN {network}.junctions_z jz ON j.nodeid=jz.nodeid;
 """
         self.run_query(sql.format(beta=-0.1,  # Gewichtungsfaktor weight = exp(beta * meter)
                                   max_dist=30,  # Maximale Distanz zu benachbarten Centroiden
