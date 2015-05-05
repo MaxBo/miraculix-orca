@@ -194,7 +194,7 @@ FROM meta.boundary a;
 
             sql = """
         SELECT
-            st_srid(a.geom) AS as srid
+            st_srid(a.geom) AS srid
         FROM meta.boundary a;
         """
             cur.execute(sql)
