@@ -229,7 +229,7 @@ if __name__ == '__main__':
                         dest="host", default='localhost')
     parser.add_argument("-p", '--port', action="store",
                         help="port", type=int,
-                        dest="port", default=15432)
+                        dest="port", default=5432)
     parser.add_argument("-U", '--user', action="store",
                         help="user", type=str,
                         dest="user", default='osm')
