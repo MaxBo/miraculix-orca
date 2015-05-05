@@ -261,6 +261,8 @@ ALTER TABLE osm.relations
 
         """.format(schema=self.schema)
         self.run_query(sql, self.conn1)
+        self.tables2cluster.append('{schema}.nodes'.format(schema=self.schema))
+        self.tables2cluster.append('{schema}.ways'.format(schema=self.schema))
 
     def further_stuff(self):
         """

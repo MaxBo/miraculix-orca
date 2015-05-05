@@ -98,8 +98,7 @@ CREATE INDEX idx_clc06_code
 ALTER TABLE {schema}.clc06 CLUSTER ON clc06_geom_idx;
 """
         self.run_query(sql.format(schema=self.schema), conn=self.conn1)
-        #ALTER TABLE {schema}.{tn} ADD PRIMARY KEY (rid);
-        #ALTER TABLE {schema}.o_{ov}_{tn} ADD PRIMARY KEY (rid);
+        self.tables2cluster.append('{schema}.clc06'.format(schema=self.schema))
 
         sql = """
 CREATE INDEX idx_{tn}_geom ON {schema}.{tn} USING gist(st_convexhull(rast));

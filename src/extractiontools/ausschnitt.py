@@ -56,6 +56,7 @@ class Extract(DBApp):
         self.source_db = options.get('source_db', 'dplus')
         self.destination_db = destination_db
         self.recreate_db = recreate_db
+        self.tables2cluster = []
 
     def set_login(self, host, port, user, password=None):
         """
@@ -338,15 +339,28 @@ ALTER DATABASE {db} OWNER TO {role};
         """
         login = self.login1
 
-        clusterdb = os.path.join(self.PGPATH, 'clusterdb')
-        cmd = '''"{clusterdb}" -U {user} -h {host} -p {port} -w --verbose -d {destination_db}'''.format(clusterdb=clusterdb, destination_db=login.db, user=login.user,
-           port=login.port, host=login.host)
-        logger.info(cmd)
-        subprocess.call(cmd, shell=self.SHELL)
+        cmd = '''"{clusterdb}" -U {user} -h {host} -p {port} -w --verbose {tbls} -d {destination_db}'''
+        if self.tables2cluster:
+            tbls = ' '.join(('-t {}'.format(d) for d in self.tables2cluster))
+            clusterdb = os.path.join(self.PGPATH, 'clusterdb')
+            cmd = cmd.format(clusterdb=clusterdb,
+                             destination_db=login.db,
+                             user=login.user,
+                             port=login.port,
+                             host=login.host,
+                             tbls=tbls)
+            logger.info(cmd)
+            subprocess.call(cmd, shell=self.SHELL)
+        else:
+            logger.info('no tables to cluster')
 
         vacuumdb = os.path.join(self.PGPATH, 'vacuumdb')
-        cmd = '''"{vacuumdb}" -U {user} -h {host} -p {port} -w --analyze -d {destination_db}'''.format(vacuumdb=vacuumdb, destination_db=login.db, user=login.user,
-           port=login.port, host=login.host)
+        cmd = '''"{vacuumdb}" -U {user} -h {host} -p {port} -w --analyze -d {destination_db}'''
+        cmd = cmd.format(vacuumdb=vacuumdb,
+                         destination_db=login.db,
+                         user=login.user,
+                         port=login.port,
+                         host=login.host)
         logger.info(cmd)
         subprocess.call(cmd, shell=self.SHELL)
 
