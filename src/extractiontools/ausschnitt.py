@@ -58,6 +58,17 @@ class Extract(DBApp):
         self.recreate_db = recreate_db
 
     def set_login(self, host, port, user, password=None):
+        """
+        set login information for source and destination database
+        to self.login0 and self.login1
+
+        Parameters
+        ----------
+        host : str
+        port : int
+        user : str
+        password : str, optional
+        """
         self.login0 = Login(host, port, user, password, db=self.source_db)
         self.login1 = Login(host, port, user, password, db=self.destination_db)
 
@@ -162,6 +173,34 @@ DROP SCHEMA IF EXISTS {schema} CASCADE;
         """
         """
         self.bbox = bbox
+
+    def get_target_boundary_from_dest_db(self):
+        """
+        get the target boundary from the destination database
+        """
+        with Connection(login=self.login1) as conn1:
+            cur = conn1.cursor()
+            sql = """
+SELECT
+    st_ymax(a.source_geom) AS top,
+    st_ymin(a.source_geom) AS bottom,
+    st_xmax(a.source_geom) AS right,
+    st_xmin(a.source_geom) AS left
+FROM meta.boundary a;
+"""
+            cur.execute(sql)
+            row = cur.fetchone()
+            self.bbox = BBox(row.top, row.bottom, row.left, row.right)
+
+            sql = """
+        SELECT
+            st_srid(a.geom) AS as srid
+        FROM meta.boundary a;
+        """
+            cur.execute(sql)
+            row = cur.fetchone()
+
+            self.target_srid = row.srid
 
     def create_target_boundary(self):
         """
