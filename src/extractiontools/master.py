@@ -131,7 +131,7 @@ run script {name} with parameters {params} at {time}:
         msg_end = '''
 script {name} finished at {time} with returncode {ret}'''
 
-        cmd = '. .profile; {scriptname} {params}'
+        cmd = '. ~/.profile; {scriptname} {params}'
 
         with Connection(login=self.login) as conn:
             self.conn = conn
