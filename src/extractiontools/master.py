@@ -51,6 +51,7 @@ class ScriptRunner(DBApp):
         """
         self.set_login()
         if self.options.recreate_db:
+            self.update_metatable()
             self.create_db()
         self.choose_scripts()
         self.run_scripts()
@@ -96,8 +97,9 @@ UPDATE meta.scripts SET todo = False;
 UPDATE meta.scripts SET todo = True WHERE scriptcode = %(sc)s
             '''
             cursor = self.conn.cursor()
-            for script in self.options.scripts:
-                cursor.execute(sql, {'sc': script})
+            if self.options.scripts is not None:
+                for script in self.options.scripts:
+                    cursor.execute(sql, {'sc': script})
             self.conn.commit()
 
     def run_scripts(self):
@@ -129,7 +131,7 @@ run script {name} with parameters {params} at {time}:
         msg_end = '''
 script {name} finished at {time} with returncode {ret}'''
 
-        cmd = '{scriptname} {params}'
+        cmd = '. .profile; {scriptname} {params}'
 
         with Connection(login=self.login) as conn:
             self.conn = conn
@@ -166,6 +168,52 @@ script {name} finished at {time} with returncode {ret}'''
                                            time=endtime,
                                            ret=ret))
 
+    def update_metatable(self):
+        """update the row in the meta-table of the database"""
+        sql_delete = """
+DELETE FROM meta.projekte WHERE projektname_kurz = '{name}';
+        """
+        sql_insert = """
+INSERT INTO meta.projekte (projektname_kurz,
+                           projektname_lang,
+                           projektnummer,
+                           bearbeiter,
+                           srid,
+                           "left",
+                           "right",
+                           "top",
+                           "bottom",
+                           date_areas,
+                           date_timetable)
+VALUES (%(destination_db)s,
+        %(name_long)s,
+        %(project_number)s,
+        %(bearbeiter)s,
+        %(srid)s,
+        %(left)s,
+        %(right)s,
+        %(top)s,
+        %(bottom)s,
+        %(date_areas)s,
+        %(date_timetable)s
+        );
+        """
+        op = self.options
+        login = Login(host=op.host,
+                      port=op.port,
+                      user=op.user,
+                      password=None,
+                      db=op.source_db)
+
+        with Connection(login) as conn:
+            self.conn = conn
+            cursor = self.conn.cursor()
+            cursor.execute(sql_delete.format(name=op.destination_db))
+            cursor.execute(sql_insert, op.__dict__)
+            self.conn.commit()
+
+
+
 
 if __name__ == '__main__':
 
@@ -174,6 +222,21 @@ if __name__ == '__main__':
     parser.add_argument("-n", '--name', action="store",
                         help="Name of destination database",
                         dest="destination_db", default='extract')
+
+    parser.add_argument('--name-long', action="store",
+                        help="Long Project Name",
+                        dest="name_long", default='Projektname')
+
+
+    parser.add_argument('--projectnumber', action="store",
+                        help="Project Number",
+                        dest="project_number", default='0000')
+
+    parser.add_argument('--bearbeiter', action="store",
+                        help="Bearbeiter",
+                        dest="bearbeiter", default='ggr')
+
+
 
     parser.add_argument("-s", '--srid', action="store",
                         help="srid of the target database", type=int,

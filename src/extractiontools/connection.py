@@ -2,7 +2,7 @@
 #coding:utf-8
 
 import psycopg2
-from psycopg2.extras import NamedTupleConnection
+from psycopg2.extras import NamedTupleConnection, DictCursor
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from types import MethodType
@@ -54,6 +54,7 @@ class Connection(object):
                               database=login.db,
                               connection_factory=NamedTupleConnection)
         self.conn = conn
+        self.conn.get_dict_cursor = self.get_dict_cursor
         self.set_copy_command_format()
         self.set_vacuum_analyze_command()
         return conn
@@ -91,6 +92,9 @@ class Connection(object):
         self.conn.vacuum_analyze = MethodType(vacuum_analyze,
                                               self.conn,
                                               self.conn.__class__)
+
+    def get_dict_cursor(self):
+        return self.conn.cursor(cursor_factory=DictCursor)
 
 
 class DBApp(object):

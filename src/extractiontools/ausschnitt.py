@@ -108,6 +108,7 @@ class Extract(DBApp):
 
         self.further_stuff()
 
+
     def further_stuff(self):
         """
         To be defined in the subclass
@@ -515,6 +516,8 @@ UPDATE {temp}.scripts
 SET started=False, finished=False, todo=False;
         '''.format(temp=self.temp)
         cursor.execute(sql)
+
+
 
 
 if __name__ == '__main__':
