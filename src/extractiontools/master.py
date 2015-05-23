@@ -166,6 +166,7 @@ script {name} finished at {time} with returncode {ret}'''
                     self.run_query(error_sql, values={'sc': row.scriptcode,
                                                       'time': starttime})
                     msg = '{script} returned ErrorCode {code}'
+                    self.conn.commit()
                     raise ScriptError(msg.format(script=command, code=ret))
                 self.run_query(finished_sql, values={'sc': row.scriptcode,
                                                      'time': endtime})
@@ -210,7 +211,6 @@ VALUES (%(destination_db)s,
         login = Login(host=op.host,
                       port=op.port,
                       user=op.user,
-                      password=None,
                       db=op.source_db)
 
         with Connection(login) as conn:
