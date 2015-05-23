@@ -391,7 +391,7 @@ BEGIN
   FROM meta.dependencies d
   WHERE d.needs_script = s.scriptcode
   AND d.scriptcode = NEW.scriptcode
-  AND NOT s.success;
+  AND s.success IS NOT True;
   END IF;
   RETURN NEW;
 
@@ -409,7 +409,7 @@ CREATE OR REPLACE FUNCTION {temp}.unselect_dependent_scripts()
 $BODY$
 DECLARE
 BEGIN
-  IF NOT NEW.todo AND NOT NEW.success
+  IF NOT NEW.todo AND NEW.success IS NOT True
   THEN
   UPDATE meta.scripts s
   SET todo = False
