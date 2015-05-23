@@ -29,7 +29,7 @@ SELECT
   c.fid, c.code_06, c.id, c.remark,
   st_transform(c.geom, {target_srid})::geometry('MULTIPOLYGON', {target_srid}) AS geom
 INTO {temp}.clc06
-FROM {schema}.clc06 c, meta.boundary tb
+FROM {schema}.clc06 c, {temp}.boundary tb
 WHERE
 c.geom && tb.source_geom
         """
@@ -59,7 +59,7 @@ INSERT INTO {temp}.{tn} (rast, filename)
 SELECT
   rast,
   r.filename
-FROM {schema}.{tn} r, meta.boundary tb
+FROM {schema}.{tn} r, {temp}.boundary tb
 WHERE
 r.rast && tb.source_geom;
         """
@@ -179,5 +179,5 @@ if __name__ == '__main__':
                              target_srid=options.srid,
                              recreate_db=False)
     extract.set_login(host=options.host, port=options.port, user=options.user)
-    extract.get_target_boundary(bbox)
+    extract.get_target_boundary_from_dest_db()
     extract.extract()

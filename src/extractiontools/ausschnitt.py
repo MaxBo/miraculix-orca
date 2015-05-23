@@ -160,7 +160,7 @@ ALTER SCHEMA {temp} RENAME TO {schema}
         sql = """
 SELECT t.*
 INTO {temp}.{tn}
-FROM {schema}.{tn} t, meta.boundary tb
+FROM {schema}.{tn} t, {temp}.boundary tb
 WHERE
 t.{geom} && tb.geom
         """
