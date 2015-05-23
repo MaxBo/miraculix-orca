@@ -114,15 +114,21 @@ ORDER BY id
         """
         started_sql = """
 UPDATE meta.scripts
-SET started = True, finished=False, starttime = %(time)s, endtime=NULL
+SET started = True, success=NULL, starttime = %(time)s, endtime=NULL
 WHERE scriptcode = %(sc)s;
         """
 
         finished_sql = """
 UPDATE meta.scripts
-SET finished = True, started=False, endtime = %(time)s, todo = False
+SET success = True, started=False, endtime = %(time)s, todo = False
 WHERE scriptcode = %(sc)s;
             """
+
+        error_sql = """
+UPDATE meta.scripts
+SET success = False, endtime = %(time)s
+WHERE scriptcode = %(sc)s;
+"""
 
         msg_start = '''
 run script {name} with parameters {params} at {time}:
@@ -157,6 +163,8 @@ script {name} finished at {time} with returncode {ret}'''
                 endtime = datetime.now()
 
                 if ret:
+                    self.run_query(error_sql, values={'sc': row.scriptcode,
+                                                      'time': starttime})
                     msg = '{script} returned ErrorCode {code}'
                     raise ScriptError(msg.format(script=command, code=ret))
                 self.run_query(finished_sql, values={'sc': row.scriptcode,

@@ -391,7 +391,7 @@ BEGIN
   FROM meta.dependencies d
   WHERE d.needs_script = s.scriptcode
   AND d.scriptcode = NEW.scriptcode
-  AND NOT s.finished;
+  AND NOT s.success;
   END IF;
   RETURN NEW;
 
@@ -409,7 +409,7 @@ CREATE OR REPLACE FUNCTION {temp}.unselect_dependent_scripts()
 $BODY$
 DECLARE
 BEGIN
-  IF NOT NEW.todo AND NOT NEW.finished
+  IF NOT NEW.todo AND NOT NEW.success
   THEN
   UPDATE meta.scripts s
   SET todo = False
@@ -461,7 +461,7 @@ CREATE TABLE {temp}.scripts
   desctiption text,
   parameter text,
   started boolean NOT NULL DEFAULT false,
-  finished boolean NOT NULL DEFAULT false,
+  success boolean DEFAULT NULL,
   starttime timestamp with time zone,
   endtime timestamp with time zone,
   todo boolean NOT NULL DEFAULT false,
@@ -513,7 +513,7 @@ SELECT * FROM {schema}.dependencies;
 
         sql = '''
 UPDATE {temp}.scripts
-SET started=False, finished=False, todo=False;
+SET started=False, success=NULL, todo=False;
         '''.format(temp=self.temp)
         cursor.execute(sql)
 
