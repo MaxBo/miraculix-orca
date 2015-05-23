@@ -206,7 +206,7 @@ CREATE OR REPLACE VIEW {schema}.users AS
             to_xml = ' --tee --write-xml file={xml_file}.osm.gz '.format(xml_file=file_path)
         else:
             to_xml = ''
-        cmd = '{OSMOSIS} -v --read-pgsql authFile={authfile} host={host}:{port} user={user} database={db} --dataset-dump {to_xml}--write-pbf file={fn}.pbf'
+        cmd = '{OSMOSIS} -v --read-pgsql authFile="{authfile}" host={host}:{port} user={user} database={db} --dataset-dump {to_xml}--write-pbf file={fn}.pbf'
 
         full_cmd = cmd.format(OSMOSIS=self.OSMOSISPATH,
                               authfile=self.AUTHFILE,
