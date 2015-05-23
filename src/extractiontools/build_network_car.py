@@ -97,10 +97,10 @@ SELECT spatial_ref_names.id FROM spatial_ref_name,spatial_ref_names WHERE spatia
 
     def get_srid(self):
         """
-        retrieve the SRID from osm.boundary
+        retrieve the SRID from meta.boundary
         """
         sql = """
-SELECT st_srid(geom) AS srid FROM osm.boundary LIMIT 1;
+SELECT st_srid(geom) AS srid FROM meta.boundary LIMIT 1;
         """
         cur = self.conn.cursor()
         cur.execute(sql)
@@ -1189,7 +1189,7 @@ WHERE h.node = r.node;
         """
         sql = """
 SELECT v.id
-FROM {network}.edge_table_vertices_pgr v, (SELECT st_centroid(b.geom) AS geom FROM osm.boundary b) AS c
+FROM {network}.edge_table_vertices_pgr v, (SELECT st_centroid(b.geom) AS geom FROM meta.boundary b) AS c
 ORDER BY v.the_geom <-> c.geom
 LIMIT {n};
         """.format(n=n, network=self.network)

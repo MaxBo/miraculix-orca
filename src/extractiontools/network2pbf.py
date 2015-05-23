@@ -56,7 +56,7 @@ CREATE OR REPLACE VIEW {schema}.actions AS
 CREATE OR REPLACE VIEW {schema}.boundary AS
  SELECT b.id,
     st_transform(b.geom, {srid}) AS geom
-   FROM osm.boundary b;
+   FROM meta.boundary b;
 
 DROP VIEW IF EXISTS {schema}.ways CASCADE;
 CREATE MATERIALIZED VIEW {schema}.ways AS
