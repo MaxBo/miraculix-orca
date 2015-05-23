@@ -378,7 +378,7 @@ ALTER DATABASE {db} OWNER TO {role};
         logger.info(cmd)
         subprocess.call(cmd, shell=self.SHELL)
 
-    def create_serverside_folder():
+    def create_serverside_folder(self):
         """ Create a project folder on the server"""
         folder = os.path.join(self.folder, 'projekte', self.destination_db)
         cmd = 'mkdir -p {}'.format(folder)
