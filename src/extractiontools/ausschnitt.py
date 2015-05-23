@@ -57,6 +57,18 @@ class Extract(DBApp):
         self.destination_db = destination_db
         self.recreate_db = recreate_db
         self.tables2cluster = []
+        self.check_platform()
+
+    def check_platform(self):
+        """
+        check the platform
+        """
+        if sys.platform.startswith('win'):
+            self.folder = r'C:\temp'
+            self.SHELL = False
+        else:
+            self.folder = '~/gis'
+            self.SHELL = True
 
     def set_login(self, host, port, user, password=None):
         """
@@ -84,6 +96,7 @@ class Extract(DBApp):
         self.set_pg_path()
         if self.recreate_db:
             self.create_target_db(self.login1)
+            self.create_serverside_folder()
         with Connection(login=self.login0) as conn0, Connection(login=self.login1) as conn1:
             self.conn0 = conn0
             self.conn1 = conn1
@@ -365,6 +378,12 @@ ALTER DATABASE {db} OWNER TO {role};
         logger.info(cmd)
         subprocess.call(cmd, shell=self.SHELL)
 
+    def create_serverside_folder():
+        """ Create a project folder on the server"""
+        folder = os.path.join(self.folder, 'projekte', self.destination_db)
+        cmd = 'mkdir -p {}'.format(folder)
+        logger.info(cmd)
+        subprocess.call(cmd, shell=self.SHELL)
 
 class ExtractMeta(Extract):
     """

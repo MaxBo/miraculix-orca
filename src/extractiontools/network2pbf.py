@@ -180,22 +180,28 @@ CREATE OR REPLACE VIEW {schema}.users AS
             self.folder = r'C:\temp'
             self.SHELL = False
         else:
-            self.OSM_FOLDER = '/home/mb/osm'
+            self.OSM_FOLDER = '~/osm'
             self.OSMOSISPATH = os.path.join(self.OSM_FOLDER, 'osmosis',
                                             'bin', 'osmosis')
             self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
-            self.folder = '/home/mb/gis'
+            self.folder = '~/gis'
             self.SHELL = True
 
     def copy2pbf(self):
         """
         copy the according schema to a pbf with osmosis
         """
-        #cmd = '{OSMOSIS} -v --read-pgsql authFile={authfile} host={host}:{port} user={user} database={db} --dataset-dump --write-xml file={pbf_file}'
 
         fn = '{db}_{network}'.format(db=self.options.destination_db,
                                          network=self.options.network)
-        file_path = os.path.join(self.folder, fn)
+        folder = os.path.join(self.folder,
+                              'projekte',
+                              self.options.destination_db,
+                              'pbf', )
+        ret = subprocess.call('mkdir -p {}'.format(folder), shell=self.SHELL)
+
+        file_path = os.path.join(folder, fn)
+
         if self.options.xml:
             to_xml = ' --tee --write-xml file={xml_file}.osm.gz '.format(xml_file=file_path)
         else:

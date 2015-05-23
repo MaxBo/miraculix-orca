@@ -39,7 +39,12 @@ class Copy2FGDB(object):
             gdbname = '{db}.gdb'.format(db=self.options.destination_db)
         else:
             gdbname = self.options.gdbname
-        path = os.path.join(self.folder, gdbname)
+        folder = os.path.join(self.folder,
+                              'projekte',
+                              self.options.destination_db,
+                              'fgdb', )
+        ret = subprocess.call('mkdir -p {}'.format(folder), shell=self.SHELL)
+        path = os.path.join(folder, gdbname)
 
         full_cmd = cmd.format(OGR2OGR=self.OGR2OGRPATH,
                               layer=layer,
@@ -99,7 +104,7 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
             self.ORG_FOLDER = '/usr/bin'
             self.OGR2OGRPATH = os.path.join(self.ORG_FOLDER, 'ogr2ogr')
             self.OGRINFO = os.path.join(self.ORG_FOLDER, 'ogrinfo')
-            self.folder = '/home/mb/gis'
+            self.folder = '~/gis'
             self.SHELL = True
 
 
