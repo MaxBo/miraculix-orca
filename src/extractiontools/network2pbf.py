@@ -180,7 +180,7 @@ CREATE OR REPLACE VIEW {schema}.users AS
             self.folder = r'C:\temp'
             self.SHELL = False
         else:
-            self.OSM_FOLDER = '~/osm'
+            self.OSM_FOLDER = '~/gis/osm'
             self.OSMOSISPATH = os.path.join(self.OSM_FOLDER, 'osmosis',
                                             'bin', 'osmosis')
             self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
