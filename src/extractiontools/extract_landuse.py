@@ -29,7 +29,7 @@ SELECT
   c.fid, c.code_06, c.id, c.remark,
   st_transform(c.geom, {target_srid})::geometry('MULTIPOLYGON', {target_srid}) AS geom
 INTO {temp}.clc06
-FROM {schema}.clc06 c, {temp}.boundary tb
+FROM {schema}.clc06 c, meta.boundary tb
 WHERE
 c.geom && tb.source_geom
         """
@@ -59,7 +59,7 @@ INSERT INTO {temp}.{tn} (rast, filename)
 SELECT
   rast,
   r.filename
-FROM {schema}.{tn} r, {temp}.boundary tb
+FROM {schema}.{tn} r, meta.boundary tb
 WHERE
 r.rast && tb.source_geom;
         """

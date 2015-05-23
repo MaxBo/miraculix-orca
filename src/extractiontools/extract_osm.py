@@ -146,7 +146,7 @@ SELECT
   st_transform(w.bbox, {target_srid})::geometry('GEOMETRY', {target_srid}) AS bbox,
   st_transform(w.linestring, {target_srid})::geometry('GEOMETRY', {target_srid}) AS linestring
 INTO {temp}.ways
-FROM {schema}.ways w, {temp}.boundary tb
+FROM {schema}.ways w, meta.boundary tb
 WHERE
 w.bbox && tb.source_geom
 AND st_intersects(w.linestring, tb.source_geom);
@@ -164,7 +164,7 @@ SELECT
   n.id, n.version, n.user_id, n.tstamp, n.changeset_id, n.tags,
   st_transform(n.geom, {target_srid})::geometry('POINT', {target_srid}) AS geom
 INTO {temp}.nodes
-FROM {schema}.nodes n, {temp}.boundary tb
+FROM {schema}.nodes n, meta.boundary tb
 WHERE
 n.geom && tb.source_geom;
 ANALYZE {temp}.nodes;
