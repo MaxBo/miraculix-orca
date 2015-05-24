@@ -67,7 +67,7 @@ class Extract(DBApp):
             self.folder = r'C:\temp'
             self.SHELL = False
         else:
-            self.folder = '~/gis'
+            self.folder = '$HOME/gis'
             self.SHELL = True
 
     def set_login(self, host, port, user, password=None):

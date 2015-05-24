@@ -104,7 +104,7 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
             self.ORG_FOLDER = '/usr/bin'
             self.OGR2OGRPATH = os.path.join(self.ORG_FOLDER, 'ogr2ogr')
             self.OGRINFO = os.path.join(self.ORG_FOLDER, 'ogrinfo')
-            self.folder = '~/gis'
+            self.folder = '$HOME/gis'
             self.SHELL = True
 
 
