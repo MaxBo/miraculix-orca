@@ -114,7 +114,7 @@ WITH b AS (SELECT
   ceil((st_xmax(a.geom) - st_xmin(a.geom)) / {pixelsize})::integer AS width,
   ceil((st_ymax(a.geom) - st_ymin(a.geom)) / {pixelsize})::integer AS hight
 FROM
-(SELECT st_transform(geom, 3035) AS geom from {temp}.boundary) a)
+(SELECT st_transform(geom, 3035) AS geom from {schema}.boundary) a)
 
 INSERT INTO {schema}.laea_raster_{pixelsize} (rast)
 SELECT

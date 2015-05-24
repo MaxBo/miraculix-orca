@@ -220,7 +220,7 @@ CREATE OR REPLACE VIEW {schema}.users AS
         logger.info(full_cmd)
         ret = subprocess.call(full_cmd, shell=self.SHELL)
         if ret:
-            raise IOError('Layer {layer} could copied to Pbf'.format(layer=layer))
+            raise IOError('Layer {layer} could copied to Pbf'.format(layer='pbf'))
 
 if __name__ == '__main__':
 
