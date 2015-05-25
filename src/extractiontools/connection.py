@@ -193,3 +193,4 @@ SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
 DROP DATABASE IF EXISTS {db};
         """
         cur.execute(sql.format(db=dbname))
+        conn.commit()
