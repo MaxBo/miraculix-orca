@@ -168,3 +168,24 @@ class DBApp(object):
         """Reset role to Login Role"""
         sql = """RESET SESSION AUTHORIZATION;"""
         self.run_query(sql, conn)
+
+    def drop_database(self, dbname, conn=None):
+        """
+        Drop database, disconnect all connections before
+
+        Parameters
+        ----------
+        dbname : str
+            the name of the database to drop
+        conn : Connection-instance, optional
+            the connection to use to execute the drop commands
+        """
+        if conn is None:
+            conn = self.conn
+
+        sql = """
+update pg_database set datallowconn = 'false' where datname = '{db}';
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
+DROP DATABASE IF EXISTS {db};
+            """.format(db=dbname)
+        self.run_query(sql, conn)

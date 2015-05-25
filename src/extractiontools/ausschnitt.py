@@ -95,6 +95,7 @@ class Extract(DBApp):
     def extract(self):
         self.set_pg_path()
         if self.recreate_db:
+            self.drop_target_db(self.login0)
             self.create_target_db(self.login1)
             self.create_serverside_folder()
         with Connection(login=self.login0) as conn0, Connection(login=self.login1) as conn1:
@@ -253,17 +254,24 @@ UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
             self.PGPATH = '/usr/lib/postgresql/9.3/bin'
             self.SHELL = True
 
+    def drop_target_db(self, login):
+        """drop the target database if exists"""
+        with Connection(login=login) as conn:
+            self.drop_database(dbname=self.destination_db, conn=conn)
+        logger.info('database {} dropped'.format(self.destination_db))
+
     def create_target_db(self, login):
         """
         create the target database
         """
-        createdb = os.path.join(self.PGPATH, 'createdb')
-        dropdb = os.path.join(self.PGPATH, 'dropdb')
+        #dropdb = os.path.join(self.PGPATH, 'dropdb')
 
-        cmd = '''"{dropdb}" -U {user} -h {host} -p {port} -w {destination_db}'''.format(dropdb=dropdb, destination_db=login.db, user=login.user,
-           port=login.port, host=login.host)
-        logger.info(cmd)
-        ret = subprocess.call(cmd, shell=self.SHELL)
+        createdb = os.path.join(self.PGPATH, 'createdb')
+
+        #cmd = '''"{dropdb}" --if-exists -U {user} -h {host} -p {port} -w {destination_db} '''.format(dropdb=dropdb, destination_db=login.db, user=login.user,
+           #port=login.port, host=login.host)
+        #logger.info(cmd)
+        #ret = subprocess.call(cmd, shell=self.SHELL)
 
         cmd = '''"{createdb}" -U {user} -h {host} -p {port} -w -T pg21_template {destination_db}'''.format(createdb=createdb, destination_db=login.db, user=login.user,
            port=login.port, host=login.host)
