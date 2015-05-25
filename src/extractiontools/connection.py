@@ -186,6 +186,10 @@ class DBApp(object):
         sql = """
 update pg_database set datallowconn = 'false' where datname = '{db}';
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
-DROP DATABASE IF EXISTS {db};
             """.format(db=dbname)
         self.run_query(sql, conn)
+        cur = conn.cursor()
+        sql = """
+DROP DATABASE IF EXISTS {db};
+        """
+        cur.execute(sql.format(db=dbname))
