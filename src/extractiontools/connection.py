@@ -182,17 +182,17 @@ class DBApp(object):
         """
         if conn is None:
             conn = self.conn
+        # update pg_database set datallowconn = 'false' where datname = '{db}';
 
         sql = """
-update pg_database set datallowconn = 'false' where datname = '{db}';
-SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
+SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
             """.format(db=dbname)
         self.run_query(sql, conn)
-        cur = conn.cursor()
-        sql = """
-DROP DATABASE IF EXISTS {db};
-        """
-        conn.set_isolation_level(0)
-        cur.execute(sql.format(db=dbname))
-        conn.set_isolation_level(1)
+        #cur = conn.cursor()
+        #sql = """
+#DROP DATABASE IF EXISTS {db};
+        #"""
+        #conn.set_isolation_level(0)
+        #cur.execute(sql.format(db=dbname))
+        #conn.set_isolation_level(1)
         conn.commit()
