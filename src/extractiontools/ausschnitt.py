@@ -289,6 +289,67 @@ ALTER DATABASE {db} OWNER TO {role};
                            conn=conn0)
             conn0.commit()
 
+    def copy_template_target_db(self):
+        """
+        copy the template to the target db
+        build a pipe between the Databases to copy the template into the
+        new Database
+        """
+        pg_dump = os.path.join(self.PGPATH, 'pg_dump')
+        pg_restore = os.path.join(self.PGPATH, 'pg_restore')
+
+        template = 'pg21_template'
+
+        logger.info('copy template from {db0} to {db1}'.format(
+            schema=schema,
+            db0=template,
+            db1=self.login1.db))
+
+        logger.info('login_source: %s' % self.login0)
+        logger.info('login_dest: %s' % self.login1)
+
+        pg_dump_cmd = ' '.join([
+            '"{cmd}"'.format(cmd=pg_dump),
+            '--host={host}'.format(host=self.login0.host),
+            '--port={port}'.format(port=self.login0.port),
+            '--username={user}'.format(user=self.login0.user),
+            '-w',
+            '--format=custom',
+            '--verbose',
+            '--schema={schema}'.format(schema=schema),
+            '{db}'.format(db=template),
+        ])
+
+        logger.info(pg_dump_cmd)
+
+        dump = subprocess.Popen(pg_dump_cmd,
+                                stdout=subprocess.PIPE,
+                                shell=self.SHELL,
+                                )
+
+        pg_restore_cmd = ' '.join([
+            '"{cmd}"'.format(cmd=pg_restore),
+            '-d {db}'.format(db=self.login1.db),
+            '--host={host}'.format(host=self.login1.host),
+            '--port={port}'.format(port=self.login1.port),
+            '--username={user}'.format(user=self.login1.user),
+            #'--clean',
+            '-w',
+            '--format=custom',
+            '--verbose',
+        ])
+        logger.info(pg_restore_cmd)
+
+        try:
+
+            restore = subprocess.check_output(pg_restore_cmd,
+                                              stdin=dump.stdout,
+                                              shell=self.SHELL)
+        except subprocess.CalledProcessError as err:
+            logger.info(err)
+
+        dump.terminate()
+
 
     def copy_temp_schema_to_target_db(self, schema):
         """
