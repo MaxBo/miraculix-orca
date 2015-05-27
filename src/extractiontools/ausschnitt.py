@@ -290,18 +290,18 @@ ALTER DATABASE {db} OWNER TO {role};
         """Truncate the database"""
         sql = """
 SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
-        """.format(self.destination_db)
+        """.format(db=self.destination_db)
         with Connection(login=self.login0) as conn:
             self.run_query(sql, conn=conn)
+            conn.commit()
 
         sql = """
 SELECT 'drop schema if exists "' || schema_name || '" cascade;' AS sql
 FROM (SELECT catalog_name, schema_name
       FROM information_schema.schemata
       WHERE schema_name not like 'pg_%' AND
-      schema_name not like 'information_schema' AND
-      schema_name not IN ('information_schema', 'public', 'topology', 'repack'))
-      ) s;
+      schema_name not IN ('information_schema', 'public',
+                          'topology', 'repack')) s;
         """
         with Connection(login=self.login1) as conn:
             cursor2 = conn.cursor()
@@ -316,6 +316,7 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
         """.format(db=self.destination_db)
         with Connection(login=self.login0) as conn:
             self.run_query(sql, conn=conn)
+            conn.commit()
 
     def copy_temp_schema_to_target_db(self, schema):
         """
