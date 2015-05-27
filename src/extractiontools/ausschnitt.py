@@ -573,8 +573,6 @@ SET started=False, success=NULL, todo=False;
         cursor.execute(sql)
 
 
-
-
 if __name__ == '__main__':
 
     parser = ArgumentParser(description="Extract Data for Model")
@@ -630,10 +628,3 @@ if __name__ == '__main__':
     extract.get_target_boundary(bbox)
     extract.extract()
 
-    extract = ExtractLanduse(source_db=options.source_db,
-                             destination_db=options.destination_db,
-                             target_srid=options.srid,
-                             recreate_db=False)
-    extract.set_login(host=options.host, port=options.port, user=options.user)
-    extract.get_target_boundary(bbox)
-    extract.extract()
