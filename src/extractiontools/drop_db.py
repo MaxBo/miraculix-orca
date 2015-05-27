@@ -4,7 +4,7 @@
 from argparse import ArgumentParser
 
 from extractiontools.ausschnitt import logger, Extract
-
+from extractiontools.connection import Connection
 
 class DropDatabase(Extract):
     """Drop Database"""
@@ -18,7 +18,7 @@ class DropDatabase(Extract):
         with Connection(login=self.login0) as conn:
             cursor = conn.cursor()
             sql = """
-"SELECT can_be_deleted FROM meta_projekte WHERE projektname_kurz = {};
+SELECT can_be_deleted FROM meta.projekte WHERE projektname_kurz = '{}';
             """.format(self.destination_db)
             cursor.execute(sql)
             row = cursor.fetchone()
@@ -31,7 +31,8 @@ class DropDatabase(Extract):
                 logger.info(msg.format(self.destination_db))
                 return
             self.drop_database(dbname=self.destination_db, conn=conn)
-            sql = """DELETE FROM meta_projekte WHERE projektname_kurz = {};"""
+            sql = """
+DELETE FROM meta.projekte WHERE projektname_kurz = '{}';"""
             cursor.execute(sql.format(self.destination_db))
             conn.commit()
             msg = 'database {} successfully deleted'
@@ -67,8 +68,6 @@ if __name__ == '__main__':
     options = parser.parse_args()
 
     extract = DropDatabase(source_db=options.source_db,
-                           destination_db=options.destination_db,
-                           target_srid=options.srid,
-                           recreate_db=False)
+                           destination_db=options.destination_db,)
     extract.set_login(host=options.host, port=options.port, user=options.user)
     extract.extract()
