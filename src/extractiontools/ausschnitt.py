@@ -97,7 +97,7 @@ class Extract(DBApp):
         if self.recreate_db:
             exists = self.check_if_database_exists(self.destination_db)
             if exists:
-                self.drop_target_db(self.login0)
+                self.truncate_db()
             else:
                 self.create_target_db(self.login1)
             self.create_serverside_folder()
@@ -257,14 +257,6 @@ UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
             self.PGPATH = '/usr/lib/postgresql/9.3/bin'
             self.SHELL = True
 
-    def drop_target_db(self, login):
-        """drop the target database if exists"""
-        with Connection(login=login) as conn:
-            self.drop_database(dbname=self.destination_db, conn=conn)
-        self.truncate_db()
-        self.copy_template_target_db()
-        logger.info('database {} dropped'.format(self.destination_db))
-
     def create_target_db(self, login):
         """
         create the target database
@@ -295,14 +287,22 @@ ALTER DATABASE {db} OWNER TO {role};
             conn0.commit()
 
     def truncate_db(self):
-        """truncates all schemata in the destination database"""
+        """Truncate the database"""
         sql = """
-    select 'drop schema if exists "' || schema_name || '" cascade;' AS sql
-    from (select catalog_name, schema_name
-          from information_schema.schemata
-          WHERE schema_name not like 'pg_%' and
-          schema_name not IN ('information_schema', 'public', 'topology', 'repack')) s;
-            """
+SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
+        """.format(self.destination_db)
+        with Connection(login=self.login0) as conn:
+            self.run_query(sql, conn=conn)
+
+        sql = """
+SELECT 'drop schema if exists "' || schema_name || '" cascade;' AS sql
+FROM (SELECT catalog_name, schema_name
+      FROM information_schema.schemata
+      WHERE schema_name not like 'pg_%' AND
+      schema_name not like 'information_schema' AND
+      schema_name not IN ('information_schema', 'public', 'topology', 'repack'))
+      ) s;
+        """
         with Connection(login=self.login1) as conn:
             cursor2 = conn.cursor()
             cursor = conn.cursor()
@@ -311,83 +311,11 @@ ALTER DATABASE {db} OWNER TO {role};
                 cursor2.execute(row.sql)
             conn.commit()
 
-    def copy_template_target_db(self):
-        """
-        copy the template to the target db
-        build a pipe between the Databases to copy the template into the
-        new Database
-        """
-        pg_dump = os.path.join(self.PGPATH, 'pg_dump')
-        pg_restore = os.path.join(self.PGPATH, 'pg_restore')
-        psql = os.path.join(self.PGPATH, 'psql')
-
-        template = 'pg21_template'
-
-        logger.info('copy template from {db0} to {db1}'.format(
-            db0=template,
-            db1=self.login1.db))
-
-        logger.info('login_source: %s' % template)
-        logger.info('login_dest: %s' % self.login1)
-
-        pg_dump_cmd = ' '.join([
-            '"{cmd}"'.format(cmd=pg_dump),
-            '--host={host}'.format(host=self.login1.host),
-            '--port={port}'.format(port=self.login1.port),
-            '--username={user}'.format(user=self.login1.user),
-            '--schema=public',
-            '--schema=repack',
-            '--schema=topology',
-            '-w',
-            '--format=custom',
-            '--verbose',
-            '{db}'.format(db=template),
-        ])
-
-        logger.info(pg_dump_cmd)
-
-        dump = subprocess.Popen(pg_dump_cmd,
-                                stdout=subprocess.PIPE,
-                                shell=self.SHELL,
-                                )
-
-        pg_restore_cmd = ' '.join([
-            '"{cmd}"'.format(cmd=pg_restore),
-            '-d {db}'.format(db=self.login1.db),
-            '--host={host}'.format(host=self.login1.host),
-            '--port={port}'.format(port=self.login1.port),
-            '--username={user}'.format(user=self.login1.user),
-            #'--clean',
-            '-w',
-            #'--format=custom',
-            '--verbose',
-        ])
-        logger.info(pg_restore_cmd)
-
-        psql_cmd = ' '.join([
-            '"{cmd}"'.format(cmd=psql),
-            '--file -',
-            '--host={host}'.format(host=self.login1.host),
-            '--port={port}'.format(port=self.login1.port),
-            '--username={user}'.format(user=self.login1.user),
-            #'--clean',
-            '-w',
-            #'--format=custom',
-            #'--verbose',
-            '{db}'.format(db=self.login1.db),
-        ])
-        logger.info(psql_cmd)
-
-        try:
-
-            restore = subprocess.check_output(pg_restore_cmd,
-                                              stdin=dump.stdout,
-                                              shell=self.SHELL)
-        except subprocess.CalledProcessError as err:
-            logger.info(err)
-
-        dump.terminate()
-
+        sql = """
+update pg_database set datallowconn = 'True' where datname = '{db}';
+        """.format(db=self.destination_db)
+        with Connection(login=self.login0) as conn:
+            self.run_query(sql, conn=conn)
 
     def copy_temp_schema_to_target_db(self, schema):
         """

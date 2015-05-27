@@ -204,21 +204,21 @@ SELECT 1 AS e FROM pg_database WHERE datname = '{}';
         """
         if conn is None:
             conn = self.conn
-        # update pg_database set datallowconn = 'false' where datname = '{db}';
-
         sql = """
-SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
+update pg_database set datallowconn = 'false' where datname = '{db}';
+SELECT pg_teminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
             """.format(db=dbname)
         self.run_query(sql, conn)
 
         cur = conn.cursor()
-        #sql = """
-#DROP DATABASE IF EXISTS {db};
-        #"""
-        #conn.set_isolation_level(0)
-        #cur.execute(sql.format(db=dbname))
-        #conn.set_isolation_level(1)
+        sql = """
+DROP DATABASE IF EXISTS {db};
+        """
+        conn.set_isolation_level(0)
+        cur.execute(sql.format(db=dbname))
+        conn.set_isolation_level(1)
         conn.commit()
-        # select 'drop schema if exists "' || schema_name || '" cascade;'
-        #  from (select catalog_name,schema_name from information_schema.schemata WHERE schema_name not like 'pg_%' and schema_name not like 'information_schema') s;
+
+
+
 
