@@ -95,8 +95,11 @@ class Extract(DBApp):
     def extract(self):
         self.set_pg_path()
         if self.recreate_db:
-            self.drop_target_db(self.login0)
-            self.create_target_db(self.login1)
+            exists = self.check_if_database_exists(self.destination_db)
+            if exists:
+                self.drop_target_db(self.login0)
+            else:
+                self.create_target_db(self.login1)
             self.create_serverside_folder()
         with Connection(login=self.login0) as conn0, Connection(login=self.login1) as conn1:
             self.conn0 = conn0
@@ -258,6 +261,8 @@ UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
         """drop the target database if exists"""
         with Connection(login=login) as conn:
             self.drop_database(dbname=self.destination_db, conn=conn)
+        self.truncate_db()
+        self.copy_template_target_db()
         logger.info('database {} dropped'.format(self.destination_db))
 
     def create_target_db(self, login):
@@ -289,6 +294,23 @@ ALTER DATABASE {db} OWNER TO {role};
                            conn=conn0)
             conn0.commit()
 
+    def truncate_db(self):
+        """truncates all schemata in the destination database"""
+        sql = """
+    select 'drop schema if exists "' || schema_name || '" cascade;' AS sql
+    from (select catalog_name, schema_name
+          from information_schema.schemata
+          WHERE schema_name not like 'pg_%' and
+          schema_name not IN ('information_schema', 'public', 'topology', 'repack')) s;
+            """
+        with Connection(login=self.login1) as conn:
+            cursor2 = conn.cursor()
+            cursor = conn.cursor()
+            cursor.execute(sql)
+            for row in cursor:
+                cursor2.execute(row.sql)
+            conn.commit()
+
     def copy_template_target_db(self):
         """
         copy the template to the target db
@@ -297,26 +319,28 @@ ALTER DATABASE {db} OWNER TO {role};
         """
         pg_dump = os.path.join(self.PGPATH, 'pg_dump')
         pg_restore = os.path.join(self.PGPATH, 'pg_restore')
+        psql = os.path.join(self.PGPATH, 'psql')
 
         template = 'pg21_template'
 
         logger.info('copy template from {db0} to {db1}'.format(
-            schema=schema,
             db0=template,
             db1=self.login1.db))
 
-        logger.info('login_source: %s' % self.login0)
+        logger.info('login_source: %s' % template)
         logger.info('login_dest: %s' % self.login1)
 
         pg_dump_cmd = ' '.join([
             '"{cmd}"'.format(cmd=pg_dump),
-            '--host={host}'.format(host=self.login0.host),
-            '--port={port}'.format(port=self.login0.port),
-            '--username={user}'.format(user=self.login0.user),
+            '--host={host}'.format(host=self.login1.host),
+            '--port={port}'.format(port=self.login1.port),
+            '--username={user}'.format(user=self.login1.user),
+            '--schema=public',
+            '--schema=repack',
+            '--schema=topology',
             '-w',
             '--format=custom',
             '--verbose',
-            '--schema={schema}'.format(schema=schema),
             '{db}'.format(db=template),
         ])
 
@@ -335,10 +359,24 @@ ALTER DATABASE {db} OWNER TO {role};
             '--username={user}'.format(user=self.login1.user),
             #'--clean',
             '-w',
-            '--format=custom',
+            #'--format=custom',
             '--verbose',
         ])
         logger.info(pg_restore_cmd)
+
+        psql_cmd = ' '.join([
+            '"{cmd}"'.format(cmd=psql),
+            '--file -',
+            '--host={host}'.format(host=self.login1.host),
+            '--port={port}'.format(port=self.login1.port),
+            '--username={user}'.format(user=self.login1.user),
+            #'--clean',
+            '-w',
+            #'--format=custom',
+            #'--verbose',
+            '{db}'.format(db=self.login1.db),
+        ])
+        logger.info(psql_cmd)
 
         try:
 
@@ -640,6 +678,10 @@ if __name__ == '__main__':
                         help="port", type=int,
                         dest="port", default=5432)
 
+    parser.add_argument('--recreate', action="store_true",
+                        help="recreate",
+                        dest="recreate", default=False)
+
     parser.add_argument("-U", '--user', action="store",
                         help="database user",
                         dest="user", default='max')
@@ -651,10 +693,10 @@ if __name__ == '__main__':
 
     bbox = BBox(top=options.top, bottom=options.bottom,
                 left=options.left, right=options.right)
-    extract = ExtractOSM(source_db=options.source_db,
+    extract = ExtractMeta(source_db=options.source_db,
                          destination_db=options.destination_db,
                          target_srid=options.srid,
-                         recreate_db=True)
+                         recreate_db=options.recreate)
     extract.set_login(host=options.host, port=options.port, user=options.user)
     extract.get_target_boundary(bbox)
     extract.extract()

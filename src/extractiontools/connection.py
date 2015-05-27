@@ -169,6 +169,28 @@ class DBApp(object):
         sql = """RESET SESSION AUTHORIZATION;"""
         self.run_query(sql, conn)
 
+    def check_if_database_exists(self, db_name):
+        """
+        checks if database exists
+
+        Parameters
+        ----------
+        db_name : str
+            the database to search
+
+        Returns
+        -------
+        exists : bool
+        """
+        with Connection(login=self.login0) as conn:
+            cursor = conn.cursor()
+            sql = """
+SELECT 1 AS e FROM pg_database WHERE datname = '{}';
+            """.format(db_name)
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+        return len(rows) > 0
+
     def drop_database(self, dbname, conn=None):
         """
         Drop database, disconnect all connections before
@@ -189,7 +211,7 @@ SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
             """.format(db=dbname)
         self.run_query(sql, conn)
 
-        #cur = conn.cursor()
+        cur = conn.cursor()
         #sql = """
 #DROP DATABASE IF EXISTS {db};
         #"""
@@ -197,9 +219,6 @@ SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
         #cur.execute(sql.format(db=dbname))
         #conn.set_isolation_level(1)
         conn.commit()
-
-
         # select 'drop schema if exists "' || schema_name || '" cascade;'
         #  from (select catalog_name,schema_name from information_schema.schemata WHERE schema_name not like 'pg_%' and schema_name not like 'information_schema') s;
-
 
