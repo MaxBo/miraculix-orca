@@ -32,7 +32,7 @@ SELECT can_be_deleted FROM meta.projekte WHERE projektname_kurz = '{}';
                 return
             self.drop_database(dbname=self.destination_db, conn=conn)
             sql = """
-DELETE FROM meta.projekte WHERE projektname_kurz = '{}';"""
+UPDATE meta.projekte SET deleted = True WHERE projektname_kurz = '{}';"""
             cursor.execute(sql.format(self.destination_db))
             conn.commit()
             msg = 'database {} successfully deleted'
