@@ -206,7 +206,7 @@ SELECT 1 AS e FROM pg_database WHERE datname = '{}';
             conn = self.conn
         sql = """
 update pg_database set datallowconn = 'false' where datname = '{db}';
-SELECT pg_teminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
             """.format(db=dbname)
         self.run_query(sql, conn)
 
