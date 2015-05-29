@@ -670,11 +670,16 @@ WHERE l.wayid = s.id;
 CREATE INDEX idx_links_geom ON {network}.links USING gist (geom);
 ANALYZE {network}.links;
 
+WITH urban AS
+(SELECT c.geom
+FROM landuse.clc06 c
+WHERE c.code_06 IN (SELECT code FROM classifications.corine_urban))
+
 UPDATE {network}.links l
 SET io = TRUE
-FROM landuse.clc06 c
-WHERE c.code_06 IN (SELECT code FROM classifications.corine_urban)
-AND st_intersects(c.geom, l.geom);
+FROM urban
+WHERE st_intersects(urban.geom, l.geom);
+
 
 CREATE INDEX idx_links_linktype ON {network}.links USING btree (linktype, io);
 
