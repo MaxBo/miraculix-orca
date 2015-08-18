@@ -16,11 +16,11 @@ class Login(object):
     Login-Object with the Database credentials
     """
     def __init__(self,
-                 host='192.168.198.24',
+                 host='localhost',
                  port=5432,
                  user='postgres',
-                 password='ggr',
-                 db='bahn_db',
+                 password='',
+                 db='',
                  ):
         self.host = host
         self.port = port
@@ -49,7 +49,7 @@ class Connection(object):
         login = self.login
         conn = psycopg2.connect(host=login.host,
                               user=login.user,
-                              #password=login.password,
+                              password=login.password,
                               port=login.port,
                               database=login.db,
                               connection_factory=NamedTupleConnection)
