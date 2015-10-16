@@ -3,6 +3,7 @@
 
 import os
 import sys
+import tempfile
 import subprocess
 import logging
 logger = logging.getLogger()
@@ -196,6 +197,7 @@ WHERE
         """
         export the data to tiff files
         """
+        tempfile_hex = tempfile.TemporaryFile
         tempfile_hex = '/tmp/{tn}.hex'.format(tn=tablename)
 
         folder = os.path.join(self.folder,
@@ -220,16 +222,20 @@ COPY (
            rast=raster_col,
        )
 
-        with open(tempfile_hex, 'wb') as f:
+        with tempfile.NamedTemporaryFile('wb', delete=False) as f:
             cur = self.conn.cursor()
             logger.info(copy_sql)
             cur.copy_expert(copy_sql, f)
+            f.close()
 
-
-        cmd = 'xxd -p -r {tf} > {file_path}'.format(tf=tempfile_hex,
-                                                    file_path=file_path)
-        logger.info(cmd)
-        ret = subprocess.call(cmd, shell=self.SHELL)
+            cmd = 'xxd -p -r {tf} > {file_path}'.format(tf=f.name,
+                                                        file_path=file_path)
+            logger.info(cmd)
+            ret = subprocess.call(cmd, shell=self.SHELL)
+            try:
+                os.remove(f.name)
+            except IOError:
+                pass
         if ret:
             msg = 'Raster Table {tn} could copied to {df}'
             raise IOError(msg.format(tn=tablename, df=file_path))
