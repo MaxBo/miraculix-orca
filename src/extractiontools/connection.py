@@ -218,7 +218,3 @@ DROP DATABASE IF EXISTS {db};
         cur.execute(sql.format(db=dbname))
         conn.set_isolation_level(1)
         conn.commit()
-
-
-
-
