@@ -4,6 +4,10 @@
 import os
 import sys
 import subprocess
+import logging
+logger = logging.getLogger()
+logger.addHandler(logging.StreamHandler())
+logger.level = logging.DEBUG
 from extractiontools.connection import Connection, DBApp, Login
 
 
@@ -203,26 +207,29 @@ WHERE
         fn = '{tn}.tiff'.format(tn=tablename)
         file_path = os.path.join(folder, fn)
 
-        sql = """
+        copy_sql = """
 COPY (
   SELECT encode(
-    ST_AsTIFF({rast}, 'LZW'),
+    ST_AsTIFF(st_union({rast}), 'LZW'),
     'hex') AS png
   FROM {s}.{tn})
-  TO '{tf}';
-""".format(
-       s=self.schema,
-       tn=tablename,
-       rast=raster_col,
-       tf=tempfile_hex,
-   )
-        self.run_query(sql)
+  TO STDOUT;
+    """.format(
+           s=self.schema,
+           tn=tablename,
+           rast=raster_col,
+       )
+
+        with open(tempfile_hex, 'wb') as f:
+            cur = self.conn.cursor()
+            logger.info(copy_sql)
+            cur.copy_expert(copy_sql, f)
 
 
         cmd = 'xxd -p -r {tf} > {file_path}'.format(tf=tempfile_hex,
                                                     file_path=file_path)
-        logger.info(full_cmd)
-        ret = subprocess.call(full_cmd, shell=self.SHELL)
+        logger.info(cmd)
+        ret = subprocess.call(cmd, shell=self.SHELL)
         if ret:
             msg = 'Raster Table {tn} could copied to {df}'
             raise IOError(msg.format(tn=tablename, df=file_path))
