@@ -39,6 +39,8 @@ class Copy2FGDB(object):
             gdbname = '{db}.gdb'.format(db=self.options.destination_db)
         else:
             gdbname = self.options.gdbname
+        if not gdbname.endswith('.gdb'):
+            gdbname += '.gdb'
         folder = os.path.join(self.folder,
                               'projekte',
                               self.options.destination_db,
