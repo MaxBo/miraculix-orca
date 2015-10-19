@@ -211,15 +211,27 @@ FROM meta.boundary a;
             row = cur.fetchone()
             self.bbox = BBox(row.top, row.bottom, row.left, row.right)
 
-            sql = """
-        SELECT
-            st_srid(a.geom) AS srid
-        FROM meta.boundary a;
+        self.target_srid = self.get_target_srid_from_dest_db()
+
+    def get_target_srid_from_dest_db(self):
         """
+        get the target boundary from the destination database
+
+        Returns
+        -------
+        srid : int
+        """
+        with Connection(login=self.login1) as conn1:
+            cur = conn1.cursor()
+            sql = """
+SELECT
+    st_srid(a.geom) AS srid
+FROM meta.boundary a;
+"""
             cur.execute(sql)
             row = cur.fetchone()
-
-            self.target_srid = row.srid
+            srid = row.srid
+        return srid
 
     def create_target_boundary(self):
         """
