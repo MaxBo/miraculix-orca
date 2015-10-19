@@ -235,7 +235,7 @@ SELECT
   pnt AS geom
 FROM {schema}.laea_vector_{pixelsize};
 
-CREATE OR REPLACE VIEW {schema}.grid_poly{pixelsize}
+CREATE OR REPLACE VIEW {schema}.grid_poly_{pixelsize}
 SELECT
   cellcode,
   geom
