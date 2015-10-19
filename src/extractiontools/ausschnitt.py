@@ -435,27 +435,57 @@ class ExtractMeta(Extract):
 
         # create dblink tables
         sql = """
-CREATE OR REPLACE VIEW {temp}.master_scripts AS
+CREATE OR REPLACE FUNCTION {temp}.select_master_scripts()
+  RETURNS TABLE (id integer, scriptcode text, scriptname text,
+         description text, parameter text, category text) AS
+$BODY$
+DECLARE
+BEGIN
+perform dblink_connect_u('conn', 'dbname={sd}');
+RETURN QUERY
 SELECT *
-FROM dblink(
-  'dbname={sd}',
-  'SELECT id, scriptcode, scriptname, description, parameter, category
-   FROM meta_master.scripts'
+FROM dblink('conn',
+'SELECT id, scriptcode, scriptname, description, parameter, category
+FROM meta_master.scripts'
   ) AS m(id integer,
          scriptcode text,
          scriptname text,
          description text,
          parameter text,
          category text);
+perform dblink_disconnect('conn');
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
 
-CREATE OR REPLACE VIEW {temp}.dependencies AS
+CREATE OR REPLACE VIEW {temp}.master_scripts AS
 SELECT *
-FROM dblink(
-  'dbname={sd}',
-  'SELECT scriptcode, needs_script
+FROM {temp}.select_master_scripts();
+
+CREATE OR REPLACE FUNCTION {temp}.select_dependencies()
+  RETURNS TABLE (scriptcode text,
+         needs_script text) AS
+$BODY$
+DECLARE
+BEGIN
+perform dblink_connect_u('conn', 'dbname={sd}');
+RETURN QUERY
+SELECT *
+FROM dblink('conn',
+'SELECT scriptcode, needs_script
    FROM meta_master.dependencies'
   ) AS m(scriptcode text,
          needs_script text);
+perform dblink_disconnect('conn');
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+
+CREATE OR REPLACE VIEW {temp}.dependencies AS
+SELECT *
+FROM {temp}.select_dependencies();
         """
         cursor.execute(sql.format(temp=self.temp, sd=self.source_db))
 
@@ -509,14 +539,15 @@ $BODY$
 
         sql = '''
 CREATE TABLE {temp}.scripts
-(
+( id integer,
   scriptcode text,
   started boolean NOT NULL DEFAULT false,
   success boolean DEFAULT NULL,
   starttime timestamp with time zone,
   endtime timestamp with time zone,
   todo boolean NOT NULL DEFAULT false,
-  CONSTRAINT scripts_scriptcode_key PRIMARY KEY (scriptcode)
+  CONSTRAINT scripts_pkey PRIMARY KEY (id),
+  CONSTRAINT scripts_scriptcode_key UNIQUE (scriptcode)
 );
 
 CREATE OR REPLACE VIEW {temp}.script_view AS
@@ -533,8 +564,8 @@ SELECT
     s.endtime,
     s.todo
 FROM
-    meta.master_scripts m
-    LEFT JOIN meta.scripts s ON m.scriptcode = s.scriptcode
+    {temp}.master_scripts m
+    LEFT JOIN {temp}.scripts s ON m.scriptcode = s.scriptcode
 ORDER BY m.id
 ;
 
@@ -552,10 +583,11 @@ CREATE TRIGGER scripts_unselect_trigger
 
 '''.format(schema=self.schema, temp=self.temp)
         self.run_query(sql, conn=self.conn0)
+        self.conn0.commit()
 
         sql = '''
-INSERT INTO {temp}.scripts (scriptcode)
-SELECT scriptcode FROM {temp}.master_scripts;
+INSERT INTO {temp}.scripts (id, scriptcode)
+SELECT id, scriptcode FROM {temp}.master_scripts;
 '''.format(schema=self.schema, temp=self.temp)
         self.run_query(sql, conn=self.conn0)
 

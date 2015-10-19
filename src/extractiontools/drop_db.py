@@ -18,7 +18,7 @@ class DropDatabase(Extract):
         with Connection(login=self.login0) as conn:
             cursor = conn.cursor()
             sql = """
-SELECT can_be_deleted FROM meta.projekte WHERE projektname_kurz = '{}';
+SELECT can_be_deleted FROM meta_master.projekte WHERE projektname_kurz = '{}';
             """.format(self.destination_db)
             cursor.execute(sql)
             row = cursor.fetchone()
@@ -32,7 +32,7 @@ SELECT can_be_deleted FROM meta.projekte WHERE projektname_kurz = '{}';
                 return
             self.drop_database(dbname=self.destination_db, conn=conn)
             sql = """
-UPDATE meta.projekte SET deleted = True WHERE projektname_kurz = '{}';"""
+UPDATE meta_master.projekte SET deleted = True WHERE projektname_kurz = '{}';"""
             cursor.execute(sql.format(self.destination_db))
             conn.commit()
             msg = 'database {} successfully deleted'
