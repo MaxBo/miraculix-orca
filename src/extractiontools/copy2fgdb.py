@@ -12,18 +12,18 @@ import os
 import subprocess
 import psycopg2
 from extractiontools.connection import Login, Connection
+from extractiontools.ausschnitt import Extract
 
-
-class Copy2FGDB(object):
+class Copy2FGDB(Extract):
     def __init__(self, options):
 
         """"""
         self.options = options
         self.check_platform()
-        self.login = Login(self.options.host,
-                           self.options.port,
-                           self.options.user,
-                           db=self.options.destination_db)
+        self.login1 = Login(self.options.host,
+                            self.options.port,
+                            self.options.user,
+                            db=self.options.destination_db)
 
     def copy_layer(self, layer):
         """
@@ -33,7 +33,7 @@ class Copy2FGDB(object):
         layer : str
         """
 
-        cmd = '{OGR2OGR} -overwrite -geomfield geom -nln {layer} -a_srs EPSG:{srid} -lco FEATURE_DATASET="{dest_schema}" -f "FileGDB" {path} PG:"host={host} port={port} user={user} dbname={db}" "{schema}.{layer}"'
+        cmd = '{OGR2OGR} -overwrite -geomfield geom -nln {layer} {srid_option} -lco FEATURE_DATASET="{dest_schema}" -f "FileGDB" {path} PG:"host={host} port={port} user={user} dbname={db}" "{schema}.{layer}"'
 
         if self.options.gdbname is None:
             gdbname = '{db}.gdb'.format(db=self.options.destination_db)
@@ -41,16 +41,26 @@ class Copy2FGDB(object):
             gdbname = self.options.gdbname
         if not gdbname.endswith('.gdb'):
             gdbname += '.gdb'
+
+        # get srid
+        if self.options.target_srid is None:
+            srid = self.get_target_srid_from_dest_db()
+            srid_option = '-a_srs EPSG:{srid}'.format(srid=srid)
+        else:
+            srid_option = '-t_srs EPSG:{srid}'.format(
+                srid=self.options.target_srid)
+
         folder = os.path.join(self.folder,
                               'projekte',
                               self.options.destination_db,
                               'fgdb', )
-        ret = subprocess.call('mkdir -p {}'.format(folder), shell=self.SHELL)
+        ret = subprocess.call('mkdir -p {}'.format(folder),
+                              shell=self.SHELL)
         path = os.path.join(folder, gdbname)
 
         full_cmd = cmd.format(OGR2OGR=self.OGR2OGRPATH,
                               layer=layer,
-                              srid=self.options.srid,
+                              srid_option=srid_option,
                               path=path,
                               host=self.options.host,
                               port=self.options.port,
@@ -71,7 +81,7 @@ class Copy2FGDB(object):
         ----------
         layer : str
         """
-        with Connection(self.login) as conn:
+        with Connection(self.login1) as conn:
             cur = conn.cursor()
             sql = '''
 SELECT * FROM {schema}.{layer} LIMIT 1;
@@ -120,7 +130,7 @@ if __name__ == '__main__':
 
     parser.add_argument("-s", '--srid', action="store",
                         help="srid of the target database", type=int,
-                        dest="srid", default=31467)
+                        dest="target_srid")
 
     parser.add_argument('--host', action="store",
                         help="host",
