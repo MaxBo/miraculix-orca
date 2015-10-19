@@ -229,18 +229,18 @@ ANALYZE {schema}.laea_vector_{pixelsize};
         pixelsize : int
         """
         sql = """
-CREATE OR REPLACE VIEW {schema}.grid_points_{pixelsize}
+CREATE OR REPLACE VIEW {schema}.grid_points_{pixelsize} AS
 SELECT
   cellcode,
   pnt AS geom
 FROM {schema}.laea_vector_{pixelsize};
 
-CREATE OR REPLACE VIEW {schema}.grid_poly_{pixelsize}
+CREATE OR REPLACE VIEW {schema}.grid_poly_{pixelsize} AS
 SELECT
   cellcode,
   geom
 FROM {schema}.laea_vector_{pixelsize};
-""".format(schema=self.schema,
+""".format(schema=self.temp,
            pixelsize=pixelsize)
         self.run_query(sql, conn=self.conn0)
 
