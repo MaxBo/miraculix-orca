@@ -108,7 +108,7 @@ UPDATE meta.scripts SET todo = True WHERE scriptcode = %(sc)s
         """
         sql = """
 SELECT id, scriptcode, scriptname, parameter
-FROM meta.scripts
+FROM meta.master_scripts
 WHERE todo
 ORDER BY id
         """
@@ -180,20 +180,21 @@ script {name} finished at {time} with returncode {ret}'''
     def update_metatable(self):
         """update the row in the meta-table of the database"""
         sql_delete = """
-DELETE FROM meta.projekte WHERE projektname_kurz = '{name}';
+DELETE FROM meta_master.projekte WHERE projektname_kurz = '{name}';
         """
         sql_insert = """
-INSERT INTO meta.projekte (projektname_kurz,
-                           projektname_lang,
-                           projektnummer,
-                           bearbeiter,
-                           srid,
-                           "left",
-                           "right",
-                           "top",
-                           "bottom",
-                           date_areas,
-                           date_timetable)
+INSERT INTO meta_master.projekte (
+  projektname_kurz,
+  projektname_lang,
+  projektnummer,
+  bearbeiter,
+  srid,
+  "left",
+  "right",
+  "top",
+  "bottom",
+  date_areas,
+  date_timetable)
 VALUES (%(destination_db)s,
         %(name_long)s,
         %(project_number)s,
@@ -219,6 +220,83 @@ VALUES (%(destination_db)s,
             cursor.execute(sql_delete.format(name=op.destination_db))
             cursor.execute(sql_insert, op.__dict__)
             self.conn.commit()
+
+    def create_dblink_view_to_master_table(self):
+        """
+        Creates a view in meta to the
+        master scripts and dependencies table
+        """
+        sql = """
+CREATE OR REPLACE VIEW meta.master_script AS
+SELECT *
+FROM dblink(
+  'dbname={source_db}',
+  'SELECT id, scriptcode, scriptname, description, parameter, category
+   FROM meta.scripts'
+  ) AS m(id integer,
+         scriptcode text,
+         scriptname text,
+         description text,
+         parameter text,
+         category text);
+
+CREATE OR REPLACE VIEW meta.script_view AS
+SELECT
+  m.id,
+  m.scriptcode,
+  m.scriptname,
+  m.description,
+  m.parameter,
+  m.category,
+  s.started,
+  s.success,
+  s.starttime,
+  s.endtime,
+  s.todo
+FROM
+  meta.master_script m
+  LEFT JOIN meta.scripts s ON m.scriptcode = s.scriptcode
+ORDER BY
+  m.id
+;
+
+CREATE OR REPLACE VIEW meta.master_dependencies AS
+SELECT *
+FROM dblink(
+  'dbname={source_db}',
+  'SELECT scriptcode, needs_script, scriptname, description, parameter, category
+   FROM meta.scripts'
+  ) AS m(scriptcode text,
+         needs_script text);
+    """.format(source_db=self.options.source_db)
+
+        with Connection(login=self.login) as conn:
+            self.conn = conn
+            self.run_query(sql)
+
+    def update_scripts_from_masterdb(self):
+        """Update meta.scripts from master table and add new scripts"""
+        sql = """
+        -- Insert new scripts in to scripts table
+        INSERT INTO meta.scripts (scriptcode)
+        SELECT m.scriptcode
+        FROM meta.master_scripts m
+        WHERE NOT EXISTS (
+        SELECT 1 FROM meta.scripts s
+        WHERE m.scriptcode = s.scriptcode);
+
+        -- delete obsolete scripts from scipts table
+        DELETE FROM meta.scripts s
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM meta.master_scripts m
+          WHERE m.scriptcode = s.scriptcode);
+        """
+        with Connection(login=self.login) as conn:
+            self.conn = conn
+            self.run_query(sql)
+
+
 
 
 
@@ -255,7 +333,7 @@ if __name__ == '__main__':
                         dest="top", default=55.6)
     parser.add_argument("-b", '--bottom,', action="store",
                         help="bottom", type=float,
-                        dest="bottom", default=54.6)
+                        dest="bottom", default=55.61)
     parser.add_argument("-r", '--right', action="store",
                         help="right", type=float,
                         dest="right", default=10.0)

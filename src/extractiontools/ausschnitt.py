@@ -433,6 +433,32 @@ class ExtractMeta(Extract):
         """
         cursor = self.conn0.cursor()
 
+        # create dblink tables
+        sql = """
+CREATE OR REPLACE VIEW {temp}.master_scripts AS
+SELECT *
+FROM dblink(
+  'dbname={sd}',
+  'SELECT id, scriptcode, scriptname, description, parameter, category
+   FROM meta_master.scripts'
+  ) AS m(id integer,
+         scriptcode text,
+         scriptname text,
+         description text,
+         parameter text,
+         category text);
+
+CREATE OR REPLACE VIEW {temp}.dependencies AS
+SELECT *
+FROM dblink(
+  'dbname={sd}',
+  'SELECT scriptcode, needs_script
+   FROM meta_master.dependencies'
+  ) AS m(scriptcode text,
+         needs_script text);
+        """
+        cursor.execute(sql.format(temp=self.temp, sd=self.source_db))
+
         sql = """
 CREATE OR REPLACE FUNCTION {temp}.select_dependent_scripts()
   RETURNS trigger AS
@@ -481,61 +507,36 @@ $BODY$
         """
         cursor.execute(sql.format(temp=self.temp))
 
-        sql = """
-CREATE OR REPLACE FUNCTION {temp}.check_dependency_order()
-  RETURNS trigger AS
-$BODY$DECLARE
-id_sc INTEGER;
-id_needs_script INTEGER;
-BEGIN
-  SELECT id INTO id_sc FROM meta.scripts s
-  WHERE NEW.scriptcode = s.scriptcode;
-  SELECT id INTO id_needs_script FROM meta.scripts s
-  WHERE NEW.needs_script = s.scriptcode;
-  IF NOT id_sc > id_needs_script
-  THEN RAISE EXCEPTION
-  'the id of % (%) has to be lower than the id of % (%)',
-  NEW.needs_script, id_needs_script, NEW.scriptcode, id_sc;
-  END IF;
-  RETURN NEW;
-
-END;
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-
-        """
-        cursor.execute(sql.format(temp=self.temp))
-
         sql = '''
 CREATE TABLE {temp}.scripts
 (
-  id integer NOT NULL,
   scriptcode text,
-  scriptname text,
-  desctiption text,
-  parameter text,
   started boolean NOT NULL DEFAULT false,
   success boolean DEFAULT NULL,
   starttime timestamp with time zone,
   endtime timestamp with time zone,
   todo boolean NOT NULL DEFAULT false,
-  category text,
-  CONSTRAINT scripts_pkey PRIMARY KEY (id),
-  CONSTRAINT scripts_scriptcode_key UNIQUE (scriptcode)
+  CONSTRAINT scripts_scriptcode_key PRIMARY KEY (scriptcode)
 );
-CREATE TABLE {temp}.dependencies
-(
-  scriptcode text NOT NULL,
-  needs_script text NOT NULL,
-  CONSTRAINT dependencies_pkey PRIMARY KEY (scriptcode, needs_script),
-  CONSTRAINT dependencies_needs_script_fkey FOREIGN KEY (needs_script)
-      REFERENCES {temp}.scripts (scriptcode) MATCH SIMPLE
-      ON UPDATE NO ACTION ON DELETE NO ACTION,
-  CONSTRAINT dependencies_scriptname_fkey FOREIGN KEY (scriptcode)
-      REFERENCES {temp}.scripts (scriptcode) MATCH SIMPLE
-      ON UPDATE NO ACTION ON DELETE NO ACTION
-);
+
+CREATE OR REPLACE VIEW {temp}.script_view AS
+SELECT
+    m.id,
+    m.scriptcode,
+    m.scriptname,
+    m.description,
+    m.parameter,
+    m.category,
+    s.started,
+    s.success,
+    s.starttime,
+    s.endtime,
+    s.todo
+FROM
+    meta.master_scripts m
+    LEFT JOIN meta.scripts s ON m.scriptcode = s.scriptcode
+ORDER BY m.id
+;
 
 CREATE TRIGGER scripts_select_trigger
   AFTER INSERT OR UPDATE OF todo
@@ -549,28 +550,14 @@ CREATE TRIGGER scripts_unselect_trigger
   FOR EACH ROW
   EXECUTE PROCEDURE {temp}.unselect_dependent_scripts();
 
-CREATE CONSTRAINT TRIGGER check_dependency_order_trigger
-  AFTER INSERT OR UPDATE
-  ON {temp}.dependencies
-  FOR EACH ROW
-  EXECUTE PROCEDURE {temp}.check_dependency_order();
-
-'''.format(schema=self.schema, temp=self.temp)
-        self.run_query(sql, conn=self.conn0)
-
-        sql = '''INSERT INTO {temp}.scripts
-SELECT * FROM {schema}.scripts;
-
-INSERT INTO {temp}.dependencies
-SELECT * FROM {schema}.dependencies;
 '''.format(schema=self.schema, temp=self.temp)
         self.run_query(sql, conn=self.conn0)
 
         sql = '''
-UPDATE {temp}.scripts
-SET started=False, success=NULL, todo=False;
-        '''.format(temp=self.temp)
-        cursor.execute(sql)
+INSERT INTO {temp}.scripts (scriptcode)
+SELECT scriptcode FROM {temp}.master_scripts;
+'''.format(schema=self.schema, temp=self.temp)
+        self.run_query(sql, conn=self.conn0)
 
 
 if __name__ == '__main__':
