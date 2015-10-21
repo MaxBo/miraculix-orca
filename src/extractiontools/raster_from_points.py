@@ -98,6 +98,8 @@ class Points2Raster(DBApp):
                      raster_pkey='rid',
                      raster_col='rast',
                      band=1,
+                     noData=0,
+                     initial=0,
                      overwrite=False,
                      ):
         """
@@ -127,6 +129,10 @@ class Points2Raster(DBApp):
             the column with the raster values
         band : int
             the band to create
+        noData : float, optional (default=0)
+            the NoData-Value
+        initial : double, optional (default=0)
+            the initial value
         overwrite : bool
             default=False
 
@@ -156,7 +162,9 @@ r.{rid},
 st_setvalues(
   st_addband(
     ST_MakeEmptyRaster(r.{rast}),
-    '{pixeltype}'::text),
+    '{pixeltype}'::text,
+    {initial}::double precision,
+    {nd}::double precision),
       {band}, rv.geomval_arr
 ) AS {rast}
 
@@ -183,6 +191,8 @@ WHERE
             pixeltype=pt.pixeltype,
             srid=srid,
             band=band,
+            nd=noData,
+            initial=initial,
             ref_raster=reference_raster,
             point_feature=point_feature,
             geom_col=geom_col,

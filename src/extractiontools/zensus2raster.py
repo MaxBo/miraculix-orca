@@ -44,7 +44,66 @@ WHERE v.cellcode = z.id;
             raster_pkey='rid',
             raster_col='rast',
             band=1,
+            noData=0,
             overwrite=True)
+
+    def zensus2km2(self):
+        """convert ZensusData to km2-Raster"""
+
+        # create view joining geometry and values
+        sql = """
+CREATE OR REPLACE VIEW
+{schema}.zensus_km2_pnt_laea AS
+SELECT
+v.cellcode,
+v.pnt_laea,
+z.alter_d,
+z.unter18_a,
+z.ab65_a,
+z.auslaender_a,
+z.hhgroesse_d,
+z.leerstandsquote,
+z.wohnfl_bew_d,
+z.wohnfl_wohnung
+FROM
+{schema}.zensus_km2 z,
+{schema}.laea_vector_1000 v
+WHERE v.cellcode = z.id;
+        """.format(schema=self.schema)
+        self.run_query(sql)
+
+        self.point2km2raster(column='einwohner', dtype='16BSI')
+        self.point2km2raster(column='hhgroesse_d', dtype='64BF', noData=-1)
+        self.point2km2raster(column='wohnfl_wohnung', dtype='64BF', noData=-1)
+
+    def point2km2raster(self, column, dtype, noData=0):
+        """
+        create raster-layer on km2-level
+
+        Parameters
+        ----------
+        column : str
+            the column name
+        dtype : str
+            the data type
+        noData : double, optional (Default=0)
+            the noData Value
+        """
+        self.point2raster(
+            point_feature='{}.zensus_km2_pnt_laea'.format(self.schema),
+            geom_col='pnt_laea',
+            value_col=column,
+            target_raster='{s}.{c}_km2_raster'.format(s=self.schema,
+                                                      c=column),
+            pixeltype=dtype,
+            srid=3035,
+            reference_raster='{}.laea_raster_1000'.format(self.schema),
+            raster_pkey='rid',
+            raster_col='rast',
+            band=1,
+            noData=noData,
+            overwrite=True)
+
 
 
 

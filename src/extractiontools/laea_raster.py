@@ -24,7 +24,6 @@ class ExtractLAEA(Extract):
         self.add_raster_constraint(pixelsize=1000)
         self.create_views_zensus()
 
-
     def create_views_zensus(self):
         """
         create views for zensus data and
@@ -69,7 +68,7 @@ SELECT AddRasterConstraints('{schema}'::name,
         self.create_grid_points_and_poly(1000)
 
         self.get_einwohner_hectar()
-        #self.get_zensusdata_km2()
+        self.get_zensusdata_km2()
 
     def get_einwohner_hectar(self):
         """
@@ -85,13 +84,51 @@ SELECT z.id, z.einwohner
 FROM zensus.ew_zensus2011_gitter z,
 {schema}.laea_vector_100 v
 WHERE v.cellcode = z.id;
-
         """.format(schema=self.temp)
         self.run_query(sql, conn=self.conn0)
 
     def get_zensusdata_km2(self):
         """Extract Censusdata on km2 level for area"""
-        raise NotImplementedError('ToDo')
+    sql = """
+DROP TABLE IF EXISTS {schema}.zensus_km2 CASCADE;
+CREATE TABLE {schema}.zensus_km2
+( id text primary key,
+  einwohner integer,
+  alter_d double precision,
+  unter18_a double precision,
+  ab65_a double precision,
+  auslaender_a double precision,
+  hhgroesse_d double precision,
+  leerstandsquote double precision,
+  wohnfl_bew_d double precision,
+  wohnfl_wohnung double precision);
+
+INSERT INTO {schema}.zensus_km2(
+  id,
+  einwohner,
+  alter_d,
+  unter18_a,
+  ab65_a,
+  auslaender_a,
+  hhgroesse_d,
+  leerstandsquote,
+  wohnfl_bew_d,
+  wohnfl_wohnung)
+SELECT z.id,
+  z.einwohner,
+  z.alter_d,
+  z.unter18_a,
+  z.ab65_a,
+  z.auslaender_a,
+  z.hhgroesse_d,
+  z.leerstandsquote,
+  z.wohnfl_bew_d,
+  z.wohnfl_wohnung
+FROM zensus.ew_zensus2011_gitter z,
+{schema}.laea_vector_1000 v
+WHERE v.cellcode = z.id;
+        """.format(schema=self.temp)
+    self.run_query(sql, conn=self.conn0)
 
     def create_raster(self, pixelsize):
         """
