@@ -13,7 +13,11 @@ class Zensus2Raster(Points2Raster):
         define here, what to execute
         """
         self.ew2hectar()
+        self.zensus2km2()
         self.export2tiff('ew_ha_raster')
+        self.export2tiff('einwohner_km2_raster')
+        self.export2tiff('hhgroesse_d_km2_raster')
+        self.export2tiff('wohnfl_wohnung_km2_raster')
 
     def ew2hectar(self):
         """convert Einwohner to Raster"""
@@ -57,6 +61,7 @@ CREATE OR REPLACE VIEW
 SELECT
 v.cellcode,
 v.pnt_laea,
+z.einwohner,
 z.alter_d,
 z.unter18_a,
 z.ab65_a,

@@ -89,7 +89,7 @@ WHERE v.cellcode = z.id;
 
     def get_zensusdata_km2(self):
         """Extract Censusdata on km2 level for area"""
-    sql = """
+        sql = """
 DROP TABLE IF EXISTS {schema}.zensus_km2 CASCADE;
 CREATE TABLE {schema}.zensus_km2
 ( id text primary key,
@@ -124,11 +124,11 @@ SELECT z.id,
   z.leerstandsquote,
   z.wohnfl_bew_d,
   z.wohnfl_wohnung
-FROM zensus.ew_zensus2011_gitter z,
+FROM zensus.zensus2011_gitter1000m_spitze z,
 {schema}.laea_vector_1000 v
 WHERE v.cellcode = z.id;
         """.format(schema=self.temp)
-    self.run_query(sql, conn=self.conn0)
+        self.run_query(sql, conn=self.conn0)
 
     def create_raster(self, pixelsize):
         """
@@ -151,10 +151,10 @@ CREATE TABLE {schema}.laea_raster_{pixelsize}
 (rid serial primary key, rast raster);
 
 WITH b AS (SELECT
-  st_xmin(a.geom) AS left,
-  st_ymax(a.geom) AS upper,
-  ceil((st_xmax(a.geom) - st_xmin(a.geom)) / {pixelsize})::integer AS width,
-  ceil((st_ymax(a.geom) - st_ymin(a.geom)) / {pixelsize})::integer AS hight
+  floor(st_xmin(a.geom) / {pixelsize}) * {pixelsize} AS left,
+  ceil(st_ymax(a.geom) / {pixelsize}) * {pixelsize} AS upper,
+  ceil((st_xmax(a.geom) - floor(st_xmin(a.geom) / {pixelsize}) * {pixelsize}) / {pixelsize})::integer AS width,
+  ceil((ceil(st_ymax(a.geom) / {pixelsize}) * {pixelsize} - st_ymin(a.geom)) / {pixelsize})::integer AS hight
 FROM
 (SELECT st_transform(geom, 3035) AS geom from {schema}.boundary) a)
 
@@ -194,8 +194,8 @@ CREATE TABLE {schema}.laea_vector_{pixelsize} (
 INSERT INTO {schema}.laea_vector_{pixelsize}
 SELECT
 '{str_pixelsize}N' ||
-floor(ST_y(geom)/{pixelsize})::text ||
-'E' || floor(st_x(geom)/{pixelsize})::text AS cellcode,
+(ST_y(geom)/{pixelsize} - 1)::text ||
+'E' || (st_x(geom)/{pixelsize})::text AS cellcode,
 poly AS geom,
 pnt,
 pnt_laea
