@@ -107,15 +107,15 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
         check the platform
         """
         if sys.platform.startswith('win'):
-            self.ORG_FOLDER = r'C:\Program Files\QGIS Brighton\bin'
-            self.OGR2OGRPATH = os.path.join(self.ORG_FOLDER, 'ogr2ogr.exe')
-            self.OGRINFO = os.path.join(self.ORG_FOLDER, 'ogrinfo.exe')
+            self.OGR_FOLDER = r'C:\Program Files\QGIS Brighton\bin'
+            self.OGR2OGRPATH = os.path.join(self.OGR_FOLDER, 'ogr2ogr.exe')
+            self.OGRINFO = os.path.join(self.OGR_FOLDER, 'ogrinfo.exe')
             self.folder = r'C:\temp'
             self.SHELL = False
         else:
-            self.ORG_FOLDER = '/usr/bin'
-            self.OGR2OGRPATH = os.path.join(self.ORG_FOLDER, 'ogr2ogr')
-            self.OGRINFO = os.path.join(self.ORG_FOLDER, 'ogrinfo')
+            self.OGR_FOLDER = '/opt/gdal-2/bin'
+            self.OGR2OGRPATH = os.path.join(self.OGR_FOLDER, 'ogr2ogr')
+            self.OGRINFO = os.path.join(self.OGR_FOLDER, 'ogrinfo')
             self.folder = '$HOME/gis'
             self.SHELL = True
 
