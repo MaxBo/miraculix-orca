@@ -1183,7 +1183,7 @@ WHERE h.node = r.node;
         """.format(network=self.network)
         self.run_query(sql)
 
-    def try_startvertices(self, n=30, k=5):
+    def try_startvertices(self, n=20, k=4):
         """
         search vertices in the surrounding of the centroid of the vertices
         or the biggest cluster of vertices
@@ -1207,17 +1207,21 @@ FROM
 FROM (
   SELECT
     cl.s,
-    kmeans(ARRAY[ST_X(geom), ST_Y(j.geom)], cl.s) OVER (PARTITION BY cl.s),
-    geom
+    kmeans(ARRAY[ST_X(j.the_geom), ST_Y(j.the_geom)], cl.s) OVER (PARTITION BY cl.s),
+    j.the_geom AS geom
   FROM {network}.edge_table_vertices_pgr j,
   (SELECT generate_series(1, {k}) s) cl
 ) AS k
 GROUP BY k.s, k.kmeans) c
 WHERE c.rn = 1)
 
-SELECT v.id
-FROM {network}.edge_table_vertices_pgr v, cluster AS c
-ORDER BY cluster.s, v.the_geom <-> c.geom
+SELECT e.id, e.geom, e.s, e.rn
+FROM (
+SELECT v.id , v.the_geom AS geom,
+cluster.s,
+row_number() OVER (PARTITION BY cluster.s ORDER BY v.the_geom <-> cluster.geom) AS rn
+FROM {network}.edge_table_vertices_pgr v, cluster) e
+ORDER BY e.rn, e.s
 LIMIT {n};
         """.format(n=n, k=k, network=self.network)
         cursor = self.conn.cursor()
@@ -1259,8 +1263,8 @@ SELECT count(*) FROM {network}.edges_reached;
                 self.run_query(sql)
                 return
 
-        msg = 'No Vertex has been found that is accessible at least by half of the links in the network'
-        raise ValueError(msg)
+        msg = 'No Vertex has been found that is accessible at least by at least {n:0.0f}% of the links in the network'
+        raise ValueError(msg.format(n=self.options.links_to_find * 100))
 
     def update_pgr_driving_distance(self, startvertex=1, maxcosts=10000000):
         """
@@ -1330,7 +1334,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--links-to-find", action="store",
                         help="share of links to find", type=float,
-                        dest="links_to_find", default='0.5')
+                        dest="links_to_find", default=0.25)
 
     options = parser.parse_args()
 

@@ -425,7 +425,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--links-to-find", action="store",
                         help="share of links to find", type=float,
-                        dest="links_to_find", default='0.5')
+                        dest="links_to_find", default=0.25)
 
     parser.add_argument("--routing_walk", action='store_true',
                         help='routing for walking (cycling is the default',
