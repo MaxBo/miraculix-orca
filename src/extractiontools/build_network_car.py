@@ -1183,21 +1183,43 @@ WHERE h.node = r.node;
         """.format(network=self.network)
         self.run_query(sql)
 
-    def try_startvertices(self, n=20):
+    def try_startvertices(self, n=30, k=5):
         """
-        search vertices in the surrounding of the boundary centroid
+        search vertices in the surrounding of the centroid of the vertices
+        or the biggest cluster of vertices
 
         Parameters
         ----------
         n : int
-            the number of vertices to test
+            the total number of vertices to test
+        k : int
+            the number of clusters to test
         """
         sql = """
+WITH cluster AS
+(SELECT c.s, c.geom
+FROM
+(SELECT
+  k.s,
+  k.kmeans,
+  row_number() OVER(PARTITION BY k.s ORDER BY count(*) DESC) rn,
+  ST_Centroid(ST_Collect(k.geom)) AS geom
+FROM (
+  SELECT
+    cl.s,
+    kmeans(ARRAY[ST_X(geom), ST_Y(j.geom)], cl.s) OVER (PARTITION BY cl.s),
+    geom
+  FROM {network}.edge_table_vertices_pgr j,
+  (SELECT generate_series(1, {k}) s) cl
+) AS k
+GROUP BY k.s, k.kmeans) c
+WHERE c.rn = 1)
+
 SELECT v.id
-FROM {network}.edge_table_vertices_pgr v, (SELECT st_centroid(b.geom) AS geom FROM meta.boundary b) AS c
-ORDER BY v.the_geom <-> c.geom
+FROM {network}.edge_table_vertices_pgr v, cluster AS c
+ORDER BY cluster.s, v.the_geom <-> c.geom
 LIMIT {n};
-        """.format(n=n, network=self.network)
+        """.format(n=n, k=k, network=self.network)
         cursor = self.conn.cursor()
         cursor.execute(sql)
         vertices = cursor.fetchall()
