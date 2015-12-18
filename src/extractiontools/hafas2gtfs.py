@@ -417,7 +417,7 @@ if __name__=='__main__':
 
     parser.add_argument("-U", '--user', action="store",
                         help="database user",
-                        dest="user", default='max')
+                        dest="user", default='osm')
     parser.add_argument("-D", '--date', action="store",
                         help="database user",
                         dest="date")

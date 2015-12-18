@@ -1304,7 +1304,7 @@ if __name__ == '__main__':
                         dest="port", default=5432)
     parser.add_argument("-U", '--user', action="store",
                         help="database user",
-                        dest="user", default='max')
+                        dest="user", default='osm')
 
     parser.add_argument("--links-to-find", action="store",
                         help="share of links to find", type=float,

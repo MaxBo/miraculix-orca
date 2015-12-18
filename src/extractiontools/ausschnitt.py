@@ -642,7 +642,7 @@ if __name__ == '__main__':
 
     parser.add_argument("-U", '--user', action="store",
                         help="database user",
-                        dest="user", default='max')
+                        dest="user", default='osm')
     parser.add_argument('--source-db', action="store",
                         help="source database",
                         dest="source_db", default='dplus')
