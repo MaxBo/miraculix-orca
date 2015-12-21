@@ -249,6 +249,21 @@ WHERE mm.relation_id = r.relation_id;
         sql_delete_unused_simple_polygons = """
 -- the complex polygons that are valid no longer need to be represented with their outerring only
 -- and not deleting those simple_polys will prevent insertion in the final polygon UNION below
+
+CREATE TABLE IF NOT EXISTS osm.ways_in_poly (id bigint PRIMARY KEY);
+TRUNCATE osm.ways_in_poly;
+INSERT INTO osm.ways_in_poly
+SELECT DISTINCT rm.member_id
+  FROM osm.relation_members rm
+  WHERE rm.member_role='outer'
+  AND rm.member_type = 'W'
+  and rm.relation_id
+  IN
+   (SELECT r.relation_id
+    FROM osm.polygon_with_holes r
+    WHERE ST_IsValid(r.polygon))
+    ;
+
 DELETE FROM osm.simple_polys p WHERE p.id IN (
   SELECT rm.member_id
   FROM osm.relation_members rm
@@ -261,9 +276,27 @@ DELETE FROM osm.simple_polys p WHERE p.id IN (
 )
 );
 
+
 -- Also clean useless innerrings stored as simple_polys or ways
+
+INSERT INTO osm.ways_in_poly
+SELECT DISTINCT rm.member_id
+  FROM osm.relation_members rm,
+  osm.ways w
+  WHERE
+  rm.member_id = w.id
+  AND rm.member_role='inner'
+  AND rm.member_type = 'W'
+  AND w.tags = ''
+  and rm.relation_id
+  IN
+   (SELECT r.relation_id
+    FROM osm.polygon_with_holes r
+    WHERE ST_IsValid(r.polygon))
+;
+
 DELETE FROM osm.simple_polys p WHERE p.id IN (
-  SELECT rm.member_id
+  SELECT DISTINCT rm.member_id
   FROM osm.relation_members rm
   WHERE rm.member_role='inner'
   and rm.relation_id
@@ -273,6 +306,12 @@ DELETE FROM osm.simple_polys p WHERE p.id IN (
     WHERE ST_IsValid(r.polygon)
 )
 );
+
+INSERT INTO osm.ways_in_poly
+SELECT s.id FROM osm.simple_polys s
+WHERE NOT EXISTS(
+SELECT 1 FROM osm.ways_in_poly p
+WHERE p.id = s.id);
 
 -- Create simple polygon not having (valid) innering(s)
 UPDATE osm.polygon_with_holes r
@@ -335,7 +374,17 @@ m.tags
 FROM osm.polygon_with_holes m
 WHERE m.poly_type != 'no valid outerring';
 
-
+DROP VIEW IF EXISTS osm.lines CASCADE;
+CREATE OR REPLACE VIEW osm.lines
+AS
+SELECT
+  w.id,
+  w.linestring::geometry(LINESTRING, {srid}) as geom,
+  w.tags
+FROM
+  osm.ways w
+WHERE NOT EXISTS
+  (SELECT 1 FROM osm.ways_in_poly wp WHERE wp.id = w.id);
         """
         with Connection(login=self.login1) as conn:
             self.conn = conn
@@ -348,7 +397,9 @@ WHERE m.poly_type != 'no valid outerring';
             self.run_query(sql_delete_unused_simple_polygons)
             self.run_query(sql_update_tags)
             self.run_query(sql_create_index)
-            self.run_query(sql_create_view)
+            #self.conn.commit()
+            self.run_query(sql_create_view.format(
+                srid=self.target_srid))
             self.conn.commit()
 
 
