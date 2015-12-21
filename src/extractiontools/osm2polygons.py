@@ -8,46 +8,31 @@ logger = logging.getLogger()
 logger.addHandler(logging.StreamHandler())
 logger.level = logging.DEBUG
 
-from extractiontools.connection import Connection
-from extractiontools.copy2fgdb import Copy2FGDB
+from extractiontools.connection import Connection, Login
+from extractiontools.ausschnitt import Extract
 
-class CopyOSM2FGDB(Copy2FGDB):
+class CopyOSM2FGDB(Extract):
+    """"""
+    def __init__(self, options):
 
-    def create_views(self):
-        """Create the osm views that should be exported"""
-        with Connection(login=self.login1):
-            self.create_railways()
-            self.create_leisure()
-            self.create_natural()
-            self.create_waterway()
-            self.create_buildings()
-
-    def create_point_layer(self, key, view, schema='osm'):
-        """Create a point layer schema.view, given by key"""
-        sql = """
-CREATE OR REPLACE VIEW {schema}.{view} AS
- SELECT w.id,
-    n.tags -> '{key}'::text AS val,
-    n.tags -> 'name'::text AS name,
-    n.geom AS geom
-   FROM osm.nodes n
-  WHERE n.tags ? '{key}'::text;
-"""
-        self.run_query(sql.format(schema=schema,
-                                  view=view,
-                                  key=key))
-
+        """"""
+        self.options = options
+        self.check_platform()
+        self.login1 = Login(self.options.host,
+                            self.options.port,
+                            self.options.user,
+                            db=self.options.destination_db)
 
     def create_poly_and_multipolygons(self, schema='osm'):
         """
-
+        Create Polygons and Multipolygons for OSM-Data
         """
-        sql = """
+        sql_create_simple_polygons = """
 -- -- -- -- -- --
 --  POLYGONS - --
 -- -- -- -- -- --
 -- CREATE TABLE WITH POLYGONS MADE OF A SINGLE LINESTRING
-DROP TABLE osm.simple_polys;
+DROP TABLE IF EXISTS osm.simple_polys CASCADE;
 CREATE TABLE osm.simple_polys
 (id bigint PRIMARY KEY,
 geom geometry(MULTIPOLYGON, {srid}));
@@ -59,11 +44,12 @@ SELECT w.id,
   WHERE st_IsClosed(w.linestring)
     and st_NPoints(w.linestring) > 3
 ;
-
+"""
+        sql_create_polygons_with_holes = """
 -- -- -- -- -- --
 --  POLYGONS WITH HOLES - --
 -- -- -- -- -- --
-DROP TABLE IF EXISTS osm.polygon_with_holes;
+DROP TABLE IF EXISTS osm.polygon_with_holes CASCADE;
 CREATE TABLE osm.polygon_with_holes (
 relation_id bigint PRIMARY KEY,
 tags hstore,
@@ -72,16 +58,6 @@ outerring_array bigint[],
 innerring_linestring geometry[],
 polygon geometry(MULTIPOLYGON, {srid}),
 poly_type text NOT NULL DEFAULT 'unknown');
-
--- multipolygons
-DROP TABLE IF EXISTS osm.multi_polygons;
-CREATE TABLE osm.multi_polygons
-(relation_id bigint,
-path integer,
-outerring geometry(LINESTRING, {srid}),
-polygon geometry(POLYGON, {srid}),
-ALTER TABLE osm.multi_polygons
-ADD PRIMARY KEY (relation_id, path);
 
 -- fill the table with all relations tagged "multipolygon"
 INSERT INTO osm.polygon_with_holes (relation_id, tags)
@@ -189,7 +165,27 @@ WHERE r.poly_type = 'unknown'
 and (st_ISClosed(ST_LineMerge(ST_Collect(r.innerring_linestring))))
 ;
 
+
+--finally create the Polygon
+UPDATE osm.polygon_with_holes r
+SET polygon = st_multi(ST_MakePolygon(r.outerring_linestring,
+                                      (r.innerring_linestring )))
+WHERE poly_type= 'valid innerring'
+and GeometryType(r.outerring_linestring) ='LINESTRING';
+"""
+
+        sql_create_multipolygons = """
 -- MULTIPOLYGONS
+DROP TABLE IF EXISTS osm.multi_polygons;
+CREATE TABLE osm.multi_polygons
+(relation_id bigint,
+path integer,
+outerring geometry(LINESTRING, {srid}),
+polygon geometry(POLYGON, {srid}));
+
+ALTER TABLE osm.multi_polygons
+ADD PRIMARY KEY (relation_id, path);
+
 -- fill the multipolygon_table
 INSERT INTO osm.multi_polygons (relation_id, path, outerring)
 SELECT r.relation_id,
@@ -202,7 +198,7 @@ WHERE geometrytype(r.outerring_linestring) = 'MULTILINESTRING';
 UPDATE osm.multi_polygons m
 SET polygon = st_makepolygon(outerring)
 WHERE st_isclosed(outerring)
-AND st_npoints(outterring) > 3;
+AND st_npoints(outerring) > 3;
 
 -- create the full polygon
 UPDATE osm.multi_polygons m
@@ -234,11 +230,6 @@ GROUP BY i.relation_id, i.path) AS i2
 WHERE m.relation_id = i2.relation_id
 AND m.path = i2.path;
 
---finally create the Polygon
-UPDATE osm.polygon_with_holes r
-SET polygon = ST_MakePolygon(r.outerring_linestring, (r.innerring_linestring ))
-WHERE poly_type= 'valid innerring'
-and GeometryType(r.outerring_linestring) ='LINESTRING';
 
 -- and the Multipolygons
 UPDATE osm.polygon_with_holes r
@@ -254,6 +245,8 @@ WHERE m.relation_id = r.relation_id
 GROUP BY m.relation_id) mm
 WHERE mm.relation_id = r.relation_id;
 
+"""
+        sql_delete_unused_simple_polygons = """
 -- the complex polygons that are valid no longer need to be represented with their outerring only
 -- and not deleting those simple_polys will prevent insertion in the final polygon UNION below
 DELETE FROM osm.simple_polys p WHERE p.id IN (
@@ -288,7 +281,8 @@ WHERE (r.poly_type = 'no valid innerring'
 OR r.poly_type = 'unknown')
 and GeometryType((r.outerring_linestring)) ='LINESTRING'
 ;
-
+"""
+        sql_update_tags = """
 -- UPDATE tags of the multipolygon with the tags from the polygon
 UPDATE osm.polygon_with_holes r
 SET tags = w2.tags || r.tags
@@ -310,7 +304,20 @@ GROUP BY wr.relation_id ) w2
 WHERE r.relation_id = w2.relation_id
 AND w2.tags != ''
 ;
+"""
+        sql_create_index = """
+CREATE INDEX poly_tags_idx ON osm.polygon_with_holes
+USING gist(tags);
+CREATE INDEX poly_geom_idx ON osm.polygon_with_holes
+USING gist(polygon);
+CREATE INDEX simple_poly_geom_idx ON osm.simple_polys
+USING gist(geom);
 
+ANALYZE osm.polygon_with_holes;
+ANALYZE osm.simple_polys;
+
+"""
+        sql_create_view = """
 CREATE OR REPLACE VIEW osm.polygons
 AS
 SELECT
@@ -328,44 +335,21 @@ m.tags
 FROM osm.polygon_with_holes m
 WHERE m.poly_type != 'no valid outerring';
 
-ANALYZE osm.polygon_with_holes;
-
-CREATE INDEX poly_tags_idx ON osm.polygon_with_holes
-USING gist(tags);
-CREATE INDEX poly_geom_idx ON osm.polygon_with_holes
-USING gist(polygon);
 
         """
-        self.run_query(sql, srid=self.options.target_srid)
-
-
-    def create_multipolygon_layer(self,
-                                  fields,
-                                  where_clause,
-                                  view,
-                                  schema='osm'):
-        """Create a multipolygon layer schema.view, with the given fields
-        and the given where-clause"""
-        sql = """
-
-
-"""
-        self.run_query(sql.format(schema=schema,
-                                  view=view,
-                                  key=key))
-
-    def create_railways(self):
-        """Create railways layer"""
-        sql = """
-CREATE OR REPLACE VIEW osm.buildings AS
- SELECT w.id,
-    w.tags -> 'building'::text AS val,
-    w.tags -> 'name'::text AS name,
-    st_makepolygon(w.linestring)::geometry(Polygon,3044) AS geom
-   FROM osm.ways w
-  WHERE w.tags ? 'building'::text AND st_isclosed(w.linestring);
-"""
-
+        with Connection(login=self.login1) as conn:
+            self.conn = conn
+            self.run_query(sql_create_simple_polygons.format(
+                srid=self.target_srid))
+            self.run_query(sql_create_polygons_with_holes.format(
+                srid=self.target_srid))
+            self.run_query(sql_create_multipolygons.format(
+                srid=self.target_srid))
+            self.run_query(sql_delete_unused_simple_polygons)
+            self.run_query(sql_update_tags)
+            self.run_query(sql_create_index)
+            self.run_query(sql_create_view)
+            self.conn.commit()
 
 
 if __name__ == '__main__':
@@ -382,35 +366,19 @@ if __name__ == '__main__':
 
     parser.add_argument('--host', action="store",
                         help="host",
-                        dest="host", default='gis.ggr-planung.de')
+                        dest="host", default='localhost')
     parser.add_argument("-p", '--port', action="store",
                         help="port", type=int,
                         dest="port", default=5432)
-
     parser.add_argument("-U", '--user', action="store",
                         help="database user",
                         dest="user", default='osm')
+
     parser.add_argument('--schema', action="store",
                         help="schema",
-                        dest="schema", default='network_car')
-    parser.add_argument('--destschema', action="store",
-                        help="destination schema in the FileGDB",
-                        dest="dest_schema", default='network_car')
-    parser.add_argument('--gdbname', action="store",
-                        help="Name of the FileGDB to create",
-                        dest="gdbname")
-    parser.add_argument('--layers', action='store',
-                        help='layers to copy,',
-                        dest='layers',
-                        nargs='+',
-                        default=['autobahn',
-                                 'hauptstr',
-                                 'nebennetz',
-                                 'faehren',
-                                 'unaccessible_links',
-                                 ])
+                        dest="schema", default='osm')
 
     options = parser.parse_args()
     copy2fgdb = CopyOSM2FGDB(options)
-    copy2fgdb.create_views()
-    copy2fgdb.copy_layers()
+    copy2fgdb.get_target_boundary_from_dest_db()
+    copy2fgdb.create_poly_and_multipolygons()
