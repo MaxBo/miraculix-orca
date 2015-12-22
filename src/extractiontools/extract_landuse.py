@@ -17,8 +17,26 @@ class ExtractLanduse(Extract):
     def additional_stuff(self):
         """
         """
+        self.extract_oceans()
         self.extract_corine()
         self.extract_aster()
+
+    def extract_oceans(self):
+        """
+        Extract OSM oceans and transform into target srid
+        """
+        sql = """
+SELECT
+  c.gid,
+  st_transform(c.geom, {target_srid})::geometry(MULTIPOLYGON, {target_srid}) AS geom
+INTO {temp}.oceans
+FROM {schema}.oceans c, {temp}.boundary tb
+WHERE
+c.geom && tb.source_geom
+        """
+        self.run_query(sql.format(temp=self.temp, schema=self.schema,
+                                  target_srid=self.target_srid),
+                       conn=self.conn0)
 
     def extract_corine(self):
         """
@@ -72,7 +90,7 @@ r.rast && tb.source_geom;
         # raster points
         sql = """
 CREATE MATERIALIZED VIEW {schema}.aster_centroids AS
- SELECT DISTINCT st_transform((b.a).geom, {target_srid}) AS geom,
+ SELECT DISTINCT st_transform((b.a).geom, {target_srid})::geometry(POINT, {target_srid}) AS geom,
     (b.a).val AS val
    FROM ( SELECT st_pixelascentroids(aster.rast) AS a
            FROM {schema}.aster AS aster) b
@@ -96,6 +114,11 @@ CREATE INDEX idx_clc06_code
   ON {schema}.clc06
   USING btree(code_06);
 ALTER TABLE {schema}.clc06 CLUSTER ON clc06_geom_idx;
+-- oceans
+ALTER TABLE {schema}.oceans ADD PRIMARY KEY (gid);
+CREATE INDEX oceans_geom_idx
+ON {schema}.oceans
+USING gist(geom);
 """
         self.run_query(sql.format(schema=self.schema), conn=self.conn1)
         self.tables2cluster.append('{schema}.clc06'.format(schema=self.schema))
