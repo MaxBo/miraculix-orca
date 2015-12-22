@@ -293,6 +293,9 @@ SELECT DISTINCT rm.member_id
    (SELECT r.relation_id
     FROM osm.polygon_with_holes r
     WHERE ST_IsValid(r.polygon))
+AND NOT EXISTS (
+SELECT 1 FROM osm.ways_in_poly p
+WHERE p.id = rm.member_id)
 ;
 
 DELETE FROM osm.simple_polys p WHERE p.id IN (
