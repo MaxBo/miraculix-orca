@@ -50,7 +50,9 @@ class Points2Raster(DBApp):
     """
     schema = 'laea'
     role = 'group_osm'
-
+    reference_raster = 'laea.laea_raster_100'
+    reference_vector = 'laea.laea_vector_100'
+    srid = 3035
 
     def __init__(self,
                  options,
@@ -250,4 +252,67 @@ COPY (
             msg = 'Raster Table {tn} could copied to {df}'
             raise IOError(msg.format(tn=tablename, df=file_path))
 
+    def create_matview_raster_as_pnt(self,
+                                     tablename,
+                                     source_table,
+                                     value_column):
+        """Create a materialized view for """
+        sql = """
+DROP MATERIALIZED VIEW {sc}.{tn} CASCADE;
+CREATE MATERIALIZED VIEW {sc}.{tn} AS
+SELECT
+l.cellcode,
+sum(st_area(st_intersection(g.geom, l.geom)) / st_area(g.geom) * g.{val}) as value
+FROM {st} g,
+{rv} l
+WHERE l.geom && g.geom
+GROUP BY l.cellcode;
+CREATE INDEX {tn}_pkey ON
+{sc}.{tn} USING btree(cellcode);
 
+ANALYZE {sc}.{tn};
+CREATE OR REPLACE VIEW {sc}.{tn}_pnt AS
+SELECT
+v.cellcode, v.value, l.pnt_laea,
+row_number() OVER(ORDER BY v.cellcode)::integer AS rn
+FROM
+{sc}.{tn} v,
+{rv} l
+WHERE v.cellcode=l.cellcode;
+        """
+        self.run_query(sql.format(sc=self.schema,
+                                  tn=tablename,
+                                  rv=self.reference_vector,
+                                  val=value_column))
+
+    def create_raster_for_table(self,
+                                tablename,
+                                source_table,
+                                value_column,
+                                pixeltype='32BF',
+                                noData=0):
+        """intersect polygon feature with raster and create raster tiff"""
+
+        self.create_matview_raster_as_pnt(
+            tablename, source_table, value_column)
+
+        self.point2raster(
+            point_feature='{sc}.{tn}_pnt'.format(sc=self.schema,
+                                                 tn=tablename),
+            geom_col='pnt_laea',
+            value_col='value',
+            target_raster='{sc}.{tn}_raster'.format(sc=self.schema,
+                                                    tn=tablename),
+            pixeltype=pixeltype,
+            srid=self.srid,
+            reference_raster=self.reference_raster,
+            raster_pkey='rid',
+            raster_col='rast',
+            band=1,
+            noData=noData,
+            overwrite=True)
+
+class Points2km2Raster(Points2Raster):
+    """Convert PointDate to km2-Raster"""
+    reference_raster = 'laea.laea_raster_1000'
+    reference_vector = 'laea.laea_vector_1000'

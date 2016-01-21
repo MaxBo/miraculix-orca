@@ -110,9 +110,6 @@ WHERE v.cellcode = z.id;
             overwrite=True)
 
 
-
-
-
 if __name__ == '__main__':
 
     parser = ArgumentParser(description="Create Raster with Census Data")
