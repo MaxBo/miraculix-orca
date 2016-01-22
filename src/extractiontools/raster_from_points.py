@@ -252,13 +252,13 @@ COPY (
             msg = 'Raster Table {tn} could copied to {df}'
             raise IOError(msg.format(tn=tablename, df=file_path))
 
-    def create_matview_raster_as_pnt(self,
-                                     tablename,
-                                     source_table,
-                                     value_column):
+    def create_matview_poly_with_raster(self,
+                                        tablename,
+                                        source_table,
+                                        value_column):
         """Create a materialized view for """
         sql = """
-DROP MATERIALIZED VIEW {sc}.{tn} CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {sc}.{tn} CASCADE;
 CREATE MATERIALIZED VIEW {sc}.{tn} AS
 SELECT
 l.cellcode,
@@ -285,16 +285,77 @@ WHERE v.cellcode=l.cellcode;
                                   rv=self.reference_vector,
                                   val=value_column))
 
-    def create_raster_for_table(self,
+    def create_matview_point_with_raster(self,
+                                         tablename,
+                                         source_table,
+                                         value_column):
+        """
+        Create a materialized view for a point raster intersected
+        with the raster polygon
+        """
+        sql = """
+DROP MATERIALIZED VIEW IF EXISTS {sc}.{tn} CASCADE;
+CREATE MATERIALIZED VIEW {sc}.{tn} AS
+SELECT
+l.cellcode,
+sum(g.{val}) as value
+FROM {st} g,
+{rv} l
+WHERE st_within(g.geom, l.geom)
+GROUP BY l.cellcode;
+CREATE INDEX {tn}_pkey ON
+{sc}.{tn} USING btree(cellcode);
+
+ANALYZE {sc}.{tn};
+CREATE OR REPLACE VIEW {sc}.{tn}_pnt AS
+SELECT
+v.cellcode, v.value, l.pnt_laea,
+row_number() OVER(ORDER BY v.cellcode)::integer AS rn
+FROM
+{sc}.{tn} v,
+{rv} l
+WHERE v.cellcode=l.cellcode;
+        """
+        self.run_query(sql.format(sc=self.schema,
+                                  tn=tablename,
+                                  rv=self.reference_vector,
+                                  val=value_column))
+
+    def create_raster_for_polygon(self,
+                                  tablename,
+                                  source_table,
+                                  value_column,
+                                  pixeltype='32BF',
+                                  noData=0):
+        """
+        intersect polygon feature with raster and create raster tiff
+        """
+        self.create_matview_poly_with_raster(
+            tablename, source_table, value_column)
+
+        self.create_raster_for_table(tablename, pixeltype, noData)
+
+    def create_raster_for_point(self,
                                 tablename,
                                 source_table,
                                 value_column,
                                 pixeltype='32BF',
                                 noData=0):
-        """intersect polygon feature with raster and create raster tiff"""
-
-        self.create_matview_raster_as_pnt(
+        """
+        intersect point feature with raster and create raster tiff
+        """
+        self.create_matview_point_with_raster(
             tablename, source_table, value_column)
+
+        self.create_raster_for_table(tablename, pixeltype, noData)
+
+    def create_raster_for_table(self,
+                                tablename,
+                                pixeltype='32BF',
+                                noData=0):
+        """
+        intersect feature with raster and create raster tiff
+        """
 
         self.point2raster(
             point_feature='{sc}.{tn}_pnt'.format(sc=self.schema,
@@ -311,6 +372,7 @@ WHERE v.cellcode=l.cellcode;
             band=1,
             noData=noData,
             overwrite=True)
+
 
 class Points2km2Raster(Points2Raster):
     """Convert PointDate to km2-Raster"""
