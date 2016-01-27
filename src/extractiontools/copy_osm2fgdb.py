@@ -24,6 +24,7 @@ class CopyOSM2FGDB(Copy2FGDB):
             self.create_leisure()
             self.create_natural()
             self.create_waterways()
+            self.create_tourism()
 
             self.conn.commit()
 
@@ -119,7 +120,7 @@ WHERE {where};
                             for k in keys)
         return columns, where_clause
 
-    def create_compostie_layer(self,
+    def create_composite_layer(self,
                                view,
                                schema,
                                *layers):
@@ -156,7 +157,7 @@ CREATE OR REPLACE VIEW {schema}.{view} AS
         self.create_layer_by_key(view_lines, keys, geometrytype='lines')
         view_polys = 'amenity_polys'
         self.create_layer_by_key(view_polys, keys, geometrytype='polygons')
-        self.create_compostie_layer('amenities',
+        self.create_composite_layer('amenities',
                                     self.options.schema,
                                     view_pnt,
                                     view_lines,
@@ -178,6 +179,20 @@ CREATE OR REPLACE VIEW {schema}.{view} AS
         view = 'leisure_polys'
         self.create_layer_by_key(view, keys, geometrytype='polygons')
 
+    def create_tourism(self):
+        """create buildings layer"""
+        keys = ['tourism']
+        view_pnt = 'tourism_pnt'
+        self.create_layer_by_key(view, keys, geometrytype='nodes')
+        view_lines = 'tourism_lines'
+        self.create_layer_by_key(view, keys, geometrytype='lines')
+        view_polys = 'tourism_polys'
+        self.create_layer_by_key(view, keys, geometrytype='polygons')
+        self.create_composite_layer('tourism',
+                                    self.options.schema,
+                                    view_pnt,
+                                    view_lines,
+                                    view_polys)
     def create_natural(self):
         """create buildings layer"""
         keys = ['natural']
@@ -191,7 +206,7 @@ CREATE OR REPLACE VIEW {schema}.{view} AS
         self.create_layer_by_key(view_lines, keys, geometrytype='lines')
         view_polys = 'waterways_polys'
         self.create_layer_by_key(view_polys, keys, geometrytype='polygons')
-        self.create_compostie_layer('waterways',
+        self.create_composite_layer('waterways',
                                     self.options.schema,
                                     view_lines,
                                     view_polys)
