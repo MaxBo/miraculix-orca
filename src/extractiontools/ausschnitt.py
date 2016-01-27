@@ -495,9 +495,25 @@ $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
 
-CREATE OR REPLACE VIEW {temp}.dependencies AS
+CREATE OR REPLACE VIEW {temp}.master_dependencies AS
 SELECT *
 FROM {temp}.select_dependencies();
+
+CREATE TABLE {temp}.local_dependencies
+(
+  scriptcode text NOT NULL,
+  needs_script text NOT NULL,
+  CONSTRAINT local_dependencies_pkey PRIMARY KEY (scriptcode, needs_script)
+);
+
+CREATE OR REPLACE VIEW {temp}.dependencies AS
+ SELECT master_dependencies.scriptcode,
+    master_dependencies.needs_script
+   FROM {temp}.master_dependencies
+UNION
+ SELECT local_dependencies.scriptcode,
+    local_dependencies.needs_script
+   FROM {temp}.local_dependencies;
         """
         cursor.execute(sql.format(temp=self.temp, sd=self.source_db))
 
@@ -562,25 +578,6 @@ CREATE TABLE {temp}.scripts
   CONSTRAINT scripts_scriptcode_key UNIQUE (scriptcode)
 );
 
-CREATE OR REPLACE VIEW {temp}.script_view AS
-SELECT
-    m.id,
-    m.scriptcode,
-    m.scriptname,
-    m.description,
-    m.parameter,
-    m.category,
-    s.started,
-    s.success,
-    s.starttime,
-    s.endtime,
-    s.todo
-FROM
-    {temp}.master_scripts m
-    LEFT JOIN {temp}.scripts s ON m.scriptcode = s.scriptcode
-ORDER BY m.id
-;
-
 CREATE TRIGGER scripts_select_trigger
   AFTER INSERT OR UPDATE OF todo
   ON {temp}.scripts
@@ -598,25 +595,27 @@ CREATE TRIGGER scripts_unselect_trigger
         self.conn0.commit()
 
         sql = '''
-CREATE OR REPLACE FUNCTION {temp}.check_scriptcode (
-)
-RETURNS trigger AS
-$body$
+CREATE OR REPLACE FUNCTION {temp}.check_scriptcode()
+  RETURNS trigger AS
+$BODY$
+DECLARE
 BEGIN
-  IF EXISTS(SELECT 1 FROM meta.master_scripts m
-  WHERE m.scriptcode = NEW.scriptcode) THEN
+  IF EXISTS(SELECT 1 FROM meta.master_scripts m WHERE m.scriptcode = NEW.scriptcode)
+  THEN
     RAISE EXCEPTION 'scriptcode % already in meta.master_scripts', NEW.scriptcode;
-  ELSE
-    RETURN NEW;
   END IF;
+  RETURN NEW;
 END;
-$body$
+$BODY$
 LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+    '''
+        cursor.execute(sql.format(temp=self.temp))
 
+        sql = '''
 CREATE SEQUENCE {temp}.local_scripts_id_seq
   INCREMENT 1 MINVALUE 1000
   MAXVALUE 2147483647 START 1000
@@ -625,7 +624,7 @@ ALTER SEQUENCE {temp}.local_scripts_id_seq RESTART WITH 1000;
 
 CREATE TABLE {temp}.local_scripts
 (
-  id integer NOT NULL DEFAULT nextval(('{temp}.local_scripts_id_seq'::text)::regclass),
+  id integer NOT NULL DEFAULT nextval(('meta.local_scripts_id_seq'::text)::regclass),
   scriptcode text,
   scriptname text,
   description text,
@@ -659,7 +658,7 @@ AS
          master_scripts.parameter,
          master_scripts.category,
          'm'::text AS source
-  FROM meta.master_scripts
+  FROM {temp}.master_scripts
   UNION ALL
   SELECT local_scripts.id::integer,
          local_scripts.scriptcode,
@@ -668,15 +667,37 @@ AS
          local_scripts.parameter,
          local_scripts.category,
          'l'::text AS source
-  FROM meta.local_scripts;
+  FROM {temp}.local_scripts;
+
+CREATE OR REPLACE VIEW {temp}.script_view AS
+SELECT
+    m.id,
+    m.scriptcode,
+    m.scriptname,
+    m.description,
+    m.parameter,
+    m.category,
+    s.started,
+    s.success,
+    s.starttime,
+    s.endtime,
+    s.todo
+FROM
+    {temp}.all_scripts m
+    LEFT JOIN {temp}.scripts s ON m.scriptcode = s.scriptcode
+ORDER BY m.id
+;
         '''.format(temp=self.temp)
         self.run_query(sql, conn=self.conn0)
+        self.conn0.commit()
 
+    def final_stuff(self):
+        """Final things to do"""
         sql = '''
-INSERT INTO {temp}.scripts (id, scriptcode)
-SELECT id, scriptcode FROM {temp}.all_scripts;
-'''.format(schema=self.schema, temp=self.temp)
-        self.run_query(sql, conn=self.conn0)
+INSERT INTO {schema}.scripts (id, scriptcode)
+SELECT id, scriptcode FROM {schema}.all_scripts;
+    '''.format(schema=self.schema)
+        self.run_query(sql, conn=self.conn1)
 
 
 if __name__ == '__main__':
