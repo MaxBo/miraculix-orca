@@ -598,8 +598,83 @@ CREATE TRIGGER scripts_unselect_trigger
         self.conn0.commit()
 
         sql = '''
+CREATE OR REPLACE FUNCTION {temp}.check_scriptcode (
+)
+RETURNS trigger AS
+$body$
+BEGIN
+  IF EXISTS(SELECT 1 FROM meta.master_scripts m
+  WHERE m.scriptcode = NEW.scriptcode) THEN
+    RAISE EXCEPTION 'scriptcode % already in meta.master_scripts', NEW.scriptcode;
+  ELSE
+    RETURN NEW;
+  END IF;
+END;
+$body$
+LANGUAGE 'plpgsql'
+VOLATILE
+CALLED ON NULL INPUT
+SECURITY INVOKER
+COST 100;
+
+CREATE SEQUENCE {temp}.local_scripts_id_seq
+  INCREMENT 1 MINVALUE 1000
+  MAXVALUE 2147483647 START 1000
+  CACHE 1;
+ALTER SEQUENCE {temp}.local_scripts_id_seq RESTART WITH 1000;
+
+CREATE TABLE {temp}.local_scripts
+(
+  id integer NOT NULL DEFAULT nextval(('{temp}.local_scripts_id_seq'::text)::regclass),
+  scriptcode text,
+  scriptname text,
+  description text,
+  parameter text,
+  category text,
+  CONSTRAINT local_scripts_pkey PRIMARY KEY (id),
+  CONSTRAINT local_scripts_scriptcode_key UNIQUE (scriptcode)
+)
+WITH (
+  OIDS=FALSE
+);
+
+CREATE TRIGGER check_scriptcode_tr
+  BEFORE INSERT OR UPDATE OF scriptcode
+  ON {temp}.local_scripts FOR EACH ROW
+  EXECUTE PROCEDURE {temp}.check_scriptcode();
+
+CREATE OR REPLACE VIEW {temp}.all_scripts(
+    id,
+    scriptcode,
+    scriptname,
+    description,
+    parameter,
+    category,
+    source)
+AS
+  SELECT master_scripts.id,
+         master_scripts.scriptcode,
+         master_scripts.scriptname,
+         master_scripts.description,
+         master_scripts.parameter,
+         master_scripts.category,
+         'm'::text AS source
+  FROM meta.master_scripts
+  UNION ALL
+  SELECT local_scripts.id::integer,
+         local_scripts.scriptcode,
+         local_scripts.scriptname,
+         local_scripts.description,
+         local_scripts.parameter,
+         local_scripts.category,
+         'l'::text AS source
+  FROM meta.local_scripts;
+        '''.format(temp=self.temp)
+        self.run_query(sql, conn=self.conn0)
+
+        sql = '''
 INSERT INTO {temp}.scripts (id, scriptcode)
-SELECT id, scriptcode FROM {temp}.master_scripts;
+SELECT id, scriptcode FROM {temp}.all_scripts;
 '''.format(schema=self.schema, temp=self.temp)
         self.run_query(sql, conn=self.conn0)
 
