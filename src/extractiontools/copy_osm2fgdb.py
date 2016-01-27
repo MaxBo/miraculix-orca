@@ -56,7 +56,7 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
 DROP VIEW IF EXISTS {schema}.{view} CASCADE;
 CREATE OR REPLACE VIEW {schema}.{view} AS
 SELECT
-  t.id,
+  t.id AS id_long,
   t.{geomcol}::geometry({geomtype}, {srid}) AS geom,
   t.tags -> 'name' AS name,
   {columns}
