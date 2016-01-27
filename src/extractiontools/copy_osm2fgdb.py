@@ -183,11 +183,11 @@ CREATE OR REPLACE VIEW {schema}.{view} AS
         """create buildings layer"""
         keys = ['tourism']
         view_pnt = 'tourism_pnt'
-        self.create_layer_by_key(view, keys, geometrytype='nodes')
+        self.create_layer_by_key(view_pnt, keys, geometrytype='nodes')
         view_lines = 'tourism_lines'
-        self.create_layer_by_key(view, keys, geometrytype='lines')
+        self.create_layer_by_key(view_lines, keys, geometrytype='lines')
         view_polys = 'tourism_polys'
-        self.create_layer_by_key(view, keys, geometrytype='polygons')
+        self.create_layer_by_key(view_polys, keys, geometrytype='polygons')
         self.create_composite_layer('tourism',
                                     self.options.schema,
                                     view_pnt,
