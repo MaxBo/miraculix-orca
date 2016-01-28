@@ -282,6 +282,7 @@ WHERE v.cellcode=l.cellcode;
         """
         self.run_query(sql.format(sc=self.schema,
                                   tn=tablename,
+                                  st=source_table,
                                   rv=self.reference_vector,
                                   val=value_column))
 
@@ -318,6 +319,7 @@ WHERE v.cellcode=l.cellcode;
         """
         self.run_query(sql.format(sc=self.schema,
                                   tn=tablename,
+                                  st=source_table,
                                   rv=self.reference_vector,
                                   val=value_column))
 

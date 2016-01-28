@@ -146,7 +146,10 @@ script {name} finished at {time} with returncode {ret}'''
             rows = cursor.fetchall()
             for row in rows:
                 starttime = datetime.now()
-                params = row.parameter.format(**self.options.__dict__)
+                if row.parameter:
+                    params = row.parameter.format(**self.options.__dict__)
+                else:
+                    params = ''
                 command = cmd.format(scriptname=row.scriptname,
                                      params=params)
                 logger.info(msg_start.format(name=row.scriptname,
