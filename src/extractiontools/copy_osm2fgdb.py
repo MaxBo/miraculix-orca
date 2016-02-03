@@ -125,11 +125,17 @@ WHERE {where};
                                schema,
                                *layers):
         """Create a composite layer of all geometrytypes"""
+        cols = self.conn.get_column_dict(layers[0])
+        cols_without_geom = (c for c in cols if c != 'geom')
+        if not cols_without_geom:
+            raise ValueError("No Columns beside the geom column defined")
+        col_str = ', '.join(cols_without_geom)
         sql = """
-SELECT *,
-st_pointonsurface(geom)::geometry(POINT, {srid}) AS pnt
+SELECT {cols},
+st_pointonsurface(geom)::geometry(POINT, {srid}) AS geom
 FROM {schema}.{layer}"""
-        queries = '\nUNION ALL\n'.join(sql.format(schema=schema,
+        queries = '\nUNION ALL\n'.join(sql.format(cols=col_str,
+                                                  schema=schema,
                                                   layer=layer,
                                                   srid=self.target_srid)
                                        for layer in layers)
