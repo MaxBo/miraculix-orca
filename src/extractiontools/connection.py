@@ -4,6 +4,7 @@
 import psycopg2
 from psycopg2.extras import NamedTupleConnection, DictCursor
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from collections import OrderedDict
 
 from types import MethodType
 
@@ -96,6 +97,41 @@ class Connection(object):
 
     def get_dict_cursor(self):
         return self.conn.cursor(cursor_factory=DictCursor)
+
+    def get_columns(self, tablename):
+        """
+        Return a tuple of columns of a table
+
+        Parameters
+        ----------
+        tablename : str
+            the tablename or schema.tablename to query
+
+        Returns
+        -------
+            tuple of Column objects
+        """
+        cur = self.get_dict_cursor()
+        sql = 'SELECT * FROM {} LIMIT 0;'.format(tablename)
+        cur.execute(sql)
+        descr = cur.description
+        return descr
+
+    def get_column_dict(self, tablename):
+        """
+        Return a tuple of column names of a table
+
+        Parameters
+        ----------
+        tablename : str
+            the tablename or schema.tablename to query
+
+        Returns
+        -------
+        cols : Ordered Dict of the columns
+        """
+        descr = self.get_columns(tablename)
+        return OrderedDict(((d.name, d) for d in descr))
 
 
 class DBApp(object):
