@@ -125,7 +125,7 @@ WHERE {where};
                                schema,
                                *layers):
         """Create a composite layer of all geometrytypes"""
-        cols = self.conn.get_column_dict(layers[0])
+        cols = self.conn.get_column_dict(layers[0], schema)
         cols_without_geom = (c for c in cols if c != 'geom')
         if not cols_without_geom:
             raise ValueError("No Columns beside the geom column defined")

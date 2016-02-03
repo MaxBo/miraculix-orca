@@ -57,6 +57,7 @@ class Connection(object):
                               sslmode='prefer')
         self.conn = conn
         self.conn.get_dict_cursor = self.get_dict_cursor
+        self.conn.get_column_dict = self.get_column_dict
         self.set_copy_command_format()
         self.set_vacuum_analyze_command()
         return conn
@@ -117,7 +118,7 @@ class Connection(object):
         descr = cur.description
         return descr
 
-    def get_column_dict(self, tablename):
+    def get_column_dict(self, tablename, schema=None):
         """
         Return a tuple of column names of a table
 
@@ -126,11 +127,18 @@ class Connection(object):
         tablename : str
             the tablename or schema.tablename to query
 
+        schema : str, optional
+            the schemaname
+
         Returns
         -------
         cols : Ordered Dict of the columns
         """
-        descr = self.get_columns(tablename)
+        if schema is not None:
+            table = '{s}.{t}'.format(s=schema, t=tablename)
+        else:
+            table = tablename
+        descr = self.get_columns(table)
         return OrderedDict(((d.name, d) for d in descr))
 
 
