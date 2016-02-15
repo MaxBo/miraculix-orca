@@ -230,9 +230,11 @@ CREATE INDEX way_tags_idx
 ON osm.ways
 USING gist(tags);
 
+-- Partial index for nodes
 CREATE INDEX node_tags_idx
 ON osm.nodes
-USING gist(tags);
+USING gist(tags)
+WHERE tags <> ''::hstore;
 
 CREATE INDEX relations_tags_idx
 ON osm.relations

@@ -40,7 +40,7 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
                               columns,
                               where_clause,
                               view,
-                              geometrytype='ways',
+                              geometrytype='lines',
                               schema='osm_layer'):
         """Create a linestring layer schema.view, with the given fields
         and the given where-clause"""
@@ -93,6 +93,10 @@ WHERE {where};
             the geometrytype to create (nodes, lines, polygons)
         """
         columns, where_clause = self.keys2sql(keys)
+        # restrict where_clause for nodes to tags with keys to force the use
+        # of the partial index
+        if geometrytype == 'nodes' and 'tags' in where_clause:
+            where_clause += "\nAND tags <> ''::hstore"
         self.create_geometry_layer(columns,
                                    where_clause,
                                    view,

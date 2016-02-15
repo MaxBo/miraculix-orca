@@ -266,7 +266,8 @@ LEFT JOIN
 substring(tags -> 'ele' FROM '[-+]?\d*\.\d+|\d+')::double precision AS z
 FROM osm.nodes n, {network}.junctions AS p
 WHERE p.nodeid = n.id
-AND n.tags ? 'ele') e
+AND n.tags ? 'ele'
+AND n.tags <> ''::hstore) e
 ON a.nodeid = e.id
 ;
 
@@ -918,7 +919,9 @@ CREATE OR REPLACE VIEW {network}.barriers_car AS
            FROM {network}.link_points lp,
             osm.nodes n
              LEFT JOIN classifications.access_types a ON n.tags @> a.tags
-          WHERE n.id = lp.nodeid AND n.tags ? 'barrier'::text
+          WHERE n.id = lp.nodeid
+          AND n.tags ? 'barrier'::text
+          AND n.tags <> ''::hstore
           GROUP BY n.id
          HAVING bool_or(a.sperre_pkw) OR (bool_or(a.oeffne_pkw) IS NULL)
          )b

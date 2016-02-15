@@ -274,7 +274,9 @@ CREATE OR REPLACE VIEW {network}.barriers_foot AS
            FROM {network}.link_points lp,
             osm.nodes n
              LEFT JOIN classifications.access_walk_cycle a ON n.tags @> a.tags
-          WHERE n.id = lp.nodeid AND n.tags ? 'barrier'::text
+          WHERE n.id = lp.nodeid
+          AND n.tags ? 'barrier'::text
+          AND n.tags <> ''::hstore
           GROUP BY n.id
          HAVING bool_or(a.sperre_walk) OR (bool_or(a.oeffne_walk) IS NULL)
          )b
@@ -294,7 +296,9 @@ CREATE OR REPLACE VIEW {network}.barriers_cycle AS
            FROM {network}.link_points lp,
             osm.nodes n
              LEFT JOIN classifications.access_walk_cycle a ON n.tags @> a.tags
-          WHERE n.id = lp.nodeid AND n.tags ? 'barrier'::text
+          WHERE n.id = lp.nodeid
+          AND n.tags ? 'barrier'::text
+          AND n.tags <> ''::hstore
           GROUP BY n.id
          HAVING bool_or(a.sperre_bike) OR (bool_or(a.oeffne_bike) IS NULL)
          ) b
