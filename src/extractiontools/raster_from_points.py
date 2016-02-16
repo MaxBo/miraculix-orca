@@ -141,7 +141,15 @@ class Points2Raster(DBApp):
         """
         # validate pixeltype
         pt = PixelType(pixeltype)
-        target_raster_tablename = target_raster.split('.')[-1]
+        # get schema-name if given
+        target_schema_table = target_raster.split('.')
+        if len(target_schema_table) == 2:
+            schema_argument = "'{}'::name, ".format(target_schema_table[0])
+        else:
+            # no schema given
+            schema_argument = ""
+        # table-name
+        target_raster_tablename = target_schema_table[-1]
 
         if overwrite:
             sql = """
@@ -167,7 +175,8 @@ st_setvalues(
     '{pixeltype}'::text,
     {initial}::double precision,
     {nd}::double precision),
-      {band}, rv.geomval_arr
+    {band},
+    rv.geomval_arr
 ) AS {rast}
 
 FROM
@@ -185,8 +194,12 @@ GROUP BY
   ) AS rv
 WHERE
   rv.{rid} = r.{rid};
+
+-- Add the Raster Constraints
+SELECT AddRasterConstraints({schema}'{target_tn}'::name, '{rast}'::name);
         """.format(
             target=target_raster,
+            schema=schema_argument,
             target_tn=target_raster_tablename,
             rid=raster_pkey,
             rast=raster_col,
