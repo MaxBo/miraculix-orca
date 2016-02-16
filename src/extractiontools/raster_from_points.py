@@ -269,7 +269,26 @@ COPY (
                                         tablename,
                                         source_table,
                                         value_column):
-        """Create a materialized view for """
+        """
+        Create a materialized view for a polygon layer that intersects
+        with a raster grid
+
+        Creates a materialized view {tablename}
+        with a value for each raster cellcode
+
+        and a view {tablename}_pnt joining this with the raster centroids
+
+        Parameters
+        ----------
+        tablename : str
+            the name of the view to create
+        source_table : str
+            [schema.]tablename of the polygon layer that sould be intersected
+        value_column : str
+            column in source_table that should be distributed to the
+            target raster
+        """
+
         sql = """
 DROP MATERIALIZED VIEW IF EXISTS {sc}.{tn} CASCADE;
 CREATE MATERIALIZED VIEW {sc}.{tn} AS
@@ -284,6 +303,103 @@ CREATE INDEX {tn}_pkey ON
 {sc}.{tn} USING btree(cellcode);
 
 ANALYZE {sc}.{tn};
+
+CREATE OR REPLACE VIEW {sc}.{tn}_pnt AS
+SELECT
+v.cellcode, v.value, l.pnt_laea,
+row_number() OVER(ORDER BY v.cellcode)::integer AS rn
+FROM
+{sc}.{tn} v,
+{rv} l
+WHERE v.cellcode=l.cellcode;
+        """
+        self.run_query(sql.format(sc=self.schema,
+                                  tn=tablename,
+                                  st=source_table,
+                                  rv=self.reference_vector,
+                                  val=value_column))
+
+    def create_matview_poly_weighted_with_raster(self,
+                                                 tablename,
+                                                 source_table,
+                                                 id_column,
+                                                 value_column,
+                                                 weights, ):
+        """
+        Create a materialized view for a polygon layer that intersects
+        with a raster grid
+
+        Creates a materialized view {tablename}
+        with a value for each raster cellcode
+
+        and a view {tablename}_pnt joining this with the raster centroids
+
+        Parameters
+        ----------
+        tablename : str
+            the name of the view to create
+        source_table : str
+            [schema.]tablename of the polygon layer that sould be intersected
+        value_column : str
+            column in source_table that should be distributed to the
+            target raster
+        id_column : str
+            column in source_table with the primary key
+        weights : str
+            the raster with the weights
+        """
+
+        sql = """
+
+DROP MATERIALIZED VIEW IF EXISTS {sc}.{tn}_raster_intersects CASCADE;
+CREATE MATERIALIZED VIEW {sc}.{tn}_raster_intersects AS
+SELECT
+l.cellcode,
+g.{pkey} AS pkey,
+g.{val}::double precision AS value
+(st_area(st_intersection(g.geom, l.geom)) / l.area * l.{val}) as weight
+FROM {st} g,
+(SELECT
+l.cellcode,
+l.geom,
+st_area(l.geom) AS area,
+st_value(r.rast, l.pnt) AS value
+FROM
+{rv} l,
+{wr} r
+WHERE l.geom && r.rast
+) AS l
+WHERE l.geom && g.geom;
+
+CREATE OR REPLACE VIEW {sc}.{tn} AS
+
+SELECT
+i.cellcode,
+sum(i.weight / s.sum_weight * i.value) as value
+
+FROM {sc}.{tn}_raster_intersects AS i,
+(
+SELECT
+  z.pkey,
+  z.cellcode,
+  sum(z.weights) AS sum_weights
+FROM {sc}.{tn}_raster_intersects AS z
+GROUP BY
+  z.{pkey},
+  z.cellcode
+) s
+WHERE s.{pkey} = i.{pkey}
+AND s.cellcode = i.cellcode
+
+GROUP BY
+i.cellcode
+;
+
+CREATE INDEX {tn}_pkey ON
+{sc}.{tn}_raster_intersects USING btree(cellcode, pkey);
+
+ANALYZE {sc}.{tn}_raster_intersects;
+
 CREATE OR REPLACE VIEW {sc}.{tn}_pnt AS
 SELECT
 v.cellcode, v.value, l.pnt_laea,
@@ -343,12 +459,31 @@ WHERE v.cellcode=l.cellcode;
                                   pixeltype='32BF',
                                   noData=0):
         """
-        intersect polygon feature with raster and create raster tiff
+        intersect polygon feature with raster and sum up the value_column
         """
         self.create_matview_poly_with_raster(
             tablename, source_table, value_column)
 
         self.create_raster_for_table(tablename, pixeltype, noData)
+
+    def intersect_polygon_with_weighted_raster(self,
+                                               tablename,
+                                               id_column,
+                                               source_table,
+                                               value_column,
+                                               weights,
+                                               pixeltype='32BF',
+                                               noData=0):
+        """
+        intersect polygon feature with raster,
+        distribute the value of the value_column weighted according to the
+        weights in the weights-raster
+        """
+        self.create_matview_poly_weighted_with_raster(
+            tablename, source_table, id_column, value_column, weights)
+
+        self.create_raster_for_table(tablename, pixeltype, noData)
+
 
     def create_raster_for_point(self,
                                 tablename,
