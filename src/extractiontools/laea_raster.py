@@ -209,6 +209,8 @@ FROM (
 ;
 CREATE INDEX laea_vector_{pixelsize}_geom_idx
 ON {schema}.laea_vector_{pixelsize} USING gist(geom);
+CREATE INDEX laea_vector_{pixelsize}_pnt_idx
+ON {schema}.laea_vector_{pixelsize} USING gist(pnt_laea);
 ANALYZE {schema}.laea_vector_{pixelsize};
 
         """.format(pixelsize=pixelsize,

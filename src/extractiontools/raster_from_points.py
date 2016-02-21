@@ -356,43 +356,52 @@ CREATE MATERIALIZED VIEW {sc}.{tn}_raster_intersects AS
 SELECT
 l.cellcode,
 g.{pkey} AS pkey,
-g.{val}::double precision AS value
-(st_area(st_intersection(g.geom, l.geom)) / l.area * l.{val}) as weight
+g.{val}::double precision AS value,
+(st_area(st_intersection(g.geom, l.geom)) / l.area * l.raster_weight) as weight
 FROM {st} g,
 (SELECT
 l.cellcode,
 l.geom,
 st_area(l.geom) AS area,
-st_value(r.rast, l.pnt) AS value
+(p).val AS raster_weight
 FROM
 {rv} l,
-{wr} r
-WHERE l.geom && r.rast
+(SELECT st_pixelascentroids(r.rast) AS p
+FROM
+{sc}.geschossflaeche_raster r) r
+WHERE l.geom && (p).geom
+AND (p).val IS NOT NULL
 ) AS l
 WHERE l.geom && g.geom;
 
 CREATE OR REPLACE VIEW {sc}.{tn} AS
 
 SELECT
-i.cellcode,
-sum(i.weight / s.sum_weight * i.value) as value
+s.cellcode,
+sum(s.val) AS value
 
+FROM (
+SELECT
+i.cellcode,
+CASE s.sum_weights
+WHEN 0 THEN s.simple_weight * i.value
+ELSE i.weight / s.sum_weights * i.value
+END as val
 FROM {sc}.{tn}_raster_intersects AS i,
 (
+-- add the weights for the zone
 SELECT
   z.pkey,
-  z.cellcode,
-  sum(z.weights) AS sum_weights
+  sum(z.weight) AS sum_weights,
+  1 / count(*)::double precision AS simple_weight
 FROM {sc}.{tn}_raster_intersects AS z
 GROUP BY
-  z.{pkey},
-  z.cellcode
+  z.pkey
 ) s
-WHERE s.{pkey} = i.{pkey}
-AND s.cellcode = i.cellcode
-
+WHERE s.pkey = i.pkey
+) s
 GROUP BY
-i.cellcode
+s.cellcode
 ;
 
 CREATE INDEX {tn}_pkey ON
@@ -413,7 +422,9 @@ WHERE v.cellcode=l.cellcode;
                                   tn=tablename,
                                   st=source_table,
                                   rv=self.reference_vector,
-                                  val=value_column))
+                                  val=value_column,
+                                  pkey=id_column,
+                                  wr=weights))
 
     def create_matview_point_with_raster(self,
                                          tablename,
@@ -502,7 +513,8 @@ WHERE v.cellcode=l.cellcode;
     def create_raster_for_table(self,
                                 tablename,
                                 pixeltype='32BF',
-                                noData=0):
+                                noData=0,
+                                value_col='value'):
         """
         intersect feature with raster and create raster tiff
         """
@@ -511,7 +523,7 @@ WHERE v.cellcode=l.cellcode;
             point_feature='{sc}.{tn}_pnt'.format(sc=self.schema,
                                                  tn=tablename),
             geom_col='pnt_laea',
-            value_col='value',
+            value_col=value_col,
             target_raster='{sc}.{tn}_raster'.format(sc=self.schema,
                                                     tn=tablename),
             pixeltype=pixeltype,
