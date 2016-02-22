@@ -368,7 +368,7 @@ FROM
 {rv} l,
 (SELECT st_pixelascentroids(r.rast) AS p
 FROM
-{sc}.geschossflaeche_raster r) r
+{wr} r) r
 WHERE l.geom && (p).geom
 AND (p).val IS NOT NULL
 ) AS l
