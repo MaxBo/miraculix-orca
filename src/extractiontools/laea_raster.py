@@ -135,7 +135,7 @@ WHERE v.cellcode = z.id;
           create_laea-raster in the destination db
           parameters: pixelsize in meters (default=100)
           search lower left corner and round value
-          make empty raster in espg:3035
+          make empty raster in epsg:3035
           add dummy band
           create raster-polygons and centroids with cellcode
           reproject them to the target-srid
