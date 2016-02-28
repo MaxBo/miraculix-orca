@@ -49,7 +49,7 @@ if __name__=='__main__':
                         dest="user", default='osm')
     parser.add_argument('--source-db', action="store",
                         help="source database",
-                        dest="source_db", default='dplus')
+                        dest="source_db", default='europe')
 
     bbox = BBox(top=options.top, bottom=options.bottom,
                 left=options.left, right=options.right)

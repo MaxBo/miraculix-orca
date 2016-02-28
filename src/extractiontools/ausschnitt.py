@@ -53,7 +53,7 @@ class Extract(DBApp):
         self.srid = 4326
         self.target_srid = target_srid
         self.temp = temp
-        self.source_db = options.get('source_db', 'dplus')
+        self.source_db = options.get('source_db', 'europe')
         self.destination_db = destination_db
         self.recreate_db = recreate_db
         self.tables2cluster = []
@@ -282,7 +282,7 @@ UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
         #logger.info(cmd)
         #ret = subprocess.call(cmd, shell=self.SHELL)
 
-        cmd = '''"{createdb}" -U {user} -h {host} -p {port} -w -T pg21_template {destination_db}'''.format(createdb=createdb, destination_db=login.db, user=login.user,
+        cmd = '''"{createdb}" -U {user} -h {host} -p {port} -w -T pg_template {destination_db}'''.format(createdb=createdb, destination_db=login.db, user=login.user,
            port=login.port, host=login.host)
         logger.info(cmd)
         ret = subprocess.call(cmd, shell=self.SHELL)
@@ -741,7 +741,7 @@ if __name__ == '__main__':
                         dest="user", default='osm')
     parser.add_argument('--source-db', action="store",
                         help="source database",
-                        dest="source_db", default='dplus')
+                        dest="source_db", default='europe')
 
     options = parser.parse_args()
 

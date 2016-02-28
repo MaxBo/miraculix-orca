@@ -277,7 +277,7 @@ if __name__ == '__main__':
                         dest="user", default='osm')
     parser.add_argument('--source-db', action="store",
                         help="source database",
-                        dest="source_db", default='dplus')
+                        dest="source_db", default='europe')
 
     parser.add_argument('--date-areas', action="store",
                         help="Stichtag Gebietsstand",

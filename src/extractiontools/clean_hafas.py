@@ -817,7 +817,7 @@ if __name__=='__main__':
                         dest="year")
     parser.add_argument('--source-db', action="store",
                         help="source database",
-                        dest="source_db", default='dplus')
+                        dest="source_db", default='europe')
 
     options = parser.parse_args()
     date = Date(options.year, options.month, options.day)
