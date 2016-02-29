@@ -266,7 +266,7 @@ UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
             self.PGPATH = r'C:\Program Files\PostgreSQL\9.3\bin'
             self.SHELL = False
         else:
-            self.PGPATH = '/usr/lib/postgresql/9.3/bin'
+            self.PGPATH = '/usr/bin'
             self.SHELL = True
 
     def create_target_db(self, login):
