@@ -662,6 +662,7 @@ COMMIT;
     def update_linktypes(self):
         """
         """
+        corine = self.options.corine
         sql = """
 UPDATE {network}.links l
 SET linktype = s.linktype_id
@@ -673,8 +674,8 @@ ANALYZE {network}.links;
 
 WITH urban AS
 (SELECT c.geom
-FROM landuse.clc06 c
-WHERE c.code_06 IN (SELECT code FROM classifications.corine_urban))
+FROM landuse.{corine} c
+WHERE c.code IN (SELECT code FROM classifications.corine_urban))
 
 UPDATE {network}.links l
 SET io = TRUE
@@ -703,7 +704,8 @@ WHERE l.wayid = w.id
 AND w.tags ? 'construction'
 AND w.tags @> lt.tag1
 AND w.tags @> lt.tag2;
-""".format(network=self.network)
+""".format(network=self.network,
+           corine=corine)
         self.run_query(sql)
 
     def update_speed(self):
@@ -1338,6 +1340,10 @@ if __name__ == '__main__':
     parser.add_argument("--links-to-find", action="store",
                         help="share of links to find", type=float,
                         dest="links_to_find", default=0.25)
+
+    parser.add_argument("--corine", action="store",
+                        help="corine landuse table", type=float,
+                        dest="corine", default='clc12')
 
     options = parser.parse_args()
 
