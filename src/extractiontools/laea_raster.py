@@ -49,7 +49,8 @@ class ExtractLAEA(Extract):
     def add_raster_constraint(self, pixelsize):
         sql = """
 
-
+CREATE INDEX idx_{tn}_geom ON {schema}.laea_raster_{pixelsize}
+USING gist(st_convexhull(rast));
 SELECT AddRasterConstraints('{schema}'::name,
                             'laea_raster_{pixelsize}'::name,
                             'rast'::name,

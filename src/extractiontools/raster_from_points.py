@@ -197,6 +197,9 @@ WHERE
 
 -- Add the Raster Constraints
 SELECT AddRasterConstraints({schema}'{target_tn}'::name, '{rast}'::name);
+-- Add the raster index
+CREATE INDEX idx_{tn}_geom ON {schema}.{target_tn}
+USING gist(st_convexhull({rast}));
         """.format(
             target=target_raster,
             schema=schema_argument,
