@@ -183,7 +183,8 @@ class DBApp(object):
                 if many:
                     cur.executemany(sql, values)
                 else:
-                    cur.execute(query, values)
+                    if not query.strip().startswith('--'):
+                        cur.execute(query, values)
                 logger.info(cur.statusmessage)
 
     def set_search_path(self, connstr='conn'):

@@ -273,6 +273,8 @@ ALTER TABLE osm.relations
         """
         self.copy_temp_schema_to_target_db(schema='classifications')
         self.copy_temp_schema_to_target_db(schema='osm84')
+        self.cluster_and_analyse()
+
 
 if __name__ == '__main__':
 

@@ -121,7 +121,6 @@ class Extract(DBApp):
             self.cleanup()
             self.conn0.commit()
             self.conn1.commit()
-        self.cluster_and_analyse()
 
         self.further_stuff()
 
@@ -161,16 +160,31 @@ ALTER SCHEMA {temp} RENAME TO {schema}
         """
         extracts a single table
         """
+        geometrytype = self.get_geometrytype(tn, geom)
+        cols = self.conn0.get_column_dict(tn, self.schema)
+        cols_without_geom = ('t.{}'.format(c) for c in cols if c != geom)
+        col_str = ', '.join(cols_without_geom)
+
         sql = """
-SELECT t.*
+SELECT {cols}, st_transform(t.{geom}, {srid})::geometry({gt}, {srid}) as geom
 INTO {temp}.{tn}
 FROM {schema}.{tn} t, {temp}.boundary tb
 WHERE
-t.{geom} && tb.geom
+t.{geom} && tb.source_geom
         """
         self.run_query(sql.format(tn=tn, temp=self.temp, geom=geom,
-                                  schema=self.schema),
+                                  schema=self.schema, cols=col_str, srid=self.target_srid,
+                                  gt=geometrytype),
                        conn=self.conn0)
+
+    def get_geometrytype(self, tn, geom):
+        sql = """
+SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
+        """.format(geom=geom, sn=self.schema, tn=tn)
+        cur = self.conn0.cursor()
+        cur.execute(sql)
+        geometrytype = cur.fetchone()[0]
+        return geometrytype
 
     def create_temp_schema(self):
         """
@@ -417,7 +431,7 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
             logger.info('no tables to cluster')
 
         vacuumdb = os.path.join(self.PGPATH, 'vacuumdb')
-        cmd = '''"{vacuumdb}" -U {user} -h {host} -p {port} -w --analyze -d {destination_db}'''
+        cmd = '''"{vacuumdb}" -U {user} -h {host} -p {port} -w --analyze-in-stages -d {destination_db}'''
         cmd = cmd.format(vacuumdb=vacuumdb,
                          destination_db=login.db,
                          user=login.user,
