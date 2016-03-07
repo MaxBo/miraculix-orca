@@ -20,8 +20,8 @@ class ExtractLAEA(Extract):
     def final_stuff(self):
         """Final steps in the destiantion db"""
 
-        self.add_raster_constraint(pixelsize=100)
-        self.add_raster_constraint(pixelsize=1000)
+        self.add_laea_raster_constraint(pixelsize=100)
+        self.add_laea_raster_constraint(pixelsize=1000)
         self.create_views_zensus()
 
     def create_views_zensus(self):
@@ -46,19 +46,9 @@ class ExtractLAEA(Extract):
         """.format(schema=self.schema)
         self.run_query(sql, conn=self.conn1)
 
-    def add_raster_constraint(self, pixelsize):
-        sql = """
-
-CREATE INDEX idx_{tn}_geom ON {schema}.laea_raster_{pixelsize}
-USING gist(st_convexhull(rast));
-SELECT AddRasterConstraints('{schema}'::name,
-                            'laea_raster_{pixelsize}'::name,
-                            'rast'::name,
-                            True);
-        """.format(schema=self.schema,
-                   pixelsize=pixelsize)
-        self.run_query(sql, conn=self.conn1)
-
+    def add_laea_raster_constraint(self, pixelsize):
+        tn = 'laea_raster_{pixelsize}'.format(pixelsize=pixelsize)
+        self.add_raster_index(schema=self.schema, tablename=tn)
 
     def additional_stuff(self):
         """

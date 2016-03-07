@@ -287,14 +287,7 @@ UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
         """
         create the target database
         """
-        #dropdb = os.path.join(self.PGPATH, 'dropdb')
-
         createdb = os.path.join(self.PGPATH, 'createdb')
-
-        #cmd = '''"{dropdb}" --if-exists -U {user} -h {host} -p {port} -w {destination_db} '''.format(dropdb=dropdb, destination_db=login.db, user=login.user,
-           #port=login.port, host=login.host)
-        #logger.info(cmd)
-        #ret = subprocess.call(cmd, shell=self.SHELL)
 
         cmd = '''"{createdb}" -U {user} -h {host} -p {port} -w -T pg_template {destination_db}'''.format(createdb=createdb, destination_db=login.db, user=login.user,
            port=login.port, host=login.host)
@@ -402,7 +395,6 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
 
         dump.terminate()
 
-
     def cleanup(self):
         """
         remove the temp schema
@@ -446,6 +438,7 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
         cmd = 'mkdir -p {}'.format(folder)
         logger.info(cmd)
         subprocess.call(cmd, shell=self.SHELL)
+
 
 class ExtractMeta(Extract):
     """

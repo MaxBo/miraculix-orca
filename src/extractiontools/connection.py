@@ -174,8 +174,7 @@ class DBApp(object):
         many : bool, Default=False
             if True, pass vars to cur.executemany instead of cur.execute
         """
-        if conn is None:
-            conn = self.conn
+        conn = conn or self.conn
         cur = conn.cursor()
         for query in sql.split(';'):
             if query.strip():
@@ -264,3 +263,45 @@ DROP DATABASE IF EXISTS {db};
         cur.execute(sql.format(db=dbname))
         conn.set_isolation_level(1)
         conn.commit()
+
+    def add_raster_index(self, schema, tablename, raster_column='rast', conn=None):
+        """
+        add a raster index
+        """
+        if schema is None:
+            raise ValueError('please define schema')
+        conn = conn or self.conn1
+        sql = """
+CREATE INDEX idx_{tn}_geom ON {schema}.{tn} USING gist(st_convexhull({rast}));
+SELECT AddRasterConstraints('{schema}', '{tn}', '{rast}', TRUE, TRUE, TRUE, TRUE,
+                            TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE);
+        """
+        self.run_query(sql.format(schema=schema, tn=tablename, rast=raster_column),
+                       conn=conn)
+        conn.commit()
+
+    def add_overview_index(self, overviews, schema, tablename, raster_column='rast', conn=None):
+        """
+        Add an index to all given overview rasters for the given raster table
+        """
+        conn = conn or self.conn1
+        for ov in overviews:
+            ov_tn = 'o_{ov}_{tn}'.format(ov=ov, tn=tablename)
+            sql = '''
+SELECT AddOverviewConstraints('{schema}', '{ov_tn}', '{rast}',
+                              '{schema}', '{tn}', '{rast}', {ov});
+
+            '''
+            self.run_query(sql.format(schema=schema,
+                                      tn=tablename,
+                                      ov_tn=ov_tn,
+                                      ov=ov,
+                                      rast=raster_column), conn=conn)
+            self.add_raster_index(schema, ov_tn, raster_column=raster_column)
+        conn.commit()
+
+    def add_raster_index_and_overviews(self, overviews, schema, tablename,
+                                       raster_column='rast', conn=None):
+        conn = conn or self.conn1
+        self.add_raster_index(schema, tablename, raster_column, conn)
+        self.add_overview_index(overviews, schema, tablename, raster_column, conn)

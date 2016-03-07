@@ -13,14 +13,32 @@ class ExtractLanduse(Extract):
     tables = {}
     schema = 'landuse'
     role = 'group_osm'
+    aster_overviews = [8, 32]
+    corine_overviews = [8, 32]
+
+
+    def __init__(self,
+                 options,
+                 source_db,
+                 destination_db,
+                 temp='temp',
+                 target_srid=31467,
+                 recreate_db=False):
+        self.options = options
+        super(ExtractLanduse, self).__init__(
+            destination_db=destination_db,
+        temp=temp,
+        target_srid=target_srid,
+        recreate_db=recreate_db,
+        source_db=source_db)
 
     def additional_stuff(self):
         """
         """
         self.extract_oceans()
-        self.extract_corine()
+        self.extract_corine_vector()
         self.extract_aster()
-        self.extract_corine_raster()
+        self.extract_all_corine_raster()
 
     def extract_oceans(self):
         """
@@ -39,13 +57,13 @@ c.geom && tb.source_geom
                                   target_srid=self.target_srid),
                        conn=self.conn0)
 
-    def extract_corine(self):
+    def extract_corine_vector(self):
         """
         Extract Corine Landcover data and transform into target srid
         """
         sql = """
     SELECT
-      c.fid, c.code, c.id, c.remark,
+      c.ogc_fid, c.code, c.id, c.remark,
       st_transform(c.geom, {target_srid})::geometry('MULTIPOLYGON',
       {target_srid}) AS geom
     INTO {temp}.{corine}
@@ -54,33 +72,30 @@ c.geom && tb.source_geom
     c.geom && tb.source_geom
             """
         for corine in self.options.corine:
-            corine_raster = self.get_corine_raster_name(corine)
-
             self.run_query(sql.format(temp=self.temp, schema=self.schema,
                                       target_srid=self.target_srid,
-                                      corine=corine_raster),
+                                      corine=corine),
                            conn=self.conn0)
 
     def get_corine_raster_name(self, corine):
         corine_raster = '{}_raster'.format(corine)
         return corine_raster
 
-    def extract_corine_raster(self):
+    def extract_all_corine_raster(self):
         """
         Extract the Corine Raster data
         """
         for corine in self.options.corine:
-            self.extract_corine(corine)
+            corine_raster = self.get_corine_raster_name(corine)
+            self.extract_corine_raster(corine_raster)
 
-    def extract_one_corine_raster(self, corine_raster_table):
+    def extract_corine_raster(self, corine_raster_table):
         """
         Extract Corine Raster data and transform into target srid
 
         """
         # Corine Raster data is given in LAEA-ETRS (EPSG:3035)
         corine_raster_srid = 3035
-        #self.corine_overviews = [8, 32]
-        self.corine_overviews = []
         tables = [corine_raster_table] + \
             ['o_{ov}_{rt}'.format(ov=ov,
                                   rt=corine_raster_table)
@@ -115,11 +130,10 @@ r.rast && st_transform(tb.source_geom, {corine_srid});
 
         """
         self.raster_table = 'aster'
-        self.overviews = [8, 32]
         tables = [self.raster_table] + \
             ['o_{ov}_{rt}'.format(ov=ov,
                                   rt=self.raster_table)
-             for ov in self.overviews]
+             for ov in self.aster_overviews]
 
         sql = """
 CREATE TABLE {temp}.{tn}
@@ -160,7 +174,9 @@ WITH NO DATA;
         """
         self.create_index_oceans()
         self.create_index_corine()
-        self.add_aster_index()
+        self.add_raster_index_and_overviews(self.aster_overviews,
+                                            self.schema,
+                                            self.raster_table)
         self.calc_aster_centroids()
         self.create_corine_raster_index()
 
@@ -168,7 +184,7 @@ WITH NO DATA;
         """ Corine landcover Index"""
 
         sql = """
-    ALTER TABLE {schema}.{corine} ADD PRIMARY KEY (fid);
+    ALTER TABLE {schema}.{corine} ADD PRIMARY KEY (ogc_fid);
     CREATE INDEX {corine}_geom_idx
       ON {schema}.{corine}
       USING gist(geom);
@@ -207,53 +223,15 @@ ANALYZE {schema}.aster_centroids;
         """
         self.run_query(sql.format(schema=self.schema), conn=self.conn1)
 
-    def add_aster_index(self):
-        sql = """
-CREATE INDEX idx_{tn}_geom ON {schema}.{tn} USING gist(st_convexhull(rast));
-SELECT AddRasterConstraints('{schema}', '{tn}', 'rast', TRUE, TRUE, TRUE, TRUE,
-                            TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE);
-        """
-        self.run_query(sql.format(schema=self.schema, tn=self.raster_table),
-                       conn=self.conn1)
-        self.conn1.commit()
-        self.add_overview_index(self.overviews, self.raster_table)
-
-    def add_overview_index(self, overviews, raster_table):
-        """
-        Add an index to all given overview rasters for the given raster table
-        """
-
-        sql = """
-CREATE INDEX idx_o_{ov}_{tn}_geom ON {schema}.o_{ov}_{tn}
-USING gist(st_convexhull(rast));
-SELECT AddOverviewConstraints('{schema}', 'o_{ov}_{tn}', 'rast',
-                              '{schema}', '{tn}', 'rast', {ov});
-SELECT AddRasterConstraints('{schema}', 'o_{ov}_{tn}', 'rast', TRUE, TRUE, TRUE, TRUE,
-                            TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE);
-        """
-        for ov in overviews:
-            self.run_query(sql.format(schema=self.schema,
-                                      tn=raster_table,
-                                      ov=ov), conn=self.conn1)
-
-    def add_one_corine_raster_index(self, corine_raster):
-        sql = """
-CREATE INDEX idx_{tn}_geom ON {schema}.{tn} USING gist(st_convexhull(rast));
-SELECT AddRasterConstraints('{schema}', '{tn}', 'rast', TRUE, TRUE, TRUE, TRUE,
-                            TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE);
-        """
-        self.run_query(sql.format(schema=self.schema, tn=corine_raster),
-                       conn=self.conn1)
-        self.conn1.commit()
-        self.add_overview_index(self.corine_overviews, corine_raster)
-
     def create_corine_raster_index(self):
         """
         add index to all corine rasters requiered in the arguments
         """
         for corine in self.options.corine:
             corine_raster = self.get_corine_raster_name(corine)
-            self.add_one_corine_raster_index(corine_raster)
+            self.add_raster_index_and_overviews(overviews=self.corine_overviews,
+                                                schema=self.schema,
+                                                tablename=corine_raster)
 
 
 if __name__ == '__main__':
@@ -285,7 +263,8 @@ if __name__ == '__main__':
 
     options = parser.parse_args()
 
-    extract = ExtractLanduse(source_db=options.source_db,
+    extract = ExtractLanduse(options=options,
+                             source_db=options.source_db,
                              destination_db=options.destination_db,
                              recreate_db=False)
     extract.set_login(host=options.host,

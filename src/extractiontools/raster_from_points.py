@@ -144,7 +144,8 @@ class Points2Raster(DBApp):
         # get schema-name if given
         target_schema_table = target_raster.split('.')
         if len(target_schema_table) == 2:
-            schema_argument = "'{}'::name, ".format(target_schema_table[0])
+            target_schema = target_schema_table[0]
+            schema_argument = "'{}'::name, ".format(target_schema)
         else:
             # no schema given
             schema_argument = ""
@@ -194,12 +195,6 @@ GROUP BY
   ) AS rv
 WHERE
   rv.{rid} = r.{rid};
-
--- Add the Raster Constraints
-SELECT AddRasterConstraints({schema}'{target_tn}'::name, '{rast}'::name);
--- Add the raster index
-CREATE INDEX idx_{target_tn}_geom ON {schema}.{target_tn}
-USING gist(st_convexhull({rast}));
         """.format(
             target=target_raster,
             schema=schema_argument,
@@ -217,6 +212,10 @@ USING gist(st_convexhull({rast}));
             value_col=value_col,
            )
         self.run_query(sql)
+        self.add_raster_index(schema=target_schema,
+                              tablename=target_raster_tablename,
+                              raster_column=raster_col,
+                              conn=self.conn)
 
     def export2tiff(self,
                     tablename,
