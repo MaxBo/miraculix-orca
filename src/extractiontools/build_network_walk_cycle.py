@@ -435,6 +435,10 @@ if __name__ == '__main__':
                         help='routing for walking (cycling is the default',
                         dest='routing_walk', default=False)
 
+    parser.add_argument("--corine", action="store",
+                        help="corine landuse table",
+                        dest="corine", default='clc12')
+
 
     options = parser.parse_args()
 

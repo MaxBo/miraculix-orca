@@ -1342,7 +1342,7 @@ if __name__ == '__main__':
                         dest="links_to_find", default=0.25)
 
     parser.add_argument("--corine", action="store",
-                        help="corine landuse table", type=float,
+                        help="corine landuse table",
                         dest="corine", default='clc12')
 
     options = parser.parse_args()
