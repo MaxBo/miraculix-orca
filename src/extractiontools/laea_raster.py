@@ -60,6 +60,7 @@ class ExtractLAEA(Extract):
 
         self.get_einwohner_hectar()
         self.get_zensusdata_km2()
+        self.get_geostat_data_km2()
 
     def get_einwohner_hectar(self):
         """
@@ -118,6 +119,25 @@ SELECT z.id,
 FROM zensus.zensus2011_gitter1000m_spitze z,
 {schema}.laea_vector_1000 v
 WHERE v.cellcode = z.id;
+        """.format(schema=self.temp)
+        self.run_query(sql, conn=self.conn0)
+
+    def get_geostat_data_km2(self):
+        """Extract Geostat data on km2 level for area"""
+        sql = """
+DROP TABLE IF EXISTS {schema}.geostat_km2 CASCADE;
+CREATE TABLE {schema}.geostat_km2
+( id text primary key,
+  einwohner integer);
+
+INSERT INTO {schema}.geostat_km2(
+  id,
+  einwohner)
+SELECT z.grid_id AS id,
+  z.tot_p AS einwohner
+FROM zensus.geostat_2011_pop_1km2 z,
+{schema}.laea_vector_1000 v
+WHERE v.cellcode = z.grid_id;
         """.format(schema=self.temp)
         self.run_query(sql, conn=self.conn0)
 

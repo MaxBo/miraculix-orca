@@ -14,10 +14,12 @@ class Zensus2Raster(Points2Raster):
         """
         self.ew2hectar()
         self.zensus2km2()
+        self.geostat2km2()
         self.export2tiff('ew_ha_raster')
         self.export2tiff('einwohner_km2_raster')
         self.export2tiff('hhgroesse_d_km2_raster')
         self.export2tiff('wohnfl_wohnung_km2_raster')
+        self.export2tiff('geostat_einwohner_km2_raster')
 
     def ew2hectar(self):
         """convert Einwohner to Raster"""
@@ -80,6 +82,41 @@ WHERE v.cellcode = z.id;
         self.point2km2raster(column='einwohner', dtype='16BSI')
         self.point2km2raster(column='hhgroesse_d', dtype='64BF', noData=-1)
         self.point2km2raster(column='wohnfl_wohnung', dtype='64BF', noData=-1)
+
+    def geostat2km2(self):
+        """convert Geostat PopulationData to km2-Raster"""
+
+        # create view joining geometry and values
+        sql = """
+CREATE OR REPLACE VIEW
+{schema}.geostat_km2_pnt_laea AS
+SELECT
+v.cellcode,
+v.pnt_laea,
+z.einwohner
+FROM
+{schema}.geostat_km2 z,
+{schema}.laea_vector_1000 v
+WHERE v.cellcode = z.id;
+        """.format(schema=self.schema)
+        self.run_query(sql)
+        column='einwohner'
+        dtype='16BSI'
+        noData=0
+        self.point2raster(
+            point_feature='{}.geostat_km2_pnt_laea'.format(self.schema),
+            geom_col='pnt_laea',
+            value_col=column,
+            target_raster='{s}.geostat_{c}_km2_raster'.format(s=self.schema,
+                                                              c=column),
+            pixeltype=dtype,
+            srid=3035,
+            reference_raster='{}.laea_raster_1000'.format(self.schema),
+            raster_pkey='rid',
+            raster_col='rast',
+            band=1,
+            noData=noData,
+            overwrite=True)
 
     def point2km2raster(self, column, dtype, noData=0):
         """
