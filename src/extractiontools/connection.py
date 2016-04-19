@@ -7,6 +7,7 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from collections import OrderedDict
 
 from types import MethodType
+import os
 
 import logging
 logger = logging.getLogger()
@@ -179,11 +180,13 @@ class DBApp(object):
         for query in sql.split(';'):
             if query.strip():
                 logger.info(query)
+                query_without_comments = '\n'.join([
+                    q for q in query.split(os.linesep)
+                    if not q.strip().startswith('--')])
                 if many:
-                    cur.executemany(sql, values)
+                    cur.executemany(query_without_comments, values)
                 else:
-                    if not query.strip().startswith('--'):
-                        cur.execute(query, values)
+                    cur.execute(query_without_comments, values)
                 logger.info(cur.statusmessage)
 
     def set_search_path(self, connstr='conn'):
