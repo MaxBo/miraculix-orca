@@ -16,14 +16,21 @@ class ExtractVerwaltungsgrenzen(Extract):
 
     def final_stuff(self):
         for tn, geom in self.tables.iteritems():
-            self.add_index(tn, geom, pkey='ogc_fid')
+            self.add_geom_index(tn, geom)
+            pkey = self.get_primary_key(self.schema, tn, conn=self.conn0)
+            if pkey:
+                self.add_pkey(tn, pkey)
 
-    def add_index(self, tn, geom, pkey):
+    def add_pkey(self, tn, pkey):
         sql = """
 ALTER TABLE {sn}.{tn} ADD PRIMARY KEY ({pkey});
---CREATE INDEX {tn}_geom_key ON {sn}.{tn} USING btree({pkey});
+        """.format(sn=self.schema, tn=tn, pkey=pkey)
+        self.run_query(sql, conn=self.conn1)
+
+    def add_geom_index(self, tn, geom):
+        sql = """
 CREATE INDEX {tn}_geom_idx ON {sn}.{tn} USING gist({geom});
-        """.format(sn=self.schema, tn=tn, geom=geom, pkey=pkey)
+        """.format(sn=self.schema, tn=tn, geom=geom)
         self.run_query(sql, conn=self.conn1)
 
 
@@ -37,7 +44,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--host', action="store",
                         help="host",
-                        dest="host", default='gis.ggr-planung.de')
+                        dest="host", default='localhost')
     parser.add_argument("-p", '--port', action="store",
                         help="port", type=int,
                         dest="port", default=5432)
@@ -51,7 +58,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--tabellen', action='store',
                         help='tabellen to extract', nargs='*',
-                        dest='tabellen', default=['gem_2015_01'])
+                        dest='tabellen', default=['gem_2015_01',
+                                                  'vwg_2015_01',
+                                                  'krs_2015_01',
+                                                  'lan_2015_01',
+                                                  'gem_2014_ew_svb',
+                                                  'plz_2016'])
 
 
     options = parser.parse_args()
