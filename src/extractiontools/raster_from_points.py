@@ -431,17 +431,22 @@ WHERE v.cellcode=l.cellcode;
     def create_matview_point_with_raster(self,
                                          tablename,
                                          source_table,
-                                         value_column):
+                                         value_column=None):
         """
         Create a materialized view for a point raster intersected
         with the raster polygon
         """
+        if value_column is None:
+            val = 'count(*) as value'
+        else:
+            val = 'sum(g.{val}) as value'.format(val=value_column)
+
         sql = """
 DROP MATERIALIZED VIEW IF EXISTS {sc}.{tn} CASCADE;
 CREATE MATERIALIZED VIEW {sc}.{tn} AS
 SELECT
 l.cellcode,
-sum(g.{val}) as value
+{val}
 FROM {st} g,
 {rv} l
 WHERE st_within(g.geom, l.geom)
@@ -463,7 +468,7 @@ WHERE v.cellcode=l.cellcode;
                                   tn=tablename,
                                   st=source_table,
                                   rv=self.reference_vector,
-                                  val=value_column))
+                                  val=val))
 
     def create_raster_for_polygon(self,
                                   tablename,
@@ -501,11 +506,25 @@ WHERE v.cellcode=l.cellcode;
     def create_raster_for_point(self,
                                 tablename,
                                 source_table,
-                                value_column,
+                                value_column=None,
                                 pixeltype='32BF',
                                 noData=0):
         """
         intersect point feature with raster and create raster tiff
+
+        Parameters
+        ----------
+        tablename : str
+            the tablename to create in the destination schema
+        source_table : str
+            the tablename of the point shape
+        value_column : str, optional
+            if given, sum up the values in value_column for each rastercell,
+            otherwise, count the points for each rastercell
+        pixeltype : str, optional(Default='32BF')
+            the pixeltype of the resulting raster
+        noData : numeric, optional(Default=0)
+            the no-data-value of the resulting raster
         """
         self.create_matview_point_with_raster(
             tablename, source_table, value_column)
