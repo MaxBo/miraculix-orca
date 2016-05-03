@@ -183,11 +183,13 @@ class DBApp(object):
                 query_without_comments = '\n'.join([
                     q for q in query.split(os.linesep)
                     if not q.strip().startswith('--')])
-                if many:
-                    cur.executemany(query_without_comments, values)
-                else:
-                    cur.execute(query_without_comments, values)
-                logger.info(cur.statusmessage)
+                if query_without_comments.strip():
+                    #logger.info('execute {}'.format(query_without_comments))
+                    if many:
+                        cur.executemany(query_without_comments, values)
+                    else:
+                        cur.execute(query_without_comments, values)
+                    logger.info(cur.statusmessage)
 
     def set_search_path(self, connstr='conn'):
         conn = getattr(self, connstr)
@@ -308,3 +310,22 @@ SELECT AddOverviewConstraints('{schema}', '{ov_tn}', '{rast}',
         conn = conn or self.conn1
         self.add_raster_index(schema, tablename, raster_column, conn)
         self.add_overview_index(overviews, schema, tablename, raster_column, conn)
+
+    def get_primary_key(self, schema, tablename, conn=None):
+        """
+        Return the primary key columns of schema.tablename as string
+        """
+        conn = conn or self.conn1
+        sql = """
+SELECT a.attname
+FROM   pg_index i
+JOIN   pg_attribute a ON a.attrelid = i.indrelid
+                     AND a.attnum = ANY(i.indkey)
+WHERE  i.indrelid = '{s}.{t}'::regclass
+AND    i.indisprimary;
+        """.format(s=schema, t=tablename)
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        pkey = ', '.join([r[0] for r in rows])
+        return pkey
