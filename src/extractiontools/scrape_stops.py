@@ -250,11 +250,9 @@ class ScrapeStops(Extract):
                             DO UPDATE SET geom = EXCLUDED.geom,
                             "H_Name" = EXCLUDED."H_Name";
                             """
-                            #logger.info(sql2)
                             cursor.execute(sql2, (H_Name, H_ID, H_Lon, H_Lat, self.target_srid))
                             stops_found += 1
                             stops_inserted += cursor.rowcount
-                            #logger.info(cursor.statusmessage)
 
                             if not stops_found % 1000:
                                 self.conn1.commit()
@@ -265,8 +263,8 @@ class ScrapeStops(Extract):
                     pass
                 except TypeError:
                     pass
-        logger.info('{} stops found, {} of them were new'.format(stops_found,
-                                                                 stops_inserted))
+        logger.info('{} stops found and inserted or updated'.format(
+            stops_inserted))
 
 
 if __name__=='__main__':
