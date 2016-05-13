@@ -83,6 +83,15 @@ class ScrapeStops(Extract):
             logger.warn(url)
             pass
 
+    def getRequestsTree(self, url):
+        """"""
+        agent = self.get_agent()
+        headers = {'User-Agent': agent}
+        page = requests.get(url, headers=headers)
+        tree = html.fromstring(page.content)
+        return tree
+
+
     def htmlentitydecode(self, s):
         try:
             u = s.decode('cp1252')
@@ -148,12 +157,16 @@ class ScrapeStops(Extract):
             """.format(schema=self.schema)
         self.run_query(sql, self.conn1)
 
-    def readHaltestellen(self):
-
-        #erzeuge Datenbankverbindung1 und Cursor
-
+    def get_cursor(self):
+        """erzeuge Datenbankverbindung1 und Cursor"""
         cursor = self.conn1.cursor()
         cursor.execute('SET search_path TO timetables, public')
+        return cursor
+
+    def readHaltestellen(self):
+        """Lies Haltestellen und füge sie in DB ein bzw. aktualisiere sie"""
+
+        cursor = self.get_cursor()
 
         lon0, lon1, lat0, lat1 = self.bbox.rounded()
         stops_found = 0
@@ -234,7 +247,8 @@ class ScrapeStops(Extract):
                             (SELECT %s, %s, st_transform(st_setsrid(
                             st_makepoint( %s, %s), 4326 ), %s::integer))
                             ON CONFLICT ("H_ID")
-                            DO UPDATE SET geom = EXCLUDED.geom;
+                            DO UPDATE SET geom = EXCLUDED.geom,
+                            "H_Name" = EXCLUDED."H_Name";
                             """
                             #logger.info(sql2)
                             cursor.execute(sql2, (H_Name, H_ID, H_Lon, H_Lat, self.target_srid))
@@ -291,7 +305,7 @@ if __name__=='__main__':
 
     bbox = BBox(top=options.top, bottom=options.bottom,
                 left=options.left, right=options.right)
-    extract = ScrapeStops(destination_db=options.destination_db)
-    extract.set_login(host=options.host, port=options.port, user=options.user)
-    extract.get_target_boundary_from_dest_db()
-    extract.extract()
+    scrape = ScrapeStops(destination_db=options.destination_db)
+    scrape.set_login(host=options.host, port=options.port, user=options.user)
+    scrape.get_target_boundary_from_dest_db()
+    scrape.extract()
