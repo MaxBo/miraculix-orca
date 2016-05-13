@@ -37,6 +37,15 @@ top: {t:0.2f}, bottom: {b:0.2f}, left: {l: 0.2f}, right: {r:0.2f}'''
         return msg.format(t=self.top, b=self.bottom,
                           l=self.left, r=self.right)
 
+    def rounded(self, digits=1):
+        """return the bbox as rounded values"""
+        lon0 = round(self.left, digits)
+        lon1 = round(self.right, digits)
+        lat0 = round(self.bottom, digits)
+        lat1 = round(self.top, digits)
+        return lon0, lon1, lat0, lat1
+
+
 class Extract(DBApp):
     """
     extracts data from an existing database into a new database
