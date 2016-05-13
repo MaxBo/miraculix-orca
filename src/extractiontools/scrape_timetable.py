@@ -5,13 +5,11 @@ from argparse import ArgumentParser
 
 import numpy as np
 import logging
-logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
-logger.level = logging.DEBUG
 import os
 import sys
 import datetime
-from extractiontools.scrape_stops import ScrapeStops, logger
+import time
+from extractiontools.scrape_stops import ScrapeStops, logger, Connection, logger
 from extractiontools.utils.get_date import Date
 from HTMLParser import HTMLParser
 
@@ -21,7 +19,6 @@ class ScrapeTimetable(ScrapeStops):
         """
         """
         self.date = Date(year, month, day)
-
 
     def create_timetable_tables(self):
         """(Re-Create the timetable tables)"""
@@ -102,7 +99,7 @@ CREATE INDEX IF NOT EXISTS fahrten_idx1
             self.conn1 = conn1
             self.create_timetable_tables()
 
-            self.readFahrten()
+            self.get_fahrten_for_stops()
 
     def get_fahrten_for_stops(self):
         """get the stops in the area"""
@@ -118,17 +115,17 @@ FROM haltestellen;
             H_ID = row[0]
             H_Name = row[1].decode('utf8')
             i += 1
-            logger.info(i, H_ID, H_Name)
+            logger.info(u'{}: {}: {}'.format(i, H_ID, H_Name))
             self.readFahrten(
                 H_ID_Abfahrtstafel=H_ID,
-                H_Name_Abfahrtstafel=H_Name])
+                H_Name_Abfahrtstafel=H_Name)
             if not i % 1:
                 self.conn1.commit()
         self.conn1.commit()
 
     def readFahrten(self,
                     H_ID_Abfahrtstafel,
-                    H_Name_Abfahrtstafe):
+                    H_Name_Abfahrtstafel):
         """Lies Fahrten"""
         cursor = self.get_cursor()
 
@@ -140,20 +137,20 @@ FROM haltestellen;
         #Abfahrten auslesen
         H_IDstr = str(H_ID_Abfahrtstafel)
         try:
-            Kurz_URL = ''.join(
+            Kurz_URL = ''.join((
                 'http://mobile.bahn.de/bin/mobil/bhftafel.exe/dox?si=',
                 H_IDstr,
                 '&bt=dep&ti=00:00%2B1&p=1111111111&date=',
-                date,
-                '&max=10000&rt=1&use_realtime_filter=1&start=yes&')
+                str(self.date),
+                '&max=10000&rt=1&use_realtime_filter=1&start=yes&'))
         except:
             print 'fehler in kurz_URL'
             pass
-
-        StundenDaten = self.urlquery(Kurz_URL)
-        StundenDaten = self.htmlentitydecode(StundenDaten)
+        logger.debug(Kurz_URL)
+        Page = self.urlquery(Kurz_URL)
+        Page = self.htmlentitydecode(Page)
         try:
-            StundenDaten = StundenDaten.split('<div class="sqdetailsDep trow">')[1:]
+            StundenDaten = Page.split('<div class="sqdetailsDep trow">')[1:]
 
             Stundenliste = []
             FahrtListe = []
@@ -176,7 +173,10 @@ FROM haltestellen;
                     Fahrt_Ziel = Fahrt.split('<span class="bold">')[1].split('\n&gt;&gt;\n')[1].split('\n<br />\n')[0]
                     Fahrt_Abfahrt = time.strptime(Zeit, '%H:%M')
                     Stunde = int(Stunde)
-                    FahrtParameter = (Fahrt_Name, H_Name_Abfahrtstafel, get_timestamp(date, Fahrt_Abfahrt), Fahrt_Ziel)
+                    FahrtParameter = (Fahrt_Name,
+                                      H_Name_Abfahrtstafel,
+                                      get_timestamp(self.date, Fahrt_Abfahrt),
+                                      Fahrt_Ziel)
                     # schaue in der DB, ob Fahrt schon vorhanden
                     cursor.execute(sql, FahrtParameter)
                     rows = cursor.fetchall()
@@ -191,11 +191,12 @@ FROM haltestellen;
             Stundenliste = set(Stundenliste)
 
             for stunde in Stundenliste:
-                logger.info(os.linesep, '%sh:' %stunde)
+                logger.info('{}{} h'.format(os.linesep, stunde))
                 time.sleep(2)
 
                 # grab data from station timetable for specific hour
-                bhftafel_URL = 'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&evaId=%s&bt=dep&time=%02d:00&date=%s&productsFilter=1111111111&max=10000&start=yes' %(H_IDstr, stunde, date)
+                bhftafel_URL = 'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&evaId=%s&bt=dep&time=%02d:00&date=%s&productsFilter=1111111111&max=10000&start=yes' %(
+                    H_IDstr, stunde, self.date)
                 tree = self.getRequestsTree(bhftafel_URL)
 
                 try:
@@ -239,7 +240,7 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
                         cursor.execute(sql,
                                        (Fahrt_Name,
                                        Abfahrtshaltestelle,
-                                       get_timestamp(date, Fahrt_Abfahrt),
+                                       get_timestamp(self.date, Fahrt_Abfahrt),
                                        Fahrt_Ziel))
                         rows = cursor.fetchall()
                         if not rows:
@@ -267,7 +268,7 @@ VALUES (%s, %s, %s, %s, %s, %s);"""
 
                             try:
                                 VerlaufParser = MyHTMLParser()
-                                VerlaufParser.query_date = date
+                                VerlaufParser.query_date = self.date
                             except:
                                 logger.warn('Fehler bei VerlaufParser')
                                 pass
@@ -322,18 +323,20 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
                                            (H_ID_Abfahrtstafel,
                                             Fahrt_Name,
                                             H_Name_Abfahrtstafel,
-                                            get_timestamp(date, Fahrt_Abfahrt),
+                                            get_timestamp(self.date, Fahrt_Abfahrt),
                                             Fahrt_Ziel))
                     except Exception:
                         exc_type, exc_obj, exc_tb = sys.exc_info()
                         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                        logger.warn(exc_type, fname, exc_tb.tb_lineno)
+                        logger.warn('{} {} {}'.format(
+                            exc_type, fname, exc_tb.tb_lineno))
                         pass
 
         except Exception:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            logger.warn(exc_type, fname, exc_tb.tb_lineno)
+            logger.warn('{} {} {}'.format(
+                exc_type, fname, exc_tb.tb_lineno))
             pass
 
 # create a subclass and override the handler methods
@@ -494,7 +497,7 @@ if __name__=='__main__':
 
     parser.add_argument('--host', action="store",
                         help="host",
-                        dest="host", default='gis.ggr-planung.de')
+                        dest="host", default='localhost')
     parser.add_argument("-p", '--port', action="store",
                         help="port", type=int,
                         dest="port", default=5432)
@@ -521,6 +524,6 @@ if __name__=='__main__':
     scrape = ScrapeTimetable(destination_db=options.destination_db)
     scrape.set_login(host=options.host, port=options.port, user=options.user)
     scrape.get_target_boundary_from_dest_db()
-    scrape.set_date(options.year, options.month, option.day)
+    scrape.set_date(options.year, options.month, options.day)
     scrape.extract()
 

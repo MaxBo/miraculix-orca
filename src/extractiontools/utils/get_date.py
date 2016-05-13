@@ -22,3 +22,11 @@ class Date(datetime.date):
         if day is None:
             day = today.day
         return super(Date, cls).__new__(cls, year, month, day)
+
+    def __repr__(self):
+        """string representation """
+        return format(self, '%d.%m.%y')
+
+    def __str__(self):
+        """"""
+        return repr(self)
