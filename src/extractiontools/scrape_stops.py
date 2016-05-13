@@ -19,13 +19,53 @@ htmlentitydefs.codepoint2name[39] = 'apos'
 
 import os
 import datetime
-from extractiontools.ausschnitt import Extract, Connection, BBox, logger
+from extractiontools.ausschnitt import DBApp, Extract, Connection, BBox, logger
 
 
-class ScrapeStops(Extract):
+class ExtractStops(Extract):
     tables = {}
     schema = 'timetables'
     role = 'group_osm'
+    def additional_stuff(self):
+        """
+        """
+        self.extract_table('haltestellen')
+
+    def final_stuff(self):
+        """"""
+        self.create_index()
+
+    def create_index(self):
+        """
+        CREATE INDEX
+        """
+
+        sql = """
+    ALTER TABLE {schema}.haltestellen ADD PRIMARY KEY ("H_ID");
+    CREATE INDEX idx_haltestellen_geom
+      ON {schema}.haltestellen
+      USING gist
+      (geom);
+            """.format(schema=self.schema)
+        self.run_query(sql, self.conn1)
+
+
+class ScrapeStops(Extract):
+    schema = 'timetables'
+    role = 'group_osm'
+
+    def __init__(self,
+                 options,
+                 db='extract'):
+        super(ScrapeStops, self).__init__(destination_db=db, options=options)
+        self.db = db
+        self.options = options
+
+    def scrape(self):
+        """"""
+        with Connection(login=self.login1) as conn1:
+            self.conn1 = conn1
+            self.readHaltestellen()
 
     def getSessionIDs(self):
         #SessionID von der Bahn bekommen
@@ -61,7 +101,6 @@ class ScrapeStops(Extract):
         agent = random.choice(agents)
         return agent
 
-
     def urlquery(self, url):
         # function cycles randomly through different user agents and time intervals to simulate more natural queries
         try:
@@ -87,10 +126,12 @@ class ScrapeStops(Extract):
         """"""
         agent = self.get_agent()
         headers = {'User-Agent': agent}
+        old_loglevel = logger.level
+        logger.level = logging.WARN
         page = requests.get(url, headers=headers)
+        logger.level = old_loglevel
         tree = html.fromstring(page.content)
         return tree
-
 
     def htmlentitydecode(self, s):
         try:
@@ -103,7 +144,6 @@ class ScrapeStops(Extract):
         except:
             u=s
         return u
-
 
     def unescape(self, text):
         def fixup(m):
@@ -126,36 +166,6 @@ class ScrapeStops(Extract):
                     pass
             return text # leave as is
         return re.sub("&#?\w+;", fixup, text)
-
-
-    def additional_stuff(self):
-        """
-        """
-        self.extract_table('haltestellen')
-
-    def final_stuff(self):
-        """"""
-        self.create_index()
-
-    def further_stuff(self):
-        """"""
-        with Connection(login=self.login1) as conn1:
-            self.conn1 = conn1
-            self.readHaltestellen()
-
-    def create_index(self):
-        """
-        CREATE INDEX
-        """
-
-        sql = """
-    ALTER TABLE {schema}.haltestellen ADD PRIMARY KEY ("H_ID");
-    CREATE INDEX idx_haltestellen_geom
-      ON {schema}.haltestellen
-      USING gist
-      (geom);
-            """.format(schema=self.schema)
-        self.run_query(sql, self.conn1)
 
     def get_cursor(self):
         """erzeuge Datenbankverbindung1 und Cursor"""
@@ -272,18 +282,18 @@ if __name__=='__main__':
 
     parser = ArgumentParser(description="Scrape Stops in a given bounding box")
 
-    parser.add_argument("-t", '--top', action="store",
-                        help="top", type=float,
-                        dest="top", default=54.65)
-    parser.add_argument("-b", '--bottom,', action="store",
-                        help="bottom", type=float,
-                        dest="bottom", default=54.6)
-    parser.add_argument("-r", '--right', action="store",
-                        help="right", type=float,
-                        dest="right", default=10.0)
-    parser.add_argument("-l", '--left', action="store",
-                        help="left", type=float,
-                        dest="left", default=9.95)
+    #parser.add_argument("-t", '--top', action="store",
+                        #help="top", type=float,
+                        #dest="top", default=54.65)
+    #parser.add_argument("-b", '--bottom,', action="store",
+                        #help="bottom", type=float,
+                        #dest="bottom", default=54.6)
+    #parser.add_argument("-r", '--right', action="store",
+                        #help="right", type=float,
+                        #dest="right", default=10.0)
+    #parser.add_argument("-l", '--left', action="store",
+                        #help="left", type=float,
+                        #dest="left", default=9.95)
 
     parser.add_argument('--host', action="store",
                         help="host",
@@ -301,9 +311,14 @@ if __name__=='__main__':
 
     options = parser.parse_args()
 
-    bbox = BBox(top=options.top, bottom=options.bottom,
-                left=options.left, right=options.right)
-    scrape = ScrapeStops(destination_db=options.destination_db)
+    #bbox = BBox(top=options.top, bottom=options.bottom,
+                #left=options.left, right=options.right)
+    extract = ExtractStops(db=options.destination_db)
+    extract.set_login(host=options.host, port=options.port, user=options.user)
+    extract.get_target_boundary_from_dest_db()
+    extract.extract()
+
+    scrape = ScrapeStops(options, db=options.destination_db)
     scrape.set_login(host=options.host, port=options.port, user=options.user)
     scrape.get_target_boundary_from_dest_db()
-    scrape.extract()
+    scrape.scrape()

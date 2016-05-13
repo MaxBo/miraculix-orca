@@ -3,6 +3,7 @@
 
 
 import datetime
+import time
 
 class Date(datetime.date):
     """date with today as default value for year, month and day"""

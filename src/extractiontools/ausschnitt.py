@@ -743,7 +743,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--host', action="store",
                         help="host",
-                        dest="host", default='gis.ggr-planung.de')
+                        dest="host", default='localhost')
     parser.add_argument("-p", '--port', action="store",
                         help="port", type=int,
                         dest="port", default=5432)
