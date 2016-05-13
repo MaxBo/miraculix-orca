@@ -22,7 +22,7 @@ class Date(datetime.date):
             month = today.month
         if day is None:
             day = today.day
-        return super(Date, cls).__new__(cls, year, month, day)
+        return super(Date, cls).__new__(cls, int(year), int(month), int(day))
 
     def __repr__(self):
         """string representation """
@@ -43,6 +43,11 @@ class Date(datetime.date):
             return '%s %sCEST' %(dateString, time_str)
         except:
             return None
+
+    def shift_day(self, days=1):
+        """adds or substracts the number of days"""
+        new_date = Date.fromordinal(self.toordinal() + days)
+        return new_date
 
 def get_timestamp2(time_to_convert):
     if time_to_convert:

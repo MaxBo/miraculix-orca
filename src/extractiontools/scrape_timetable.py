@@ -427,7 +427,10 @@ class MyHTMLParser(HTMLParser):
                 self.data_route.append(data)
         if self.recording_trainroute:
             if data <> '\n':
-                self.date= data.split('Fahrtverlauf vom: ')[1].rstrip(')')
+                date = data.split('Fahrtverlauf vom: ')[1].rstrip(')')
+                d, m, y = date.split('.')
+                yyyy = int(y) + 2000
+                self.date = Date(yyyy, m, d)
         elif self.recording_train:
             if data <> '\n':
                 self.data_train.append(data)
@@ -451,7 +454,7 @@ class MyHTMLParser(HTMLParser):
                                 # und Ankunft an der Starthaltestelle vor 4 Uhr
                                 if self.Ankunft_vor_4Uhr:
                                     # korrigiere das Datum auf den Tag der Anfrage
-                                    self.date = self.query_date #shift_day(self.date, 1)
+                                    self.date = self.query_date
                         self.ist_Starthaltestelle = False
                     zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
                     if self.data_departures:
@@ -461,7 +464,7 @@ class MyHTMLParser(HTMLParser):
                             if abfahrtszeit:
                                 if zeit < abfahrtszeit:
                                     # setze auf Folgetag
-                                    self.date = shift_day(self.date, 1)
+                                    self.date = self.date.shift_day(1)
                                     zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
                                 break
                             z -= 1
@@ -483,7 +486,7 @@ class MyHTMLParser(HTMLParser):
                     zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
                     if self.data_arrivals[-1]:
                         if zeit < self.data_arrivals[-1]:
-                            self.date = shift_day(self.date, 1)
+                            self.date = self.date.shift_day(1)
                             zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
                     else:
                         # wenn keine Ankunftszeit angegeben ist, schaue, ob Zeitsprung an Abfahrt an vorheriger Haltestelle
@@ -493,7 +496,7 @@ class MyHTMLParser(HTMLParser):
                             if abfahrtszeit:
                                 if zeit < abfahrtszeit:
                                     # setze auf Folgetag
-                                    self.date = shift_day(self.date, 1)
+                                    self.date = self.date.shift_day(1)
                                     zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
                                 break
                             z -= 1
