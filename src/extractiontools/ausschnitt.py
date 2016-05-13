@@ -171,7 +171,7 @@ ALTER SCHEMA {temp} RENAME TO {schema}
         """
         geometrytype = self.get_geometrytype(tn, geom)
         cols = self.conn0.get_column_dict(tn, self.schema)
-        cols_without_geom = ('t.{}'.format(c) for c in cols if c != geom)
+        cols_without_geom = ('t."{}"'.format(c) for c in cols if c != geom)
         col_str = ', '.join(cols_without_geom)
 
         sql = """
