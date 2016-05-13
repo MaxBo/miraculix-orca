@@ -10,7 +10,7 @@ import sys
 import datetime
 import time
 from extractiontools.scrape_stops import ScrapeStops, logger, Connection, logger
-from extractiontools.utils.get_date import Date
+from extractiontools.utils.get_date import Date, get_timestamp2
 from HTMLParser import HTMLParser
 
 class ScrapeTimetable(ScrapeStops):
@@ -175,7 +175,7 @@ FROM haltestellen;
                     Stunde = int(Stunde)
                     FahrtParameter = (Fahrt_Name,
                                       H_Name_Abfahrtstafel,
-                                      get_timestamp(self.date, Fahrt_Abfahrt),
+                                      self.date.get_timestamp(Fahrt_Abfahrt),
                                       Fahrt_Ziel)
                     # schaue in der DB, ob Fahrt schon vorhanden
                     cursor.execute(sql, FahrtParameter)
@@ -240,7 +240,7 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
                         cursor.execute(sql,
                                        (Fahrt_Name,
                                        Abfahrtshaltestelle,
-                                       get_timestamp(self.date, Fahrt_Abfahrt),
+                                       self.dateget_timestamp(Fahrt_Abfahrt),
                                        Fahrt_Ziel))
                         rows = cursor.fetchall()
                         if not rows:
@@ -255,7 +255,7 @@ VALUES (%s, %s, %s, %s, %s, %s);"""
                                            (abfahrt_id,
                                             Fahrt_URL,
                                             Fahrt_Name,
-                                            get_timestamp(date, Fahrt_Abfahrt),
+                                            self.date.get_timestamp(Fahrt_Abfahrt),
                                             H_ID_Abfahrtstafel,
                                             Fahrt_Ziel))
                             logger.info(Fahrt_Name)
@@ -323,7 +323,7 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
                                            (H_ID_Abfahrtstafel,
                                             Fahrt_Name,
                                             H_Name_Abfahrtstafel,
-                                            get_timestamp(self.date, Fahrt_Abfahrt),
+                                            self.date.get_timestamp(Fahrt_Abfahrt),
                                             Fahrt_Ziel))
                     except Exception:
                         exc_type, exc_obj, exc_tb = sys.exc_info()
