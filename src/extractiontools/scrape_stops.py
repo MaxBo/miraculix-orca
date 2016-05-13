@@ -5,6 +5,17 @@ import numpy as np
 import logging
 import time
 from argparse import ArgumentParser
+import urllib2
+import random
+
+from HTMLParser import HTMLParser
+from lxml import html
+import re, sets, requests, sys
+
+import htmlentitydefs
+htmlentitydefs.name2codepoint['apos'] = 39
+htmlentitydefs.entitydefs['apos'] = '\x27'
+htmlentitydefs.codepoint2name[39] = 'apos'
 
 logger = logging.getLogger()
 logger.addHandler(logging.StreamHandler())
@@ -36,6 +47,80 @@ class ScrapeStops(Extract):
         ID_URL2 = ID_URL2[0]
         #print ID_URL2
         return ID_URL1, ID_URL2
+
+    def get_agent(self):
+        """
+        return a random agent
+        """
+        agents = ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.17 (KHTML, like Gecko) Chrome/24.0.1309.0 Safari/537.17',
+                  'Mozilla/5.0 (compatible; MSIE 10.6; Windows NT 6.1; Trident/5.0; InfoPath.2; SLCC1; .NET CLR 3.0.4506.2152; .NET CLR 3.5.30729; .NET CLR 2.0.50727) 3gpp-gba UNTRUSTED/1.0',
+                  'Opera/12.80 (Windows NT 5.1; U; en) Presto/2.10.289 Version/12.02',
+                  'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)',
+                  'Mozilla/3.0',
+                  'Mozilla/5.0 (iPhone; U; CPU like Mac OS X; en) AppleWebKit/420+ (KHTML, like Gecko) Version/3.0 Mobile/1A543a Safari/419.3',
+                  'Mozilla/5.0 (Linux; U; Android 0.5; en-us) AppleWebKit/522+ (KHTML, like Gecko) Safari/419.3',
+                  'Opera/9.00 (Windows NT 5.1; U; en)']
+
+        agent = random.choice(agents)
+        return agent
+
+
+    def urlquery(self, url):
+        # function cycles randomly through different user agents and time intervals to simulate more natural queries
+        try:
+
+            sleeptime = float(random.randint(1,5))/10
+            time.sleep(sleeptime)
+            agent = self.get_agent()
+
+            opener = urllib2.build_opener()
+            opener.addheaders = [('User-agent', agent)]
+            #print agent
+
+            html = opener.open(url).read()
+
+            return html
+
+        except:
+            logger.warn("fehler in urlquery:")
+            logger.warn(url)
+            pass
+
+    def htmlentitydecode(self, s):
+        try:
+            u = s.decode('cp1252')
+            for k,v in htmlentitydefs.entitydefs.items():
+                if v.startswith('&'):
+                    u = u.replace(v, unichr(htmlentitydefs.name2codepoint[k]))
+            for k in htmlentitydefs.codepoint2name.keys():
+                u = u.replace('&#%s;' %k, unichr(k))
+        except:
+            u=s
+        return u
+
+
+    def unescape(text, self):
+        def fixup(m):
+            text = m.group(0)
+            if text[:2] == "&#":
+                # character reference
+                try:
+                    if text[:3] == "&#x":
+                        return unichr(int(text[3:-1], 16))
+                    else:
+                        return unichr(int(text[2:-1]))
+                except ValueError:
+                    pass
+            else:
+                # named entity
+                try:
+                    text = unichr(htmlentitydefs.name2codepoint[text[1:-1]])
+
+                except KeyError:
+                    pass
+            return text # leave as is
+        return re.sub("&#?\w+;", fixup, text)
+
 
     def additional_stuff(self):
         """
@@ -106,7 +191,7 @@ class ScrapeStops(Extract):
                             H_Name = element.split('>')
                             H_Name = H_Name[1]
                             H_Name = H_Name.replace('</a','')
-                            H_Name = unescape(H_Name)
+                            H_Name = self.unescape(H_Name)
 
                             #HaltestellenID
                             H_ID = element.split('!id=')
