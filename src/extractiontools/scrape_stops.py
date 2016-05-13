@@ -17,12 +17,9 @@ htmlentitydefs.name2codepoint['apos'] = 39
 htmlentitydefs.entitydefs['apos'] = '\x27'
 htmlentitydefs.codepoint2name[39] = 'apos'
 
-logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
-logger.level = logging.DEBUG
 import os
 import datetime
-from extractiontools.ausschnitt import Extract, Connection, BBox
+from extractiontools.ausschnitt import Extract, Connection, BBox, logger
 
 
 class ScrapeStops(Extract):
@@ -33,7 +30,7 @@ class ScrapeStops(Extract):
     def getSessionIDs(self):
         #SessionID von der Bahn bekommen
         ID_URL = 'http://mobile.bahn.de/bin/mobil/query2.exe/dox?country=DEU&rt=1&use_realtime_filter=1&stationNear=1)'
-        ID_URL = urlquery(ID_URL)
+        ID_URL = self.urlquery(ID_URL)
 
         ID_URL1 = ID_URL.split('amp;i=')
         ID_URL1 = ID_URL1[1]
@@ -99,7 +96,7 @@ class ScrapeStops(Extract):
         return u
 
 
-    def unescape(text, self):
+    def unescape(self, text):
         def fixup(m):
             text = m.group(0)
             if text[:2] == "&#":
@@ -129,8 +126,27 @@ class ScrapeStops(Extract):
 
     def final_stuff(self):
         """"""
-        self.readHaltestellen()
+        self.create_index()
 
+    def further_stuff(self):
+        """"""
+        with Connection(login=self.login1) as conn1:
+            self.conn1 = conn1
+            self.readHaltestellen()
+
+    def create_index(self):
+        """
+        CREATE INDEX
+        """
+
+        sql = """
+    ALTER TABLE {schema}.haltestellen ADD PRIMARY KEY ("H_ID");
+    CREATE INDEX idx_haltestellen_geom
+      ON {schema}.haltestellen
+      USING gist
+      (geom);
+            """.format(schema=self.schema)
+        self.run_query(sql, self.conn1)
 
     def readHaltestellen(self):
 
@@ -140,7 +156,8 @@ class ScrapeStops(Extract):
         cursor.execute('SET search_path TO timetables, public')
 
         lon0, lon1, lat0, lat1 = self.bbox.rounded()
-        ii = 0
+        stops_found = 0
+        stops_inserted = 0
         for i in range(int(lat0*10), int(lat1*10)):
             for j in range(int(lon0*10),int(lon1*10)):
 
@@ -172,7 +189,7 @@ class ScrapeStops(Extract):
                 try:
                     #HTML auslesen
 
-                    html = urlquery(URL)
+                    html = self.urlquery(URL)
 
                     html = html.split('<div class="overview clicktable">')
                     html = html[1]
@@ -211,15 +228,22 @@ class ScrapeStops(Extract):
                             H_Lon /= 1000000.
 
                             #Datenobjekt erzeugen und in DB schreiben
-                            sql2 = """INSERT INTO haltestellen ("H_Name", "H_ID", geom)""" + """
-                            (SELECT %s, %s, st_setsrid(st_makepoint( %s, %s), 4326 )
-                            WHERE NOT EXISTS
-                            """ + """(SELECT 1 FROM haltestellen """  +"""WHERE "H_ID" = %s));
+                            # wenn schon vorhanden, dann Geometrie aktualisieren
+                            sql2 = """INSERT INTO haltestellen
+                            ("H_Name", "H_ID", geom)""" + """
+                            (SELECT %s, %s, st_transform(st_setsrid(
+                            st_makepoint( %s, %s), 4326 ), %s::integer))
+                            ON CONFLICT ("H_ID")
+                            DO UPDATE SET geom = EXCLUDED.geom;
                             """
-                            cursor.execute(sql2, (H_Name, H_ID, H_Lon, H_Lat, H_ID))
-                            ii += 1
-                            if not ii % 100:
-                                self.conn1.connection, commit()
+                            #logger.info(sql2)
+                            cursor.execute(sql2, (H_Name, H_ID, H_Lon, H_Lat, self.target_srid))
+                            stops_found += 1
+                            stops_inserted += cursor.rowcount
+                            #logger.info(cursor.statusmessage)
+
+                            if not stops_found % 1000:
+                                self.conn1.commit()
                             #if READ_FAHRTEN:
                                 #readFahrten(H_ID, cursor, date)
 
@@ -227,6 +251,8 @@ class ScrapeStops(Extract):
                     pass
                 except TypeError:
                     pass
+        logger.info('{} stops found, {} of them were new'.format(stops_found,
+                                                                 stops_inserted))
 
 
 if __name__=='__main__':
