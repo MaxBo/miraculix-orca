@@ -112,9 +112,12 @@ CREATE INDEX IF NOT EXISTS fahrten_idx1
 
     def get_fahrten_for_stops(self):
         """get the stops in the area"""
+        # testdata: Lübeck: 8000237 (> 1000 Abfahrten)
+        # Bremen, Cranzer Straße: 627106 (No Abfahrten)
         sql = """
 SELECT "H_ID", "H_Name"
-FROM haltestellen;
+FROM haltestellen
+--WHERE "H_ID" = 692757;
         """
         cursor = self.get_cursor()
         cursor.execute(sql)
@@ -124,7 +127,7 @@ FROM haltestellen;
             H_ID = row[0]
             H_Name = row[1].decode('utf8')
             i += 1
-            logger.info(u'{}: {}: {}'.format(i, H_ID, H_Name))
+            #logger.info(u'{}: {}: {}'.format(i, H_ID, H_Name))
             self.readFahrten(
                 H_ID_Abfahrtstafel=H_ID,
                 H_Name_Abfahrtstafel=H_Name)
@@ -141,202 +144,207 @@ FROM haltestellen;
         sql = """SELECT max(abfahrt_id) FROM abfahrten"""
         cursor.execute(sql)
         rows = cursor.fetchall()
-        abfahrt_id = rows[0][0] or 0
+        self.abfahrt_id = rows[0][0] or 0
 
         #Abfahrten auslesen
         H_IDstr = str(H_ID_Abfahrtstafel)
+
+        # grab data from station timetable for the whole day
+        # use 24:00 instead of 00:00 to really get all departures also on stations
+        # with a lot of departures
+        bhftafel_URL = 'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&evaId=%s&bt=dep&time=24:00&maxJourneys=10000&date=%s&productsFilter=1111111111&max=10000&start=yes' %(
+            H_IDstr, self.date)
+
         try:
-            Kurz_URL = ''.join((
-                'http://mobile.bahn.de/bin/mobil/bhftafel.exe/dox?si=',
-                H_IDstr,
-                '&bt=dep&ti=00:00%2B1&p=1111111111&date=',
-                str(self.date),
-                '&max=10000&rt=1&use_realtime_filter=1&start=yes&'))
-        except:
-            print 'fehler in kurz_URL'
-            pass
-        #logger.debug(Kurz_URL)
-        Page = self.urlquery(Kurz_URL)
-        Page = self.htmlentitydecode(Page)
-        try:
-            StundenDaten = Page.split('<div class="sqdetailsDep trow">')[1:]
+            # wait a bit
+            sleeptime = random.randint(1, 4)
+            time.sleep(sleeptime)
+            # try first time to get the Bahnhofstafel
+            tree = self.getRequestsTree(bhftafel_URL)
+            errCode = tree.xpath('//div[@class="hafasContent error"]/text()')
 
-            Stundenliste = []
-            FahrtListe = []
-            sql = """SELECT 1 as id
-            FROM abfahrten AS a, fahrten AS f"""  +"""
-            WHERE a.abfahrt_id = f.abfahrt_id
-            AND a."Fahrt_Name" = %s AND f."H_Name" = %s
-            AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
-
-            vorhandene_Fahrten = 0
-            neue_Fahrten = 0
-            for Fahrt in StundenDaten:
-
-                Zeit = Fahrt.split('<span class="bold">')[2]
-                Zeit = Zeit.split('</span>')[0]
-
-                Stunde = Zeit.split(':')[0]
-                if len(Stunde) ==2:
-                    Fahrt_Name = Fahrt.split('<span class="bold">')[1].split(
-                        '</span>\n')[0]
-                    Fahrt_Ziel = Fahrt.split('<span class="bold">')[1].split(
-                        '\n&gt;&gt;\n')[1].split('\n<br />\n')[0]
-                    Fahrt_Abfahrt = time.strptime(Zeit, '%H:%M')
-                    Stunde = int(Stunde)
-                    FahrtParameter = (Fahrt_Name,
-                                      H_Name_Abfahrtstafel,
-                                      self.date.get_timestamp(Fahrt_Abfahrt),
-                                      Fahrt_Ziel)
-                    # schaue in der DB, ob Fahrt schon vorhanden
-                    cursor.execute(sql, FahrtParameter)
-                    rows = cursor.fetchall()
-                    # wenn nicht, suche in dieser Stunde
-                    if not rows:
-                        Stundenliste.append(Stunde)
-                        neue_Fahrten += 1
-                    else:
-                        vorhandene_Fahrten += 1
-            logger.info('{in_db} Fahrten schon definitiv in DB, suche {new} potenziell neue Fahrten: '.format(in_db=vorhandene_Fahrten,
-                                                                                                              new=neue_Fahrten))
-            Stundenliste = set(Stundenliste)
-
-            for stunde in Stundenliste:
-                logger.info('{}{} h'.format(os.linesep, stunde))
-                sleeptime = float(random.randint(1,4))
-                time.sleep(sleeptime)
-
-                # grab data from station timetable for specific hour
-                bhftafel_URL = 'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&evaId=%s&bt=dep&time=%02d:00&date=%s&productsFilter=1111111111&max=10000&start=yes' %(
-                    H_IDstr, stunde, self.date)
+            MAX_TRIES = 10
+            t = 0
+            while t < MAX_TRIES and errCode:
+                # if not successful,
+                # try to get the page MAX_TRIES times
+                WAITTIME = 15
+                logger.info('wait {} secs and try again {} for url {}'.format(
+                    WAITTIME, t, bhftafel_URL))
+                time.sleep(WAITTIME)
                 tree = self.getRequestsTree(bhftafel_URL)
+                errCode = tree.xpath('//div[@class="hafasContent error"]/text()')
+                t += 1
+            try:
                 subtree = tree.xpath('//*[@id="sqResult"]/table')
+                # count number of trips
+                # remove 3 rows for header & footer
+                fahrten_count = len(subtree[0].findall("tr")) - 3
 
-                MAX_TRIES = 10
-                t = 0
-                while t < MAX_TRIES and not subtree:
-                    # try to get page 3 times
-                    time.sleep(2)
-                    tree = self.getRequestsTree(bhftafel_URL)
-                    subtree = tree.xpath('//*[@id="sqResult"]/table')
-                    t += 1
-                    logger.info('try {} for url {}'.format(t, bhftafel_URL))
-                try:
-                    fahrten_count = len(subtree[0].findall("tr")) - 3 # remove 3 rows for header & footer
-                except:
-                    logger.warn('fehler bei erstellung von fahrten_count')
-                    continue
-                if fahrten_count:
-                    for i in range(0, fahrten_count + 1):
-                        try:
-                            xpath_base = '//*[@id="journeyRow_'+str(i)+'"]'
-                            Fahrt_Ziel = tree.xpath(xpath_base+'/td[4]/span/a/text()')[0].replace('\n','')
-                            Abfahrten = tree.xpath(xpath_base+'/td[4]/text()')[2:][0].split('\n')
-                            Abfahrtshaltestelle = Abfahrten[1].strip()
-                            Abfahrtsuhrzeit = Abfahrten[2]
-                            Ankunftsuhrzeit = Abfahrten[-2]
-                            Fahrt_Abfahrt = time.strptime(Abfahrtsuhrzeit, '%H:%M')
-                            Fahrt_Name = tree.xpath(xpath_base+'//td[3]/a/text()')[0].split('\n')[1]
+            except:
+                errCode = tree.xpath('//div[@class="errormsg leftMargin"]/text()')
+                logger.warn(u'fehler beim Lesen der BhfTafel für {}: {}:'.format(
+                    H_IDstr, H_Name_Abfahrtstafel))
+                if errCode:
+                    logger.warn(errCode[0])
+                return
+            if fahrten_count:
+                logger.info(u'{} abfahrten in {}: {}'.format(fahrten_count,
+                                                            H_IDstr,
+                                                            H_Name_Abfahrtstafel))
+                self.n_new = 0
+                self.n_already_in_db = 0
+                self.last_stunde = '-1'
+                for fahrt_no in range(0, fahrten_count + 1):
+                    self.parse_fahrten(fahrt_no,
+                                       fahrten_count,
+                                       tree,
+                                       H_ID_Abfahrtstafel,
+                                       cursor,
+                                       H_Name_Abfahrtstafel)
+                if self.n_new:
+                    print
+                logger.info(u'{} new, {} already in db'.format(
+                    self.n_new,
+                    self.n_already_in_db))
+        except Exception:
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            logger.warn('{} {} {}'.format(
+                exc_type, fname, exc_tb.tb_lineno))
 
-                            Fahrt_URL = 'http://reiseauskunft.bahn.de/'+tree.xpath(xpath_base+'//td[3]/a/@href')[0]
+    def parse_fahrten(self,
+                      fahrt_no,
+                      fahrten_count,
+                      tree,
+                      H_ID_Abfahrtstafel,
+                      cursor,
+                      H_Name_Abfahrtstafel):
+        """
+        Parse Fahrt fahrt_no in the tree and query the Fahrtverlauf
+        look in Fahrten, if Fahrt already exists
+        """
+        try:
+            xpath_base = '//*[@id="journeyRow_'+str(fahrt_no)+'"]'
+            Fahrt_Ziel = tree.xpath(xpath_base+'/td[4]/span/a/text()')[0].replace('\n','')
+            Abfahrten = tree.xpath(xpath_base+'/td[4]/text()')[2:][0].split('\n')
+            Abfahrtshaltestelle = Abfahrten[1].strip()
+            Abfahrtsuhrzeit = Abfahrten[2]
+            Ankunftsuhrzeit = Abfahrten[-2]
+            Fahrt_Abfahrt = time.strptime(Abfahrtsuhrzeit, '%H:%M')
+            Fahrt_Name = tree.xpath(xpath_base+'//td[3]/a/text()')[0].split('\n')[1]
 
-                            if Fahrt_URL:
-                                hstID_Abfahrt = int(Fahrt_URL.split('station_evaId=')[1].split('&')[0])
-                            else:
-                                hstID_Abfahrt = H_ID_Abfahrtstafel
+            Fahrt_URL = 'http://reiseauskunft.bahn.de/'+tree.xpath(xpath_base+'//td[3]/a/@href')[0]
 
-                        except:
-                            #logger.warn('fehler beim Auslesen der BHF-Tafel')
-                            #exc_type, exc_obj, exc_tb = sys.exc_info()
-                            #fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                            #print(exc_type, fname, exc_tb.tb_lineno)
-                            #time.sleep(10)
-                            continue
+            if Fahrt_URL:
+                hstID_Abfahrt = int(Fahrt_URL.split('station_evaId=')[1].split('&')[0])
+            else:
+                hstID_Abfahrt = H_ID_Abfahrtstafel
 
-                        try:
-                            sql = """
+        except:
+            if fahrt_no < fahrten_count:
+                # if there is an error, wait, except for the last fahrt
+                # this fahrt normally does not exist, but sometimes
+                # the fahrt_no journey_row start with 1 instead of 0
+                logger.warn('fehler beim Auslesen der BHF-Tafel')
+                exc_type, exc_obj, exc_tb = sys.exc_info()
+                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                print(exc_type, fname, exc_tb.tb_lineno)
+                time.sleep(10)
+            return
+
+        try:
+            sql = """
 SELECT 1 AS id
 FROM abfahrten AS a, fahrten AS f
 WHERE a.abfahrt_id = f.abfahrt_id
 AND a."Fahrt_Name" = %s AND f."H_Name" = %s
 AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
 
-                            cursor.execute(sql,
-                                           (Fahrt_Name,
-                                           Abfahrtshaltestelle,
-                                           self.date.get_timestamp(Fahrt_Abfahrt),
-                                           Fahrt_Ziel))
-                            rows = cursor.fetchall()
-                            if not rows:
+            cursor.execute(sql,
+                           (Fahrt_Name,
+                           Abfahrtshaltestelle,
+                           self.date.get_timestamp(Fahrt_Abfahrt),
+                           Fahrt_Ziel))
+            rows = cursor.fetchall()
+            if not rows:
+                self.n_new += 1
+                self.abfahrt_id += 1
 
-                                abfahrt_id += 1
-                                #Fahrten in Tabelle Abfahrten schreiben
-                                sql1 = """
+                stunde = Abfahrtsuhrzeit[:2]
+                if stunde != self.last_stunde:
+                    self.last_stunde = stunde
+                    print os.linesep, stunde, ':',
+
+                #Fahrten in Tabelle Abfahrten schreiben
+                sql1 = """
 INSERT INTO abfahrten
 (abfahrt_id, "Fahrt_URL", "Fahrt_Name", "Fahrt_Abfahrt", "H_ID", "Fahrt_Ziel")
 VALUES (%s, %s, %s, %s, %s, %s);"""
-                                cursor.execute(sql1,
-                                               (abfahrt_id,
-                                                Fahrt_URL,
-                                                Fahrt_Name,
-                                                self.date.get_timestamp(Fahrt_Abfahrt),
-                                                H_ID_Abfahrtstafel,
-                                                Fahrt_Ziel))
-                                logger.info(Fahrt_Name)
-                                try:
-                                    sleeptime = float(random.randint(2,5))/5
-                                    time.sleep(sleeptime)
-                                    Fahrtverlauf = self.urlquery(Fahrt_URL)
-                                except:
-                                    print 'fehler in Abfrage des Fahrtverlaufs'
-                                    pass
+                cursor.execute(sql1,
+                               (self.abfahrt_id,
+                                Fahrt_URL,
+                                Fahrt_Name,
+                                self.date.get_timestamp(Fahrt_Abfahrt),
+                                H_ID_Abfahrtstafel,
+                                Fahrt_Ziel))
+                print u'{}'.format(Fahrt_Name),
+                try:
+                    sleeptime = float(random.randint(1,3))/20.
+                    time.sleep(sleeptime)
+                    Fahrtverlauf = self.urlquery(Fahrt_URL)
+                except:
+                    print 'fehler in Abfrage des Fahrtverlaufs'
+                    pass
 
-                                try:
-                                    VerlaufParser = MyHTMLParser()
-                                    VerlaufParser.query_date = self.date
-                                except:
-                                    logger.warn('Fehler bei VerlaufParser')
-                                    pass
-                                # wenn Uhrzeit zwischen 0 und 4 h und Ankunft vor 4 Uhr ist, wird der Vortag als "Zuglauf" ausgegeben
-                                # dies muss korrigiert werden
-                                VerlaufParser.Ankunft_vor_4Uhr = int(Ankunftsuhrzeit[:2]) < 4
-                                VerlaufParser.ist_Starthaltestelle = True
+                try:
+                    VerlaufParser = MyHTMLParser()
+                    VerlaufParser.query_date = self.date
+                except:
+                    logger.warn('Fehler bei VerlaufParser')
+                    pass
+                # wenn Uhrzeit zwischen 0 und 4 h und Ankunft vor 4 Uhr ist,
+                # wird der Vortag als "Zuglauf" ausgegeben
+                # dies muss korrigiert werden
+                VerlaufParser.Ankunft_vor_4Uhr = int(Ankunftsuhrzeit[:2]) < 4
+                VerlaufParser.ist_Starthaltestelle = True
 
-                                try:
-                                    html_verlauf = self.htmlentitydecode(Fahrtverlauf)
-                                except:
-                                    logger.warn('HTML Verlauf Fehler')
-                                    pass
-                                VerlaufParser.feed(html_verlauf)
-                                for h in xrange(len(VerlaufParser.data_stations)):
-                                    H_Name = VerlaufParser.data_stations[h]
-                                    #print VerlaufParser.data_arrivals ##
-                                    H_Ankunft = VerlaufParser.data_arrivals[h]
-                                    H_Abfahrt = VerlaufParser.data_departures[h]
+                try:
+                    html_verlauf = self.htmlentitydecode(Fahrtverlauf)
+                except:
+                    logger.warn('HTML Verlauf Fehler')
+                    pass
+                VerlaufParser.feed(html_verlauf)
+                for h in xrange(len(VerlaufParser.data_stations)):
+                    H_Name = VerlaufParser.data_stations[h]
+                    #print VerlaufParser.data_arrivals ##
+                    H_Ankunft = VerlaufParser.data_arrivals[h]
+                    H_Abfahrt = VerlaufParser.data_departures[h]
 
-                                    if H_Name == H_Name_Abfahrtstafel:
-                                        akt_H_ID = H_ID_Abfahrtstafel
-                                    else:
-                                        akt_H_ID = None
+                    if H_Name == H_Name_Abfahrtstafel:
+                        akt_H_ID = H_ID_Abfahrtstafel
+                    else:
+                        akt_H_ID = None
 
 
-                                    sql3 = """
+                    sql3 = """
 INSERT INTO fahrten
 (abfahrt_id, "Fahrt_Name", fahrt_index, "H_Name", "H_Ankunft", "H_Abfahrt", "H_ID")
 VALUES (%s, %s, %s,%s,%s,%s,%s);"""
-                                    cursor.execute(sql3,
-                                                   (abfahrt_id,
-                                                    Fahrt_Name,
-                                                    h+1,
-                                                    H_Name,
-                                                    get_timestamp2(H_Ankunft),
-                                                    get_timestamp2(H_Abfahrt),
-                                                    akt_H_ID))
-                                VerlaufParser.close()
+                    cursor.execute(sql3,
+                                   (self.abfahrt_id,
+                                    Fahrt_Name,
+                                    h+1,
+                                    H_Name,
+                                    get_timestamp2(H_Ankunft),
+                                    get_timestamp2(H_Abfahrt),
+                                    akt_H_ID))
+                VerlaufParser.close()
 
-                            else:
-                                # wenn Fahrt schon vorhanden
-                                sql = """
+            else:
+                # wenn Fahrt schon vorhanden
+                self.n_already_in_db += 1
+                sql = """
 UPDATE fahrten AS f
 SET "H_ID" = %s
 FROM abfahrten AS a
@@ -344,19 +352,12 @@ WHERE a.abfahrt_id = f.abfahrt_id
 AND f."H_ID" IS NULL
 AND a."Fahrt_Name" = %s AND f."H_Name" = %s
 AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
-                                cursor.execute(sql,
-                                               (H_ID_Abfahrtstafel,
-                                                Fahrt_Name,
-                                                H_Name_Abfahrtstafel,
-                                                self.date.get_timestamp(Fahrt_Abfahrt),
-                                                Fahrt_Ziel))
-                        except Exception:
-                            exc_type, exc_obj, exc_tb = sys.exc_info()
-                            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                            logger.warn('{} {} {}'.format(
-                                exc_type, fname, exc_tb.tb_lineno))
-                            pass
-
+                cursor.execute(sql,
+                               (H_ID_Abfahrtstafel,
+                                Fahrt_Name,
+                                H_Name_Abfahrtstafel,
+                                self.date.get_timestamp(Fahrt_Abfahrt),
+                                Fahrt_Ziel))
         except Exception:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
@@ -447,15 +448,15 @@ class MyHTMLParser(HTMLParser):
                     self.first_linefeed = True
             else:
                 try:
-                    if self.ist_Starthaltestelle:
-                        if len(data.strip()) > 0:
-                            # wenn Abfahrt an der Starthaltestelle vor 4 Uhr
-                            if int(data.strip()[:2]) < 4:
-                                # und Ankunft an der Starthaltestelle vor 4 Uhr
-                                if self.Ankunft_vor_4Uhr:
-                                    # korrigiere das Datum auf den Tag der Anfrage
-                                    self.date = self.query_date
-                        self.ist_Starthaltestelle = False
+                    #if self.ist_Starthaltestelle:
+                        #if len(data.strip()) > 0:
+                            ## wenn Abfahrt an der Starthaltestelle vor 4 Uhr
+                            #if int(data.strip()[:2]) < 4:
+                                ## und Ankunft an der Starthaltestelle vor 4 Uhr
+                                #if self.Ankunft_vor_4Uhr:
+                                    ## korrigiere das Datum auf den Tag der Anfrage
+                                    #self.date = self.query_date
+                        #self.ist_Starthaltestelle = False
                     zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
                     if self.data_departures:
                         z = len(self.data_departures)-1
@@ -483,6 +484,15 @@ class MyHTMLParser(HTMLParser):
                     self.first_linefeed = True
             else:
                 try:
+                    if self.ist_Starthaltestelle:
+                        if len(data.strip()) > 0:
+                            # wenn Abfahrt an der Starthaltestelle vor 4 Uhr
+                            if int(data.strip()[:2]) < 4:
+                                # und Ankunft an der Starthaltestelle vor 4 Uhr
+                                if self.Ankunft_vor_4Uhr:
+                                    # korrigiere das Datum auf den Tag der Anfrage
+                                    self.date = self.query_date
+                        self.ist_Starthaltestelle = False
                     zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
                     if self.data_arrivals[-1]:
                         if zeit < self.data_arrivals[-1]:
