@@ -49,6 +49,10 @@ class Date(datetime.date):
         new_date = Date.fromordinal(self.toordinal() + days)
         return new_date
 
+    @property
+    def day(self):
+        return self.date().day
+
 def get_timestamp2(time_to_convert):
     if time_to_convert:
         return time.strftime('%Y-%m-%d %H:%M:%SCEST', time_to_convert)

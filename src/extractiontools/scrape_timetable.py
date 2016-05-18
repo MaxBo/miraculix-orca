@@ -32,9 +32,10 @@ class ScrapeTimetable(ScrapeStops):
         """"""
         with Connection(login=self.login1) as conn1:
             self.conn1 = conn1
+            self.create_timetable_tables()
             if self.recreate_tables:
-                self.create_timetable_tables()
-                self.conn1.commit()
+                self.truncate_timetables()
+            self.conn1.commit()
 
             self.get_fahrten_for_stops()
 
@@ -50,36 +51,16 @@ CREATE TABLE IF NOT EXISTS abfahrten
   "H_ID" integer,
   abfahrt_id bigint NOT NULL,
   "Fahrt_Ziel" text,
-  abfahrt_id_final integer,
-  keep boolean,
-  route_name_long text,
-  kreis text,
-  kennz text,
-  typ text,
-  route_short_name text,
-  agency_name text,
-  route_id integer,
   CONSTRAINT abfahrten_pkey PRIMARY KEY (abfahrt_id),
   CONSTRAINT abfahrten_fk FOREIGN KEY ("H_ID")
       REFERENCES haltestellen ("H_ID") MATCH SIMPLE
-      ON UPDATE NO ACTION ON DELETE NO ACTION,
-  CONSTRAINT abfahrten_fk1 FOREIGN KEY (abfahrt_id_final)
-      REFERENCES abfahrten (abfahrt_id) MATCH SIMPLE
       ON UPDATE NO ACTION ON DELETE NO ACTION
 );
-
-TRUNCATE abfahrten CASCADE;
 
 CREATE INDEX IF NOT EXISTS abfahrten_sh_idx
   ON abfahrten
   USING btree
   ("Fahrt_Name", "Fahrt_Ziel");
-
-CREATE INDEX IF NOT EXISTS abfahrten_idx1
-  ON abfahrten
-  USING btree
-  (keep)
-  WHERE keep IS NULL OR keep;
 
 CREATE TABLE IF NOT EXISTS fahrten
 (
@@ -90,16 +71,11 @@ CREATE TABLE IF NOT EXISTS fahrten
   abfahrt_id bigint NOT NULL,
   fahrt_index integer NOT NULL,
   "H_ID" integer,
-  h_id_backup integer,
-  stop_id integer,
-  stop_id_txt text,
   CONSTRAINT fahrten_idx PRIMARY KEY (abfahrt_id, fahrt_index),
   CONSTRAINT fahrten_fk FOREIGN KEY (abfahrt_id)
       REFERENCES abfahrten (abfahrt_id) MATCH SIMPLE
       ON UPDATE CASCADE ON DELETE CASCADE
 );
-
-TRUNCATE fahrten;
 
 CREATE INDEX IF NOT EXISTS fahrten_idx1
   ON fahrten
@@ -108,7 +84,15 @@ CREATE INDEX IF NOT EXISTS fahrten_idx1
         """
         cursor = self.get_cursor()
         cursor.execute(sql)
-        self.conn1.commit()
+
+    def truncate_timetables(self):
+        """Truncate the timetables"""
+        sql = """
+TRUNCATE abfahrten CASCADE;
+TRUNCATE fahrten;
+        """
+        cursor = self.get_cursor()
+        cursor.execute(sql)
 
     def get_fahrten_for_stops(self):
         """get the stops in the area"""
