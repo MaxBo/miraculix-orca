@@ -25,6 +25,7 @@ class Hafas(Extract):
             self.set_search_path()
             self.create_aggregate_functions()
             self.clone_timetables()
+            self.create_gtfs_tables()
             self.count()
             self.delete_invalid_fahrten()
             self.set_stop_id()
@@ -70,6 +71,107 @@ class Hafas(Extract):
 
     def create_gtfs_tables(self):
         """Create the gtfs tables if not yet exists"""
+        sql = """
+CREATE TABLE IF NOT EXISTS gtfs_agency (
+  agency_id TEXT NOT NULL,
+  agency_name TEXT,
+  agency_url TEXT DEFAULT 'www.ggr-planung.de'::text,
+  agency_timezone TEXT DEFAULT 'Europe/Berlin'::text NOT NULL,
+  CONSTRAINT gtfs_agency_pkey PRIMARY KEY(agency_id);
+
+ CREATE TABLE gtfs_calendar (
+  service_id TEXT,
+  monday INTEGER,
+  tuesday INTEGER,
+  wednesday INTEGER,
+  thursday INTEGER,
+  friday INTEGER,
+  saturday INTEGER,
+  sunday INTEGER,
+  start_date TEXT,
+  end_date TEXT
+) ;
+
+CREATE TABLE IF NOT EXISTS gtfs_calendar_dates (
+  service_id TEXT,
+  date TEXT,
+  exception_type INTEGER
+) ;
+
+CREATE TABLE IF NOT EXISTS gtfs_frequencies (
+  trip_id TEXT,
+  start_time INTEGER,
+  end_time INTEGER,
+  headway_secs INTEGER
+) ;
+CREATE TABLE IF NOT EXISTS gtfs_routes (
+  agency_id TEXT,
+  route_id TEXT NOT NULL,
+  route_short_name TEXT,
+  route_long_name TEXT,
+  route_type INTEGER,
+  CONSTRAINT gtfs_routes_pkey PRIMARY KEY(route_id)
+) ;
+CREATE TABLE IF NOT EXISTS gtfs_shapes (
+  shape_id TEXT NOT NULL,
+  shape_pt_lat DOUBLE PRECISION,
+  shape_pt_lon DOUBLE PRECISION,
+  shape_pt_sequence INTEGER NOT NULL,
+  shape_dist_traveled DOUBLE PRECISION,
+  CONSTRAINT gtfs_shapes_idx PRIMARY KEY(shape_id, shape_pt_sequence)
+) ;
+
+CREATE TABLE IF NOT EXISTS gtfs_stop_times (
+  trip_id TEXT NOT NULL,
+  arrival_time TEXT,
+  departure_time TEXT,
+  stop_id TEXT,
+  stop_sequence INTEGER NOT NULL,
+  shape_dist_traveled DOUBLE PRECISION,
+  pickup_type SMALLINT,
+  drop_off_type SMALLINT,
+  CONSTRAINT gtfs_stop_times_stop_times_trip_id PRIMARY KEY(trip_id, stop_sequence)
+) ;
+
+CREATE INDEX IF NOT EXISTS gtfs_stop_times_stop_times_stop_id ON gtfs_stop_times
+  USING btree (stop_id);
+
+CREATE TABLE IF NOT EXISTS gtfs_stops (
+  stop_id TEXT NOT NULL,
+  stop_name TEXT,
+  stop_lat DOUBLE PRECISION,
+  stop_lon DOUBLE PRECISION,
+  CONSTRAINT gtfs_stops_pkey PRIMARY KEY(stop_id)
+) ;
+
+CREATE INDEX IF NOT EXISTS gtfs_stops_stops_stop_lat ON gtfs_stops
+  USING btree (stop_lat);
+
+CREATE INDEX IF NOT EXISTS gtfs_stops_stops_stop_lon ON gtfs_stops
+  USING btree (stop_lon);
+
+CREATE TABLE IF NOT EXISTS gtfs_transfers (
+  from_stop_id TEXT,
+  to_stop_id TEXT,
+  transfer_type INTEGER,
+  min_transfer_time DOUBLE PRECISION
+) ;
+
+CREATE TABLE IF NOT EXISTS gtfs_trips (
+  route_id TEXT,
+  trip_id TEXT NOT NULL,
+  service_id TEXT,
+  shape_id TEXT,
+  trip_headsign TEXT,
+  trip_short_name TEXT,
+  CONSTRAINT gtfs_trips_pkey PRIMARY KEY(trip_id)
+);
+
+CREATE INDEX IF NOT EXISTS gtfs_trips_trips_route_id ON gtfs_trips
+  USING btree (route_id);
+
+        """
+        self.run_query(sql)
 
     def clone_timetables(self):
         """
