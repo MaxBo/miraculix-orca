@@ -80,7 +80,8 @@ CREATE TABLE IF NOT EXISTS gtfs_agency (
   agency_name TEXT,
   agency_url TEXT DEFAULT 'www.ggr-planung.de'::text,
   agency_timezone TEXT DEFAULT 'Europe/Berlin'::text NOT NULL,
-  CONSTRAINT gtfs_agency_pkey PRIMARY KEY(agency_id);
+  CONSTRAINT gtfs_agency_pkey PRIMARY KEY(agency_id)
+);
 
  CREATE TABLE gtfs_calendar (
   service_id TEXT,
@@ -289,6 +290,8 @@ CREATE TABLE IF NOT EXISTS {schema}.trips
   h_id_backup integer,
   stop_id integer,
   stop_id_txt text,
+  ein boolean DEFAULT true NOT NULL,
+  aus boolean DEFAULT true NOT NULL,
   CONSTRAINT trips_idx PRIMARY KEY (abfahrt_id, fahrt_index),
   CONSTRAINT trips_fk FOREIGN KEY (abfahrt_id)
       REFERENCES {schema}.departures (abfahrt_id) MATCH SIMPLE
@@ -299,6 +302,16 @@ CREATE INDEX IF NOT EXISTS trips_idx1
   ON timetables.trips
   USING btree
   ("H_Name" COLLATE pg_catalog."default", "H_Abfahrt");
+
+CREATE INDEX IF NOT EXISTS trips_hid_idx
+  ON timetables.trips
+  USING btree
+  ("H_ID");
+
+CREATE INDEX IF NOT EXISTS trips_hid_idx
+  ON timetables.trips
+  USING btree
+  ("stop_id_txt");
 
 TRUNCATE {schema}.stops CASCADE;
 TRUNCATE {schema}.departures CASCADE;
@@ -916,12 +929,12 @@ AND hd."H_ID" IN (SELECT DISTINCT f.stop_id FROM trips AS f);
         query = sql
         logger.info(query)
         cur.execute(query)
-        logger.info('{h}: {msg}'.format(h=h_table, msg=cur.statusmessage))
+        logger.info('{msg}'.format(msg=cur.statusmessage))
 
-        query = sql2.format(srid=self.target_sird)
+        query = sql2.format(srid=self.target_srid)
         logger.info(query)
         cur.execute(query)
-        logger.info('{h}: {msg}'.format(h=h_table, msg=cur.statusmessage))
+        logger.info('{msg}'.format(msg=cur.statusmessage))
 
     def cleanup_haltestellen(self):
         """

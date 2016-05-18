@@ -51,7 +51,7 @@ class Date(datetime.date):
 
     @property
     def day(self):
-        return self.date().day
+        return self.timetuple().tm_mday
 
 def get_timestamp2(time_to_convert):
     if time_to_convert:
