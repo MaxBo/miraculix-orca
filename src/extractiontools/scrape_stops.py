@@ -66,6 +66,7 @@ class ScrapeStops(Extract):
         with Connection(login=self.login1) as conn1:
             self.conn1 = conn1
             self.readHaltestellen()
+            self.conn1.commit()
 
     def getSessionIDs(self):
         #SessionID von der Bahn bekommen
@@ -178,21 +179,40 @@ class ScrapeStops(Extract):
 
         cursor = self.get_cursor()
 
+        sql_update = """
+    UPDATE haltestellen h
+    SET "H_Name" = %s,
+    geom = st_transform(st_setsrid(st_makepoint( %s, %s), 4326 ), %s::integer)
+    WHERE h."H_ID" = %s;
+                                """
+
+        sql_insert = """
+    INSERT INTO haltestellen
+    ("H_Name", "H_ID", geom)
+    SELECT
+      %s,
+      %s,
+      st_transform(st_setsrid(st_makepoint( %s, %s), 4326 ),
+      %s::integer)
+    WHERE NOT EXISTS (SELECT 1 FROM haltestellen h WHERE h."H_ID" = %s);
+                                """
         lon0, lon1, lat0, lat1 = self.bbox.rounded()
         stops_found = 0
         stops_inserted = 0
         for i in range(int(lat0*10), int(lat1*10)):
             for j in range(int(lon0*10),int(lon1*10)):
+                stops_found_in_tile = 0
+                stops_inserted_in_tile = 0
 
                 time.sleep(0.5)
 
-                lat = i*100000
-                lon = j*100000
+                lat = i * 100000
+                lon = j * 100000
 
                 lon = str(lon)
                 lat = str(lat)
 
-                print lat,lon
+                logger.info('search in {}, {}'.format(i, j))
 
                 ID_URL1, ID_URL2 = self.getSessionIDs()
 
@@ -252,28 +272,38 @@ class ScrapeStops(Extract):
 
                             #Datenobjekt erzeugen und in DB schreiben
                             # wenn schon vorhanden, dann Geometrie aktualisieren
-                            sql2 = """INSERT INTO haltestellen
-                            ("H_Name", "H_ID", geom)""" + """
-                            (SELECT %s, %s, st_transform(st_setsrid(
-                            st_makepoint( %s, %s), 4326 ), %s::integer))
-                            ON CONFLICT ("H_ID")
-                            DO UPDATE SET geom = EXCLUDED.geom,
-                            "H_Name" = EXCLUDED."H_Name";
-                            """
-                            cursor.execute(sql2, (H_Name, H_ID, H_Lon, H_Lat, self.target_srid))
+
+                            cursor.execute(sql_insert,
+                                           (H_Name,
+                                            H_ID,
+                                            H_Lon, H_Lat,
+                                            self.target_srid,
+                                            H_ID))
                             stops_found += 1
+                            stops_found_in_tile += 1
                             stops_inserted += cursor.rowcount
+                            stops_inserted_in_tile += cursor.rowcount
+                            if not cursor.rowcount:
+                                # update name and geom if stop is already in db
+                                cursor.execute(sql_update,
+                                               (H_Name,
+                                                H_Lon, H_Lat,
+                                                self.target_srid,
+                                                H_ID))
 
                             if not stops_found % 1000:
                                 self.conn1.commit()
-                            #if READ_FAHRTEN:
-                                #readFahrten(H_ID, cursor, date)
 
                 except IndexError:
                     pass
                 except TypeError:
                     pass
-        logger.info('{} stops found and inserted or updated'.format(
+
+                logger.info(' found {} new stops'.format(
+                    stops_inserted_in_tile))
+                self.conn1.commit()
+
+        logger.info('{} stops found and inserted'.format(
             stops_inserted))
 
 
@@ -281,19 +311,6 @@ if __name__=='__main__':
 
 
     parser = ArgumentParser(description="Scrape Stops in a given bounding box")
-
-    #parser.add_argument("-t", '--top', action="store",
-                        #help="top", type=float,
-                        #dest="top", default=54.65)
-    #parser.add_argument("-b", '--bottom,', action="store",
-                        #help="bottom", type=float,
-                        #dest="bottom", default=54.6)
-    #parser.add_argument("-r", '--right', action="store",
-                        #help="right", type=float,
-                        #dest="right", default=10.0)
-    #parser.add_argument("-l", '--left', action="store",
-                        #help="left", type=float,
-                        #dest="left", default=9.95)
 
     parser.add_argument('--host', action="store",
                         help="host",
@@ -309,14 +326,17 @@ if __name__=='__main__':
                         help="destination database",
                         dest="destination_db")
 
+    parser.add_argument('--no-copy', action="store_false", default=True,
+                        help="don't copy from source database",
+                        dest="copy_from_source_db")
+
     options = parser.parse_args()
 
-    #bbox = BBox(top=options.top, bottom=options.bottom,
-                #left=options.left, right=options.right)
-    extract = ExtractStops(destination_db=options.destination_db)
-    extract.set_login(host=options.host, port=options.port, user=options.user)
-    extract.get_target_boundary_from_dest_db()
-    extract.extract()
+    if options.copy_from_source_db:
+        extract = ExtractStops(destination_db=options.destination_db)
+        extract.set_login(host=options.host, port=options.port, user=options.user)
+        extract.get_target_boundary_from_dest_db()
+        extract.extract()
 
     scrape = ScrapeStops(options, db=options.destination_db)
     scrape.set_login(host=options.host, port=options.port, user=options.user)

@@ -7,6 +7,8 @@ from argparse import ArgumentParser
 from connection import Connection, DBApp, logger
 from extractiontools.ausschnitt import Extract
 from extractiontools.utils.get_date import Date
+import os
+import zipfile
 
 
 class Hafas(Extract):
@@ -24,7 +26,7 @@ class Hafas(Extract):
             self.conn = conn
             self.set_search_path()
             self.create_aggregate_functions()
-            self.clone_timetables()
+            self.create_timetable_tables()
             self.create_routes_tables()
             self.create_gtfs_tables()
             self.truncate_routes_tables()
@@ -33,7 +35,7 @@ class Hafas(Extract):
             self.delete_invalid_fahrten()
             self.set_stop_id()
             self.write_calendar()
-            self.workaround_sommerzeit()
+            #self.workaround_sommerzeit()
             self.test_for_negative_travel_times()
             self.set_arrival_to_day_before()
             self.set_departure_to_day_before()
@@ -42,7 +44,7 @@ class Hafas(Extract):
             self.set_ein_aus()
 
             self.count_multiple_abfahrten()
-            self.show_multiple_trips()
+            #self.show_multiple_trips()
             self.save_haltestellen_id()
             self.delete_multiple_abfahrten()
 
@@ -50,12 +52,16 @@ class Hafas(Extract):
             #self.update_haltestellen_d()
 
             self.reset_stop_id()
+            self.conn.commit()
             self.set_eindeutige_stop_id()
+            self.conn.commit()
             self.update_stop_id_from_database()
+            self.conn.commit()
 
             #self.cleanup_haltestellen()
 
             self.update_stop_id_from_similar_routes()
+            self.intersect_kreise()
 
             ### GTFS
             self.fill_gtfs_stops()
@@ -83,7 +89,7 @@ CREATE TABLE IF NOT EXISTS gtfs_agency (
   CONSTRAINT gtfs_agency_pkey PRIMARY KEY(agency_id)
 );
 
- CREATE TABLE gtfs_calendar (
+ CREATE TABLE IF NOT EXISTS gtfs_calendar (
   service_id TEXT,
   monday INTEGER,
   tuesday INTEGER,
@@ -196,7 +202,7 @@ CREATE TABLE IF NOT EXISTS routes (
   typ TEXT,
   route_long_name TEXT,
   shape_id TEXT,
-  geom public.geometry(LINESTRING, 4326),
+  geom geometry(LINESTRING, 4326),
   touches_kreis BOOLEAN DEFAULT false NOT NULL,
   CONSTRAINT routes_pkey PRIMARY KEY(route_id)
 );
@@ -237,21 +243,26 @@ TRUNCATE shapes;
         """
         self.run_query(sql)
 
-    def clone_timetables(self):
+    def create_timetable_tables(self):
         """
         make a backup of the timetables
         """
         sql = """
+CREATE SEQUENCE IF NOT EXISTS stop_id_seq START 10000000;
+
 CREATE TABLE IF NOT EXISTS {schema}.stops
 (
   "H_Name" text,
-  "H_ID" integer NOT NULL,
+  "H_ID" integer NOT NULL DEFAULT nextval('stop_id_seq'),
   kreis text,
   found boolean,
   geom geometry(Point, {srid}),
   keep boolean NOT NULL DEFAULT true,
   CONSTRAINT stops_pkey PRIMARY KEY ("H_ID")
 );
+
+CREATE INDEX IF NOT EXISTS stops_geom_idx ON stops
+  USING gist (geom);
 
 CREATE TABLE IF NOT EXISTS {schema}.departures
 (
@@ -312,6 +323,12 @@ CREATE INDEX IF NOT EXISTS trips_hid_idx
   ON timetables.trips
   USING btree
   ("stop_id_txt");
+
+CREATE INDEX IF NOT EXISTS trips_no_stop_id_idx
+  ON timetables.trips
+  USING btree
+  ("stop_id")
+  WHERE stop_id IS NULL;
 
 TRUNCATE {schema}.stops CASCADE;
 TRUNCATE {schema}.departures CASCADE;
@@ -753,7 +770,8 @@ GROUP BY keep;
         rows = cur.fetchall()
         msg = 'keep abfahrten: {0.keep}: {0.count}'
         for row in rows:
-            logger.info(msg.format(row))
+            pass
+            #logger.info(msg.format(row))
 
     def show_multiple_trips(self):
         cur = self.conn.cursor()
@@ -910,7 +928,7 @@ AND f."H_Name" = h."H_Name";
         """
 
         sql2 = """
-perform dblink_connect_u('conn', 'dbname=europe');
+SELECT dblink_connect_u('conn', 'dbname=europe');
 -- füge fehlende Haltestelle aus der Deutschland-Tabelle hinzu
 INSERT INTO stops
 ("H_ID", "H_Name", geom, kreis)
@@ -921,9 +939,10 @@ FROM timetables.haltestellen AS h') AS hd(
 "H_ID" integer,
 "H_Name" text,
 geom geometry,
-kreis text),
+kreis text)
 WHERE hd."H_ID" NOT IN (SELECT DISTINCT h."H_ID" FROM stops h)
-AND hd."H_ID" IN (SELECT DISTINCT f.stop_id FROM trips AS f);
+--AND hd."H_ID" IN (SELECT DISTINCT f.stop_id FROM trips AS f)
+AND hd."H_Name" IN (SELECT DISTINCT f."H_Name" FROM trips AS f);
 """
 
         query = sql
@@ -980,6 +999,8 @@ WHERE
 --
 UPDATE trips f
 SET stop_id = c.stop1
+
+SELECT *
 FROM
 (SELECT f.abfahrt_id, f.fahrt_index, b.stop1
 
@@ -1120,6 +1141,17 @@ regexp_replace(a."Fahrt_Name", ' +' ::text, ' ' ::text) || ' -> ' ::text ||
         """
 
         self.run_query(sql)
+
+    def intersect_kreise(self, kreise='verwaltungsgrenzen.krs_2014_12'):
+        """Intersect stops with kreisen"""
+        sql = """
+UPDATE stops h
+SET kreis = k.rs
+FROM {} k
+WHERE st_intersects(k.geom, h.geom)
+AND h.kreis IS NULL;
+        """
+        self.run_query(sql.format(kreise))
 
     def identify_kreis(self, kreise='verwaltungsgrenzen.krs_2014_12'):
         """
@@ -1338,7 +1370,7 @@ SELECT
 r.route_id, a.agency_id, r.route_short_name, r.route_long_name,
 t.route_type
 FROM routes r
-LEFT JOIN public.route_types t ON (r.typ = t.typ),
+LEFT JOIN route_types t ON (r.typ = t.typ),
 agencies a
 WHERE a.agency_name = r.agency_name
 --AND r.touches_kreis
@@ -1447,22 +1479,30 @@ WHERE departure_time IS NULL;
         """
         exports the data to the path
         """
-        with Connection() as conn:
+        with Connection(self.login1) as conn:
             self.conn = conn
             self.set_search_path()
             cur = self.conn.cursor()
             sql = '''SET CLIENT_ENCODING TO '{encoding}';'''
-            encoding = 'LATIN9'
+            encoding = 'UTF8'
             cur.execute(sql.format(encoding=encoding))
             tables = ['stops', 'agency', 'stop_times', 'routes', 'trips', 'shapes',
                       'calendar', 'calendar_dates', 'transfers']
-            for table in tables:
-                tn = 'gtfs_{tn}'.format(tn=table)
-                fn = os.path.join(path, '{tn}.txt'.format(tn=table))
-                with open(fn, 'w') as f:
-                    sql = self.conn.copy_sql.format(tn=tn, fn=fn)
-                    logger.info(sql)
-                    cur.copy_expert(sql, f)
+            if not os.path.exists(path):
+                os.mkdir(path)
+            zipfilename = os.path.join(path,
+                                       '{}.zip'.format(self.destination_db))
+            with zipfile.ZipFile(zipfilename, 'w') as z:
+                for table in tables:
+                    tn = 'gtfs_{tn}'.format(tn=table)
+                    tablename = '{tn}.txt'.format(tn=table)
+                    fn = os.path.join(path, tablename)
+                    logger.info('write {}'.format(fn))
+                    with open(fn, 'w') as f:
+                        sql = self.conn.copy_sql.format(tn=tn, fn=fn)
+                        logger.info(sql)
+                        cur.copy_expert(sql, f)
+                    z.write(fn, tablename)
 
 
             sql = '''RESET CLIENT_ENCODING;'''
@@ -1514,7 +1554,7 @@ if __name__=='__main__':
 
     parser.add_argument('--folder', action="store", type=str,
                         help="folder to store the resulting gtfs files",
-                        dest="folder", default=r'/tmp')
+                        dest="folder", default=r'/tmp/gtfs')
 
 
     options = parser.parse_args()
