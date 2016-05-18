@@ -2,30 +2,29 @@
 #coding:utf-8
 
 import numpy as np
-import logging
-logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
-logger.level = logging.DEBUG
-import os
 import datetime
-from connection import Connection, DBApp
+from argparse import ArgumentParser
+from connection import Connection, DBApp, logger
+from extractiontools.ausschnitt import Extract
+from extractiontools.utils.get_date import Date
 
 
-class Hafas(DBApp):
-    def __init__(self, schema='timetables',
-                 day= 9, month=03, year=2016):
-        self.schema = schema
-        self.today = datetime.datetime(year, month, day)
+class Hafas(Extract):
+    """Convert Hafas to GTFS"""
 
-    @property
-    def day(self):
-        return self.today.date().day
+    schema = 'timetables'
+
+    def __init__(self, options, db):
+        super(Hafas, self).__init__(destination_db=db, options=options)
+        self.options = options
+        self.today = Date(options.year, options.month, options.day)
 
     def convert(self):
-        with Connection() as conn:
+        with Connection(self.login1) as conn:
             self.conn = conn
             self.set_search_path()
             self.create_aggregate_functions()
+            self.clone_timetables()
             self.count()
             self.delete_invalid_fahrten()
             self.set_stop_id()
@@ -44,13 +43,13 @@ class Hafas(DBApp):
             self.delete_multiple_abfahrten()
 
             # Haltestellen
-            self.update_haltestellen_d()
+            #self.update_haltestellen_d()
 
             self.reset_stop_id()
             self.set_eindeutige_stop_id()
             self.update_stop_id_from_database()
 
-            self.cleanup_haltestellen()
+            #self.cleanup_haltestellen()
 
             self.update_stop_id_from_similar_routes()
 
@@ -69,6 +68,98 @@ class Hafas(DBApp):
             self.conn.commit()
             pass
 
+    def create_gtfs_tables(self):
+        """Create the gtfs tables if not yet exists"""
+
+    def clone_timetables(self):
+        """
+        make a backup of the timetables
+        """
+        sql = """
+CREATE TABLE IF NOT EXISTS {schema}.stops
+(
+  "H_Name" text,
+  "H_ID" integer NOT NULL,
+  kreis text,
+  found boolean,
+  geom geometry(Point, {srid}),
+  keep boolean NOT NULL DEFAULT true,
+  CONSTRAINT stops_pkey PRIMARY KEY ("H_ID")
+);
+
+CREATE TABLE IF NOT EXISTS {schema}.departures
+(
+  "Fahrt_Name" text,
+  "Fahrt_Abfahrt" timestamp(0) with time zone,
+  "H_ID" integer,
+  abfahrt_id bigint NOT NULL,
+  "Fahrt_Ziel" text,
+  abfahrt_id_final integer,
+  keep boolean,
+  route_name_long text,
+  kreis text,
+  kennz text,
+  typ text,
+  route_short_name text,
+  agency_name text,
+  route_id integer,
+  CONSTRAINT departures_pkey PRIMARY KEY (abfahrt_id),
+  CONSTRAINT departures_fk FOREIGN KEY ("H_ID")
+      REFERENCES {schema}.stops ("H_ID") MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION,
+  CONSTRAINT departures_fk1 FOREIGN KEY (abfahrt_id_final)
+      REFERENCES {schema}.departures (abfahrt_id) MATCH SIMPLE
+      ON UPDATE NO ACTION ON DELETE NO ACTION
+);
+
+CREATE TABLE IF NOT EXISTS {schema}.trips
+(
+  "Fahrt_Name" text,
+  "H_Ankunft" timestamp(0) with time zone,
+  "H_Abfahrt" timestamp(0) with time zone,
+  "H_Name" text,
+  abfahrt_id bigint NOT NULL,
+  fahrt_index integer NOT NULL,
+  "H_ID" integer,
+  h_id_backup integer,
+  stop_id integer,
+  stop_id_txt text,
+  CONSTRAINT trips_idx PRIMARY KEY (abfahrt_id, fahrt_index),
+  CONSTRAINT trips_fk FOREIGN KEY (abfahrt_id)
+      REFERENCES {schema}.departures (abfahrt_id) MATCH SIMPLE
+      ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS trips_idx1
+  ON timetables.trips
+  USING btree
+  ("H_Name" COLLATE pg_catalog."default", "H_Abfahrt");
+
+TRUNCATE {schema}.stops CASCADE;
+TRUNCATE {schema}.departures CASCADE;
+TRUNCATE {schema}.trips CASCADE;
+
+INSERT INTO {schema}.stops ("H_Name", "H_ID", found, geom)
+SELECT h."H_Name", h."H_ID", false::boolean, geom
+FROM {schema}.haltestellen h;
+
+INSERT INTO {schema}.departures
+("Fahrt_Name", "Fahrt_Abfahrt", "H_ID", abfahrt_id, "Fahrt_Ziel")
+SELECT
+a."Fahrt_Name", a."Fahrt_Abfahrt", a."H_ID", a.abfahrt_id, a."Fahrt_Ziel"
+FROM {schema}.abfahrten a;
+
+INSERT INTO {schema}.trips
+("Fahrt_Name", "H_Ankunft", "H_Abfahrt", "H_Name",
+abfahrt_id, fahrt_index, "H_ID")
+SELECT
+f."Fahrt_Name", f."H_Ankunft", f."H_Abfahrt", f."H_Name",
+f.abfahrt_id, f.fahrt_index, f."H_ID"
+FROM {schema}.fahrten f;
+        """
+        self.run_query(sql.format(schema=self.schema,
+                                  srid=self.target_srid))
+
     def set_search_path(self):
         sql = 'SET search_path TO %s, "$user", public;' % self.schema
         cur = self.conn.cursor()
@@ -85,8 +176,8 @@ class Hafas(DBApp):
         """
         """
         sql = """
-DROP AGGREGATE IF EXISTS array_accum (anyelement);
-CREATE AGGREGATE array_accum (anyelement)
+DROP AGGREGATE IF EXISTS public.array_accum (anyelement);
+CREATE AGGREGATE public.array_accum (anyelement)
 (
     sfunc = array_append,
     stype = anyarray,
@@ -96,19 +187,19 @@ CREATE AGGREGATE array_accum (anyelement)
         self.run_query(sql)
 
     def count(self):
-        sql = 'SELECT count(*) FROM haltestellen;'
+        sql = 'SELECT count(*) FROM stops;'
         cur = self.conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
         logger.info('Haltestellen: %s, ' % rows[0][0])
 
-        sql = 'SELECT count(*) FROM abfahrten;'
+        sql = 'SELECT count(*) FROM departures;'
         cur = self.conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
         logger.info('Abfahrten: %s ' % rows[0][0])
 
-        sql = 'SELECT count(*) FROM fahrten;'
+        sql = 'SELECT count(*) FROM trips;'
         cur = self.conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
@@ -116,8 +207,8 @@ CREATE AGGREGATE array_accum (anyelement)
 
     def delete_invalid_fahrten(self):
         sql = """
-DELETE FROM fahrten WHERE abfahrt_id IN (
-SELECT f.abfahrt_id FROM fahrten f LEFT JOIN abfahrten a
+DELETE FROM trips WHERE abfahrt_id IN (
+SELECT f.abfahrt_id FROM trips f LEFT JOIN departures a
 ON f.abfahrt_id = a.abfahrt_id
 WHERE a.abfahrt_id IS NULL) ;
         """
@@ -127,9 +218,9 @@ WHERE a.abfahrt_id IS NULL) ;
 
     def set_stop_id(self):
         sql = """
-UPDATE fahrten SET stop_id = "H_ID" WHERE "H_ID" IS NOT NULL;
-UPDATE fahrten SET stop_id = NULL WHERE stop_id >= 10000000;
-DELETE FROM haltestellen WHERE "H_ID" >= 10000000;
+UPDATE trips SET stop_id = "H_ID" WHERE "H_ID" IS NOT NULL;
+UPDATE trips SET stop_id = NULL WHERE stop_id >= 10000000;
+DELETE FROM stops WHERE "H_ID" >= 10000000;
         """
         cur = self.conn.cursor()
         cur.execute(sql)
@@ -140,9 +231,9 @@ DELETE FROM haltestellen WHERE "H_ID" >= 10000000;
         add 1 hour
         """
         sql = '''
-UPDATE abfahrten SET
+UPDATE departures SET
 "Fahrt_Abfahrt" = "Fahrt_Abfahrt" + '1 hour'::INTERVAL;
-UPDATE fahrten SET
+UPDATE trips SET
 "H_Ankunft" = "H_Ankunft" + '1 hour'::INTERVAL,
 "H_Abfahrt" = "H_Abfahrt" + '1 hour'::INTERVAL;
         '''
@@ -167,29 +258,29 @@ INSERT INTO gtfs_calendar_dates VALUES(1,{tomorrow},1);
         sql = """
 
 -- setze Ankunftstag für Ankunftszeiten zwischen 12:00 und 23:59 auf Vortag
-UPDATE fahrten f
+UPDATE trips f
 SET
 "H_Ankunft" = "H_Ankunft" - interval '1 day'
 FROM
---SELECT * FROM fahrten f,
-(SELECT abf.abfahrt_id, abf.d0, abf.h0, ank.d1, ank.h1, a."Fahrt_URL"
+--SELECT * FROM trips f,
+(SELECT abf.abfahrt_id, abf.d0, abf.h0, ank.d1, ank.h1
 FROM
 (SELECT abfahrt_id, h1, d1 FROM
 (select abfahrt_id,
-extract(hour from "H_Ankunft") AS h1 ,
+extract(hour from "H_Ankunft") AS h1,
 extract(day from "H_Ankunft") AS d1,
  "H_Ankunft", fahrt_index,
  max(fahrt_index) over (PARTITION BY abfahrt_id) AS maxindex
-FROM fahrten) f1
+FROM trips) f1
 WHERE fahrt_index = maxindex) ank,
 (SELECT
 abfahrt_id,
 extract(hour from "H_Abfahrt") AS h0,
 extract(day from "H_Abfahrt") AS d0
-FROM fahrten
+FROM trips
  WHERE fahrt_index = 1
  ) AS abf,
-abfahrten a
+departures a
 WHERE abf.abfahrt_id = ank.abfahrt_id
 AND a.abfahrt_id = ank.abfahrt_id
 -- wenn der Tag gleich ist
@@ -210,27 +301,30 @@ AND extract(hour from "H_Ankunft") >= 12;
         """
         sql = """
 --setze Abfahrtstag für Ankunftszeiten zwischen 12:00 und 23:59 auf Folgetag
-UPDATE fahrten f
+UPDATE trips f
 SET
 "H_Abfahrt" = "H_Abfahrt" - interval '1 day'
 FROM
---SELECT * FROM fahrten f,
-(SELECT abf.abfahrt_id, abf.d0, abf.h0, ank.d1, ank.h1, a."Fahrt_URL"
+--SELECT * FROM trips f,
+(SELECT abf.abfahrt_id, abf.d0, abf.h0, ank.d1, ank.h1
 FROM
 (SELECT abfahrt_id, h1, d1
-FROM (select abfahrt_id,
+FROM (
+SELECT
+abfahrt_id,
 extract(hour from "H_Ankunft") AS h1 ,
 extract(day from "H_Ankunft") AS d1, "H_Ankunft",
 fahrt_index, max(fahrt_index) over (PARTITION BY abfahrt_id) AS maxindex
-FROM fahrten
+FROM trips
 ) f1
 WHERE fahrt_index = maxindex) ank,
 (SELECT
 abfahrt_id,
 extract(hour from "H_Abfahrt") AS h0,
-extract(day from "H_Abfahrt") AS d0 FROM fahrten WHERE fahrt_index = 1
+extract(day from "H_Abfahrt") AS d0
+FROM trips WHERE fahrt_index = 1
 ) AS abf,
-abfahrten a
+departures a
 WHERE abf.abfahrt_id = ank.abfahrt_id
 AND a.abfahrt_id = ank.abfahrt_id
 -- wenn der Tag gleich ist
@@ -250,30 +344,30 @@ AND extract(hour from "H_Abfahrt") >= 12;
         sql1 = """
 -- korrigiere Fahrten über Tagesgrenzen hinaus
 --verschiebe Fahrten nach vorne, so dass nur Fahrten heute und morgen auftreten
-UPDATE fahrten f
+UPDATE trips f
 SET "H_Abfahrt" = "H_Abfahrt" + '1 day'::INTERVAL,
 "H_Ankunft" = "H_Ankunft" + '1 day'::INTERVAL
 FROM (
 SELECT DISTINCT abfahrt_id
-FROM fahrten
+FROM trips
 WHERE date_part('day', "H_Abfahrt") < {today}) v
 WHERE f.abfahrt_id = v.abfahrt_id
 ;
-""".format(today=self.day)
+""".format(today=self.today.day)
 
         sql2 = """
 --verschiebe Fahrten nach hinten, so dass nur Fahrten heute und morgen auftreten
-UPDATE fahrten f
+UPDATE trips f
 SET "H_Abfahrt" = "H_Abfahrt" - '1 day'::INTERVAL,
 "H_Ankunft" = "H_Ankunft" - '1 day'::INTERVAL
 FROM (
 SELECT DISTINCT abfahrt_id
-FROM fahrten
+FROM trips
 WHERE date_part('day', "H_Ankunft") > {tomorrow}) v
 WHERE f.abfahrt_id = v.abfahrt_id
 ;
 
-""".format(tomorrow = self.day + 1)
+""".format(tomorrow = self.today.day + 1)
 
         cur = self.conn.cursor()
         n_updated = 1
@@ -292,13 +386,13 @@ WHERE f.abfahrt_id = v.abfahrt_id
 
     def reset_ein_aus(self):
         sql1 = """
-UPDATE fahrten
+UPDATE trips
 SET "H_Abfahrt" = NULL
 WHERE ein = FALSE;
 
 """
         sql2 = """
-UPDATE fahrten
+UPDATE trips
 SET "H_Ankunft" = NULL
 WHERE aus = FALSE;
 
@@ -311,12 +405,12 @@ WHERE aus = FALSE;
 
     def set_ein_aus(self):
         sql1 = """
-UPDATE fahrten
+UPDATE trips
 SET ein = FALSE
 WHERE "H_Abfahrt" IS NULL
 """
         sql2 = """
-UPDATE fahrten
+UPDATE trips
 SET aus = FALSE
 WHERE "H_Ankunft" IS NULL
 """
@@ -327,16 +421,17 @@ WHERE "H_Ankunft" IS NULL
         logger.info('no Exit: %s' % cur.statusmessage)
 
         sql3 = """
-UPDATE fahrten f
+UPDATE trips f
 SET "H_Abfahrt" = f."H_Ankunft"
 FROM
 (SELECT abfahrt_id, fahrt_index FROM
 (select abfahrt_id,
  "H_Ankunft", "H_Abfahrt", fahrt_index,
  max(fahrt_index) over (PARTITION BY abfahrt_id) AS maxindex
-FROM fahrten) f1
+FROM trips) f1
 WHERE fahrt_index < maxindex
-AND "H_Ankunft" IS NOT NULL AND "H_Abfahrt" IS NULL) ank
+AND "H_Ankunft" IS NOT NULL
+AND "H_Abfahrt" IS NULL) ank
 WHERE ank.abfahrt_id = f.abfahrt_id
 AND ank.fahrt_index = f.fahrt_index;
         """
@@ -344,10 +439,11 @@ AND ank.fahrt_index = f.fahrt_index;
         logger.info('Missing Departure Time added : %s' % cur.statusmessage)
 
         sql4 = """
-UPDATE fahrten f
+UPDATE trips f
 SET "H_Ankunft" = "H_Abfahrt"
 WHERE fahrt_index > 1
-AND "H_Ankunft" IS NULL AND "H_Abfahrt" IS NOT NULL;
+AND "H_Ankunft" IS NULL
+AND "H_Abfahrt" IS NOT NULL;
         """
         cur.execute(sql4)
         logger.info('Missing Arrival Time added : %s' % cur.statusmessage)
@@ -357,15 +453,16 @@ AND "H_Ankunft" IS NULL AND "H_Abfahrt" IS NOT NULL;
         cur = self.conn.cursor()
         sql = """
 SELECT count(*) FROM (
-SELECT *,  lag("H_Abfahrt") OVER(PARTITION BY abfahrt_id ORDER BY fahrt_index) AS ab0 FROM fahrten f )f
+SELECT *,
+lag("H_Abfahrt") OVER(PARTITION BY abfahrt_id ORDER BY fahrt_index) AS ab0
+FROM trips f )f
 where "H_Ankunft" < ab0;
-
         """
         cur.execute(sql)
         result = cur.fetchone()
 
         sql = """
-SELECT count(*) FROM fahrten f
+SELECT count(*) FROM trips f
 where "H_Abfahrt" < "H_Ankunft";
 
         """
@@ -376,9 +473,11 @@ where "H_Abfahrt" < "H_Ankunft";
             departures before arrivals!''')
             if result[0]:
                 sql = """
-        SELECT abfahrt_id FROM (
-        SELECT *,  lag("H_Abfahrt") OVER(PARTITION BY abfahrt_id ORDER BY fahrt_index) AS ab0 FROM fahrten f )f
-        where "H_Ankunft" < ab0;
+SELECT abfahrt_id FROM (
+SELECT *,
+lag("H_Abfahrt") OVER(PARTITION BY abfahrt_id ORDER BY fahrt_index) AS ab0
+FROM trips f )f
+WHERE "H_Ankunft" < ab0;
 
                 """
                 cur.execute(sql)
@@ -387,8 +486,8 @@ where "H_Abfahrt" < "H_Ankunft";
 
             if result2[0]:
                 sql = """
-SELECT abfahrt_id FROM fahrten f
-where "H_Abfahrt" < "H_Ankunft";
+SELECT abfahrt_id FROM trips f
+WHERE "H_Abfahrt" < "H_Ankunft";
 
                 """
                 cur.execute(sql)
@@ -408,56 +507,56 @@ where "H_Abfahrt" < "H_Ankunft";
         cur = self.conn.cursor()
         sql = """
 -- zähle die doppelten Fahrten durch
-UPDATE abfahrten a
+UPDATE departures a
 SET abfahrt_id_final = b.abfahrt_id_final,
     keep =(b.rn = 1) ::bool
 FROM (
+SELECT a.abfahrt_id,
+       row_number() OVER(PARTITION BY a."Fahrt_Name", a.sh_name, a.anz_haltestellen, a.sh_ab,
+        a.eh_name, a.eh_an, a.zwh_name, a.zwh_an) AS rn,
+       first_value(a.abfahrt_id) OVER(PARTITION BY a."Fahrt_Name", a.sh_name,
+        a.anz_haltestellen, a.sh_ab, a.eh_name, a.eh_an, a.zwh_name, a.zwh_an) AS
+         abfahrt_id_final
+FROM (
        SELECT a.abfahrt_id,
-              row_number() OVER(PARTITION BY a."Fahrt_Name", a.sh_name, a.anz_haltestellen, a.sh_ab,
-               a.eh_name, a.eh_an, a.zwh_name, a.zwh_an) AS rn,
-              first_value(a.abfahrt_id) OVER(PARTITION BY a."Fahrt_Name", a.sh_name,
-               a.anz_haltestellen, a.sh_ab, a.eh_name, a.eh_an, a.zwh_name, a.zwh_an) AS
-                abfahrt_id_final
-       FROM (
-              SELECT a.abfahrt_id,
-                     a."Fahrt_Name",
-                     a."Fahrt_Ziel",
-                     a."H_ID",
-                     f."H_ID" AS sh_id,
-                     f."H_Name" AS sh_name,
-                     f."H_Abfahrt" AS sh_ab,
-                     f1.fahrt_index AS anz_haltestellen,
-                     f1."H_ID" AS eh_id,
-                     f1."H_Name" AS eh_name,
-                     f1."H_Ankunft" AS eh_an,
-                     f2."H_ID" AS zwh_id,
-                     f2."H_Name" AS zwh_name,
-                     f2."H_Ankunft" AS zwh_an
-              FROM abfahrten a,
-                   (
-                     SELECT f.abfahrt_id,
-                            f."H_ID",
-                            f."H_Ankunft",
-                            f."H_Name",
-                            f.fahrt_index,
-                            row_number() OVER(PARTITION BY f.abfahrt_id
-                     ORDER BY f.fahrt_index DESC) rn
-                     FROM fahrten f
-                   ) f1, -- letzte Haltestelle der Fahrt row_number() mit ORDER BY fahrt_index descending, also rückwärte
+              a."Fahrt_Name",
+              a."Fahrt_Ziel",
+              a."H_ID",
+              f."H_ID" AS sh_id,
+              f."H_Name" AS sh_name,
+              f."H_Abfahrt" AS sh_ab,
+              f1.fahrt_index AS anz_haltestellen,
+              f1."H_ID" AS eh_id,
+              f1."H_Name" AS eh_name,
+              f1."H_Ankunft" AS eh_an,
+              f2."H_ID" AS zwh_id,
+              f2."H_Name" AS zwh_name,
+              f2."H_Ankunft" AS zwh_an
+       FROM departures a,
+            (
+              SELECT f.abfahrt_id,
+                     f."H_ID",
+                     f."H_Ankunft",
+                     f."H_Name",
+                     f.fahrt_index,
+                     row_number() OVER(PARTITION BY f.abfahrt_id
+              ORDER BY f.fahrt_index DESC) rn
+              FROM trips f
+            ) f1, -- letzte Haltestelle der Fahrt row_number() mit ORDER BY fahrt_index descending, also rückwärte
 
-                   fahrten f, -- erste Haltestelle der Fahrt
-                   fahrten f2 -- zweite Haltestelle der Fahrt
-              WHERE a.abfahrt_id = f.abfahrt_id
-                    AND a.abfahrt_id = f1.abfahrt_id
-                    AND a.abfahrt_id = f2.abfahrt_id
-                    AND f.fahrt_index = 1 -- erste Haltestelle
-                    AND f1.rn = 1 --letzte Haltestelle
+            trips f, -- erste Haltestelle der Fahrt
+            trips f2 -- zweite Haltestelle der Fahrt
+       WHERE a.abfahrt_id = f.abfahrt_id
+             AND a.abfahrt_id = f1.abfahrt_id
+             AND a.abfahrt_id = f2.abfahrt_id
+             AND f.fahrt_index = 1 -- erste Haltestelle
+             AND f1.rn = 1 --letzte Haltestelle
 
-                    AND f2.fahrt_index = 2 --auch 2. Haltestelle gleich, damit Ringfahrten (U3 Barmbek-Barmbek) nicht aus versehen gelöscht werden
+             AND f2.fahrt_index = 2 --auch 2. Haltestelle gleich, damit Ringfahrten (U3 Barmbek-Barmbek) nicht aus versehen gelöscht werden
 
-              ORDER BY a."Fahrt_Name",
-                       sh_ab,
-                       sh_name
+       ORDER BY a."Fahrt_Name",
+                sh_ab,
+                sh_name
             ) a
      ) b
 WHERE b.abfahrt_id = a.abfahrt_id;
@@ -466,11 +565,11 @@ WHERE b.abfahrt_id = a.abfahrt_id;
         logger.info('Multiple_abfahrten: %s' % cur.statusmessage)
 
         sql = """
-        -- zähle, wie viele doppelte vorhanden
-        SELECT keep,
-               count(*)
-        FROM abfahrten
-        GROUP BY keep;
+-- zähle, wie viele doppelte vorhanden
+SELECT keep,
+       count(*)
+FROM departures
+GROUP BY keep;
         """
         cur.execute(sql)
         rows = cur.fetchall()
@@ -481,8 +580,18 @@ WHERE b.abfahrt_id = a.abfahrt_id;
     def show_multiple_trips(self):
         cur = self.conn.cursor()
         sql = '''
-SELECT f.*, a.keep FROM fahrten f, (SELECT abfahrt_id, abfahrt_id_final FROM abfahrten WHERE keep = False) a1, abfahrten a
-WHERE f.abfahrt_id = a.abfahrt_id AND a1.abfahrt_id_final = a.abfahrt_id_final
+SELECT
+f.*,
+a.keep
+FROM trips f,
+(SELECT
+  abfahrt_id,
+  abfahrt_id_final
+FROM departures
+WHERE keep = False) a1,
+departures a
+WHERE f.abfahrt_id = a.abfahrt_id
+AND a1.abfahrt_id_final = a.abfahrt_id_final
 ORDER BY f."Fahrt_Name", f.abfahrt_id, f.fahrt_index;
 '''
         cur.execute(sql)
@@ -499,16 +608,16 @@ ORDER BY f."Fahrt_Name", f.abfahrt_id, f.fahrt_index;
         """
         cur = self.conn.cursor()
         sql = """
--- sichere vor dem löschen H_ID, die bei doppelten Fahrten gefunden wurden in Spalte stop_id
-UPDATE fahrten f
+-- sichere vor dem Löschen H_ID, die bei doppelten Fahrten gefunden wurden in Spalte stop_id
+UPDATE trips f
 SET stop_id = f2."H_ID"
 FROM
      (
        SELECT a.abfahrt_id_final,
               f.fahrt_index,
               max(f."H_ID") AS "H_ID"
-       FROM fahrten f,
-            abfahrten a
+       FROM trips f,
+            departures a
        WHERE f.abfahrt_id = a.abfahrt_id
        GROUP BY a.abfahrt_id_final,
                 f.fahrt_index
@@ -558,7 +667,7 @@ WHERE h."H_ID" =id1 ;
         cur = self.conn.cursor()
         sql = """
 -- lösche doppelte Fahrten
-DELETE FROM abfahrten WHERE keep = FALSE
+DELETE FROM departures WHERE keep = FALSE
 OR keep IS NULL;
         """
         cur.execute(sql)
@@ -566,7 +675,7 @@ OR keep IS NULL;
 
         sql = """
 -- remove copied dummy-haltestellen-ids
-UPDATE fahrten f
+UPDATE trips f
 SET stop_id = NULL WHERE stop_id > 10000000;
 
         """
@@ -578,7 +687,7 @@ SET stop_id = NULL WHERE stop_id > 10000000;
         restet stop_id to None
         """
         sql = """
-UPDATE fahrten SET stop_id = NULL;
+UPDATE trips SET stop_id = NULL;
 """
         self.run_query(sql)
 
@@ -589,16 +698,16 @@ UPDATE fahrten SET stop_id = NULL;
         cur = self.conn.cursor()
         sql = """
 -- setze für noch nicht gefundenen H_IDs Haltestellennummern aus verschiedenen Haltestellentabellen
-UPDATE fahrten f
+UPDATE trips f
 SET stop_id = h."H_ID"
 FROM
 (
 SELECT
 h."H_Name"
-FROM haltestellen h
+FROM stops h
 GROUP BY h."H_Name"
 HAVING count(*) = 1 ) h1,
-haltestellen h
+stops h
 WHERE h."H_Name" = h1."H_Name"
 AND f.stop_id IS NULL
 AND f."H_Name" = h."H_Name";
@@ -614,40 +723,40 @@ AND f."H_Name" = h."H_Name";
         cur = self.conn.cursor()
         sql = """
 -- setze für noch nicht gefundenen H_IDs Haltestellennummern aus verschiedenen Haltestellentabellen
-UPDATE fahrten f
+UPDATE trips f
 SET stop_id = h."H_ID"
 FROM
-{haltestellen} h
+stops h
 WHERE f.stop_id IS NULL
 AND f."H_Name" = h."H_Name";
-
         """
 
         sql2 = """
+perform dblink_connect_u('conn', 'dbname=europe');
 -- füge fehlende Haltestelle aus der Deutschland-Tabelle hinzu
-INSERT INTO haltestellen
+INSERT INTO stops
 ("H_ID", "H_Name", geom, kreis)
-SELECT "H_ID", "H_Name", geom, kreis
-FROM {haltestellen} hd
-WHERE hd."H_ID" NOT IN (SELECT DISTINCT h."H_ID" FROM haltestellen h)
-AND hd."H_ID" IN (SELECT DISTINCT f.stop_id FROM fahrten AS f);
+SELECT "H_ID", "H_Name", st_transform(geom, {srid}) AS geom, kreis
+FROM dblink('conn',
+'SELECT h."H_ID", h."H_Name", h.geom, h.kreis
+FROM timetables.haltestellen AS h') AS hd(
+"H_ID" integer,
+"H_Name" text,
+geom geometry,
+kreis text),
+WHERE hd."H_ID" NOT IN (SELECT DISTINCT h."H_ID" FROM stops h)
+AND hd."H_ID" IN (SELECT DISTINCT f.stop_id FROM trips AS f);
 """
 
-        h_tables = ['haltestellen_d']
+        query = sql
+        logger.info(query)
+        cur.execute(query)
+        logger.info('{h}: {msg}'.format(h=h_table, msg=cur.statusmessage))
 
-        for h_table in h_tables:
-            query = sql.format(haltestellen=h_table)
-            logger.info(query)
-            cur.execute(query)
-            logger.info('{h}: {msg}'.format(h=h_table, msg=cur.statusmessage))
-
-            query = sql2.format(haltestellen=h_table)
-            logger.info(query)
-            cur.execute(query)
-            logger.info('{h}: {msg}'.format(h=h_table, msg=cur.statusmessage))
-
-
-
+        query = sql2.format(srid=self.target_sird)
+        logger.info(query)
+        cur.execute(query)
+        logger.info('{h}: {msg}'.format(h=h_table, msg=cur.statusmessage))
 
     def cleanup_haltestellen(self):
         """
@@ -657,13 +766,13 @@ AND hd."H_ID" IN (SELECT DISTINCT f.stop_id FROM fahrten AS f);
         sql = """
 -- packe die Haltestellen in eine Backup-Tabelle
 
-DROP TABLE IF EXISTS haltestellen_backup;
+DROP TABLE IF EXISTS stops_backup;
 
 SELECT *
-INTO haltestellen_backup
-FROM haltestellen;
+INTO stops_backup
+FROM stops;
 
-TRUNCATE haltestellen CASCADE;
+TRUNCATE stops CASCADE;
 
 UPDATE haltestellen h
 SET kreis = hd.kreis
@@ -671,18 +780,13 @@ FROM haltestellen_d hd
 WHERE hd."H_ID" = h."H_ID";
 
 
-INSERT INTO haltestellen
-SELECT hb.* FROM haltestellen_backup hb,
-(
-SELECT DISTINCT hb."H_ID" FROM haltestellen_backup hb
-LEFT JOIN fahrten f  on hb."H_ID" = f.stop_id
-LEFT JOIN abfahrten a on hb."H_ID" = a."H_ID"
+DELETE FROM stops h
+LEFT JOIN trips f  on h."H_ID" = f.stop_id
+LEFT JOIN departures a on h."H_ID" = a."H_ID"
 WHERE
-      f.stop_id IS NOT NULL
-      OR
-      a."H_ID" IS NOT NULL
-) h2
-WHERE hb."H_ID" = h2."H_ID"
+      f.stop_id IS NULL
+      AND
+      a."H_ID" IS NULL
 ;
 
 """
@@ -696,7 +800,7 @@ WHERE hb."H_ID" = h2."H_ID"
         sql = """
 
 --
-UPDATE fahrten f
+UPDATE trips f
 SET stop_id = c.stop1
 FROM
 (SELECT f.abfahrt_id, f.fahrt_index, b.stop1
@@ -706,23 +810,31 @@ FROM
 FROM
 (
 -- In jeder Zeile steht stop und stopname der Vorhaltestelle, aktuellen Haltestelle und Folgehaltestelle
-SELECT f."Fahrt_Name", f.abfahrt_id, f.fahrt_index,
+SELECT
+f."Fahrt_Name",
+f.abfahrt_id,
+f.fahrt_index,
 f.stop_id AS stop1,
 lag(f.stop_id) OVER(PARTITION BY f.abfahrt_id ORDER BY f.fahrt_index) AS stop0,
 lead(f.stop_id) OVER(PARTITION BY f.abfahrt_id ORDER BY f.fahrt_index) AS stop2,
 f."H_Name" AS stopname1,
 lag(f."H_Name") OVER(PARTITION BY f.abfahrt_id ORDER BY f.fahrt_index) AS stopname0,
 lead(f."H_Name") OVER(PARTITION BY f.abfahrt_id ORDER BY f.fahrt_index) AS stopname2
-FROM fahrten f) AS a
+FROM trips f) AS a
 -- Suche für jede Fahrt_Name alle eindeutigen Haltestellenfolgen (definiert durch den Haltestellennamen
 GROUP BY a."Fahrt_Name",a.stopname1, a.stopname0, a.stopname2, a.stop1) b,
 
 -- Fahrtentabelle mit den Haltestellennamen der Vorgänger und Nachfolgehaltestellen
-(SELECT f.abfahrt_id, f.fahrt_index, f."Fahrt_Name", f.stop_id, f."H_Name" AS stopname1,
+(SELECT
+f.abfahrt_id,
+f.fahrt_index,
+f."Fahrt_Name",
+f.stop_id,
+f."H_Name" AS stopname1,
 lag(f."H_Name") OVER(PARTITION BY f.abfahrt_id ORDER BY f.fahrt_index) AS stopname0,
 lead(f."H_Name") OVER(PARTITION BY f.abfahrt_id ORDER BY f.fahrt_index) AS stopname2
 FROM
-fahrten AS f ) AS f
+trips AS f ) AS f
 
 -- Aktualisier unbekannte stop_id in der Fahrtentabelle aus den bekannten Haltestellenfolgen hinzu
 WHERE f.stop_id IS NULL
@@ -731,7 +843,8 @@ AND f.stopname0 = b.stopname0
 AND f.stopname2 = b.stopname2
 AND f.stopname1 = b.stopname1
 AND b.stop1 IS NOT NULL )c
-WHERE f.abfahrt_id = c.abfahrt_id AND f.fahrt_index = c.fahrt_index
+WHERE f.abfahrt_id = c.abfahrt_id
+AND f.fahrt_index = c.fahrt_index
 ;
         """
         cur.execute(sql)
@@ -740,11 +853,12 @@ WHERE f.abfahrt_id = c.abfahrt_id AND f.fahrt_index = c.fahrt_index
         sql = """
 
 -- setze die Haltestellennummer bei Bussen auf die kleinste bekannte "H_ID" für den Haltestellennamen
-UPDATE fahrten f
+UPDATE trips f
 SET stop_id = a.stop_id
 FROM (
 SELECT f.abfahrt_id, f.fahrt_index,
-min(h."H_ID") as stop_id FROM fahrten f, haltestellen h
+min(h."H_ID") as stop_id
+FROM trips f, stops h
 WHERE f.stop_id IS NULL AND f."H_Name" = h."H_Name"
 AND f."Fahrt_Name" LIKE 'Bus%'
 GROUP BY f.abfahrt_id, f.fahrt_index )a
@@ -757,11 +871,12 @@ AND f.fahrt_index = a.fahrt_index;
 
         sql = """
 -- setze die Haltestellennummer bei Nicht-Bussen auf die größte bekannte "H_ID" für den Haltestellennamen
-UPDATE fahrten f
+UPDATE trips f
 SET stop_id = a.stop_id
 FROM (
 SELECT f.abfahrt_id, f.fahrt_index,
-max(h."H_ID") as stop_id FROM fahrten f, haltestellen h
+max(h."H_ID") as stop_id
+FROM trips f, stops h
 WHERE f.stop_id IS NULL AND f."H_Name" = h."H_Name"
 AND f."Fahrt_Name" NOT LIKE 'Bus%'
 GROUP BY f.abfahrt_id, f.fahrt_index )a
@@ -776,24 +891,24 @@ AND f.fahrt_index = a.fahrt_index;
 -- Setze die Koordinaten in haltestellen auf 0, wenn unbekannte Halteselle
 -- Wenn keine "H_ID" übergeben wird, wird automatisch eine "H_ID" mit einem
 -- serial Feld > 50000000 erzeugt
-INSERT INTO haltestellen ("H_Name", geom)
+INSERT INTO stops ("H_Name", geom)
 SELECT DISTINCT f."H_Name" AS "H_Name",
-ST_SETSRID(ST_MAKEPOINT(0,0), 4326) AS geom
-FROM fahrten f
+st_transform(ST_SETSRID(ST_MAKEPOINT(0,0), 4326), {srid}) AS geom
+FROM trips f
 WHERE f.stop_id IS NULL;
 
 -- setze für Dummy-Haltestellen die stop_id
-UPDATE fahrten f
+UPDATE trips f
 SET stop_id = h."H_ID"
 FROM
-haltestellen h
+stops h
 WHERE f.stop_id IS NULL
 AND f."H_Name" = h."H_Name";
         """
-        self.run_query(sql)
+        self.run_query(sql.format(srid=self.target_srid))
 
         sql = """
-UPDATE fahrten SET stop_id_txt = stop_id::text;
+UPDATE trips SET stop_id_txt = stop_id::text;
         """
         self.run_query(sql)
 
@@ -812,14 +927,14 @@ INSERT INTO gtfs_stops
 SELECT
   h."H_ID" AS stop_id,
   h."H_Name" AS stop_name,
-  st_y(h.geom) AS stop_lat,
-  st_x(h.geom) AS stop_lon
+  st_y(st_transform(h.geom, 4326)) AS stop_lat,
+  st_x(st_transform(h.geom, 4326)) AS stop_lon
 FROM
-  haltestellen AS h
+  stops AS h
 ;
 
 -- Generiere neuen langen Routennamen aus Fahrnamen -> Fahrtziel
-UPDATE abfahrten a
+UPDATE departures a
 SET route_name_long =
 regexp_replace(a."Fahrt_Name", ' +' ::text, ' ' ::text) || ' -> ' ::text ||
                  a."Fahrt_Ziel" ;
@@ -828,27 +943,27 @@ regexp_replace(a."Fahrt_Name", ' +' ::text, ' ' ::text) || ' -> ' ::text ||
 
         self.run_query(sql)
 
-    def identify_kreis(self):
+    def identify_kreis(self, kreise='verwaltungsgrenzen.krs_2014_12'):
         """
         Suche Kreis, in dem die meisten Haltestellen einer Linie liegen
         """
         sql = """
 -- Kreis, in der die meisten Abfahrten der Linie liegen, generieren
-UPDATE abfahrten a
-SET kreis=b.kreis, kennz=k.kennz
+UPDATE departures a
+SET kreis=b.kreis, kennz=k.kfz_kennzeichen
 FROM
 (
 SELECT h.abfahrt_id, first_value(h.kreis) OVER(PARTITION BY h.abfahrt_id ORDER BY h.cnt DESC) AS kreis
 FROM (
 SELECT f.abfahrt_id, h.kreis, count(*) cnt
-FROM fahrten f, haltestellen h
+FROM trips f, stops h
 WHERE h."H_ID" = f.stop_id
 GROUP BY f.abfahrt_id, h.kreis) h
-)b LEFT JOIN d.kr_2010 k ON (k.rs = b.kreis)
+)b LEFT JOIN {kreise} k ON (k.rs = b.kreis)
 WHERE a.abfahrt_id = b.abfahrt_id
 ;
 """
-        self.run_query(sql)
+        self.run_query(sql.format(kreise=kreise))
 
     def mark_abfahrten_around_kreis(self, ags=None, kennz=None, bbox=None, ):
         """
@@ -856,12 +971,12 @@ WHERE a.abfahrt_id = b.abfahrt_id
         """
         sql = """
 -- Checke, ob Abfahrt im 5 km Radius den Kreis berührt.
-UPDATE abfahrten a
+UPDATE departures a
 SET touches_kreis=TRUE
 FROM
 (
 SELECT DISTINCT f.abfahrt_id
-FROM fahrten f, haltestellen h,
+FROM trips f, stops h,
 d.kr_2010 k
 WHERE h."H_ID" = f.stop_id
 AND st_dwithin(st_transform(h.geom, 31467), k.geom, 5000)
@@ -872,7 +987,7 @@ WHERE a.abfahrt_id = b.abfahrt_id
 -- nur Routen im Kreis
 UPDATE routes r
 SET touches_kreis = TRUE
-FROM(SELECT DISTINCT route_id FROM abfahrten
+FROM(SELECT DISTINCT route_id FROM departures
 WHERE touches_kreis
 ) b
 WHERE r.route_id = b.route_id;
@@ -886,23 +1001,23 @@ WHERE r.route_id = b.route_id;
         sql = """
 
 -- Linientyp suchen
-UPDATE abfahrten a
+UPDATE departures a
 SET typ = regexp_replace(a."Fahrt_Name", ' *[0-9]+','');
 
-UPDATE abfahrten a
-SET typ = substr(typ,1,3)
+UPDATE departures a
+SET typ = substr(typ, 1, 3)
 WHERE a.typ ~ '^Bus|AST|Fäh|NWB *';
 
 -- route_short_name
-UPDATE abfahrten
+UPDATE departures
 SET route_short_name = regexp_replace("Fahrt_Name", '^'||typ||' *','');
 
 -- agency_name
-UPDATE abfahrten
+UPDATE departures
 SET agency_name = kennz||' '||typ
 WHERE typ = 'Bus' or typ = 'AST' or typ = 'ALT' or typ = 'Fäh'
 or typ = 'U' or typ = 'Str' or typ = 'Schiff' or typ = 'S';
-UPDATE abfahrten
+UPDATE departures
 SET agency_name = typ
 WHERE agency_name is NULL;
 
@@ -914,34 +1029,63 @@ WHERE agency_name is NULL;
         """
         sql = """
 TRUNCATE routes;
-INSERT INTO routes (route_id, agency_name, typ, route_short_name, abfahrten_list, h_folge, fz_folge, hz_folge)
+INSERT INTO routes (
+route_id,
+agency_name,
+typ,
+route_short_name,
+abfahrten_list,
+h_folge,
+fz_folge,
+hz_folge)
 SELECT *
 FROM
 (
-SELECT row_number() OVER(ORDER BY agency_name, route_short_name)::integer AS route_id,
-agency_name, typ, route_short_name, abfahrten_list,
-h_folge, fz_folge, hz_folge
+SELECT
+row_number() OVER(ORDER BY agency_name, route_short_name)::integer AS route_id,
+agency_name,
+typ,
+route_short_name,
+abfahrten_list,
+h_folge,
+fz_folge,
+hz_folge
 FROM
 (
-SELECT a.agency_name, a.typ, a.route_short_name, array_accum(a.abfahrt_id) AS abfahrten_list,
-h_folge, fz_folge, hz_folge
+SELECT
+a.agency_name,
+a.typ,
+a.route_short_name,
+array_accum(a.abfahrt_id) AS abfahrten_list,
+h_folge,
+fz_folge,
+hz_folge
 FROM
 (SELECT
-a.abfahrt_id, a.agency_name, a.typ, a.agency_name||'_'||a.route_short_name AS route_short_name,
-ff.h_folge, ff.fz_folge, ff.hz_folge
+a.abfahrt_id,
+a.agency_name,
+a.typ, a.agency_name || '_' || a.route_short_name AS route_short_name,
+ff.h_folge,
+ff.fz_folge,
+ff.hz_folge
 FROM
-(SELECT f.abfahrt_id,
+(SELECT
+f.abfahrt_id,
 array_accum(stop_id) as h_folge,
 array_accum("H_Ankunft" - lag_abfahrt) AS fz_folge,
 array_accum("H_Abfahrt" - "H_Ankunft") AS hz_folge
 FROM (
-SELECT abfahrt_id,stop_id, "H_Ankunft", "H_Abfahrt", fahrt_index,
+SELECT
+abfahrt_id,stop_id,
+"H_Ankunft",
+"H_Abfahrt",
+fahrt_index,
 lag("H_Abfahrt") OVER(PARTITION BY abfahrt_id ORDER BY fahrt_index) AS lag_abfahrt
 FROM
-  fahrten f
+  trips f
 ORDER BY abfahrt_id, fahrt_index)f
 GROUP BY abfahrt_id
-) ff, abfahrten a
+) ff, departures a
 WHERE ff.abfahrt_id = a.abfahrt_id ) a
 GROUP BY
 a.agency_name, a.typ, a.route_short_name, h_folge, fz_folge, hz_folge
@@ -949,7 +1093,7 @@ a.agency_name, a.typ, a.route_short_name, h_folge, fz_folge, hz_folge
 ) r;
 
 -- Routen den abfahrten zuweisen
-UPDATE abfahrten a
+UPDATE departures a
 SET route_id = r.route_id
 FROM routes r
 WHERE a.abfahrt_id = ANY(r.abfahrten_list)
@@ -964,7 +1108,9 @@ WHERE a.abfahrt_id = ANY(r.abfahrten_list)
 -- agency-Tabelle erzeugen
 TRUNCATE agencies;
 INSERT INTO agencies (agency_id, agency_name)
-SELECT row_number() OVER(ORDER BY typ, agency_name)::integer AS agency_id, agency_name
+SELECT
+row_number() OVER(ORDER BY typ, agency_name)::integer AS agency_id,
+agency_name
 FROM (SELECT DISTINCT typ, agency_name FROM routes) r;
 
 TRUNCATE gtfs_agency;
@@ -976,7 +1122,7 @@ FROM agencies;
 -- Langen Liniennamen generieren
 UPDATE routes r
 SET route_long_name = r.agency_name || '_' || r.route_short_name || ' -> ' || h."H_Name"
-FROM haltestellen h
+FROM stops h
 WHERE h."H_ID" = h_folge[array_upper(h_folge, 1)]
 ;
 UPDATE routes r
@@ -1006,8 +1152,6 @@ FROM shapes s
 WHERE s.h_folge = r.h_folge;
 
 
-
-
 TRUNCATE gtfs_routes;
 INSERT INTO gtfs_routes
 (route_id, agency_id, route_short_name, route_long_name,
@@ -1033,11 +1177,15 @@ INSERT INTO gtfs_shapes
 (shape_id, shape_pt_sequence, shape_pt_lon, shape_pt_lat)
 SELECT shape_id::text,
 shape_pt_sequence,
-st_x(h.geom) AS shape_pt_lon, st_y(h.geom) AS shape_pt_lat
+st_x(st_transform(h.geom, 4326)) AS shape_pt_lon,
+st_y(st_transform(h.geom, 4326)) AS shape_pt_lat
 FROM
-(SELECT shape_id, unnest(h_folge) AS h_id, generate_subscripts(h_folge, 1) AS shape_pt_sequence
+(SELECT
+shape_id,
+unnest(h_folge) AS h_id,
+generate_subscripts(h_folge, 1) AS shape_pt_sequence
 FROM shapes s) r3,
-haltestellen h
+stops h
 WHERE r3.h_id = h."H_ID"
 ORDER BY shape_id, shape_pt_sequence;
 -- delete invalid points
@@ -1056,14 +1204,13 @@ GROUP BY s.shape_id
 WHERE s.shape_id = r.shape_id
 AND array_upper(points,1) > 1;
 
-
 TRUNCATE gtfs_trips;
 INSERT INTO gtfs_trips (
     route_id,
     service_id,
     trip_id, shape_id)
 SELECT r.route_id, 1 AS service_id, a.abfahrt_id AS trip_id, r.shape_id
-FROM routes r, abfahrten a
+FROM routes r, departures a
 WHERE a.route_id = r.route_id
 --AND r.touches_kreis
 ;
@@ -1102,7 +1249,7 @@ WHEN a.typ = 'AST' or a.typ = 'ALT' THEN 2
 ELSE 0
 END AS drop_off_type
 
-FROM fahrten f, abfahrten a
+FROM trips f, departures a
 WHERE f.abfahrt_id = a.abfahrt_id
 --AND a.touches_kreis
 ;
@@ -1115,7 +1262,7 @@ WHERE arrival_time IS NULL;
 UPDATE gtfs_stop_times
 SET departure_time = arrival_time
 WHERE departure_time IS NULL;
-        """.format(today=self.day)
+        """.format(today=self.today.day)
         self.run_query(sql)
 
     def export_gtfs(self, path=''):
@@ -1145,6 +1292,58 @@ WHERE departure_time IS NULL;
 
 
 if __name__=='__main__':
-    hafas = Hafas(day=9, month=03, year=2016)
+    parser = ArgumentParser(description="Scrape Stops in a given bounding box")
+
+    parser.add_argument("-t", '--top', action="store",
+                        help="top", type=float,
+                        dest="top", default=54.65)
+    parser.add_argument("-b", '--bottom,', action="store",
+                        help="bottom", type=float,
+                        dest="bottom", default=54.6)
+    parser.add_argument("-r", '--right', action="store",
+                        help="right", type=float,
+                        dest="right", default=10.0)
+    parser.add_argument("-l", '--left', action="store",
+                        help="left", type=float,
+                        dest="left", default=9.95)
+
+    parser.add_argument('--host', action="store",
+                        help="host",
+                        dest="host", default='localhost')
+    parser.add_argument("-p", '--port', action="store",
+                        help="port", type=int,
+                        dest="port", default=5432)
+
+    parser.add_argument("-U", '--user', action="store",
+                        help="database user",
+                        dest="user", default='osm')
+    parser.add_argument('-n', '--destination-db', action="store",
+                        help="destination database",
+                        dest="destination_db", default='extract')
+    parser.add_argument('--source-db', action="store",
+                        help="source database",
+                        dest="source_db", default='europe')
+
+    parser.add_argument('--day', action="store", type=int,
+                        help="day, default: day of today",
+                        dest="day")
+    parser.add_argument('--month', action="store", type=int,
+                        help="month, default: month of today",
+                        dest="month")
+    parser.add_argument('--year', action="store", type=int,
+                        help="year, default: year of today",
+                        dest="year")
+
+    parser.add_argument('--folder', action="store", type=str,
+                        help="folder to store the resulting gtfs files",
+                        dest="folder", default=r'/tmp')
+
+
+    options = parser.parse_args()
+
+    hafas = Hafas(options, db=options.destination_db)
+    hafas.set_login(host=options.host, port=options.port, user=options.user)
+    hafas.get_target_boundary_from_dest_db()
+    hafas.get_target_srid_from_dest_db()
     hafas.convert()
-    #hafas.export_gtfs(path=r'C:\Users\AchimTack\Desktop\GTFS')
+    hafas.export_gtfs(path=options.folder)
