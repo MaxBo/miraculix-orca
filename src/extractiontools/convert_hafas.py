@@ -25,7 +25,10 @@ class Hafas(Extract):
             self.set_search_path()
             self.create_aggregate_functions()
             self.clone_timetables()
+            self.create_routes_tables()
             self.create_gtfs_tables()
+            self.truncate_routes_tables()
+            self.truncate_gtfs_tables()
             self.count()
             self.delete_invalid_fahrten()
             self.set_stop_id()
@@ -170,6 +173,66 @@ CREATE TABLE IF NOT EXISTS gtfs_trips (
 CREATE INDEX IF NOT EXISTS gtfs_trips_trips_route_id ON gtfs_trips
   USING btree (route_id);
 
+        """
+        self.run_query(sql)
+
+    def create_routes_tables(self):
+        """Create routes and agency tables"""
+        sql = """
+CREATE TABLE IF NOT EXISTS agencies (
+  agency_id INTEGER NOT NULL,
+  agency_name TEXT,
+  CONSTRAINT agencies_wilster_pkey PRIMARY KEY(agency_id)
+);
+CREATE TABLE IF NOT EXISTS routes (
+  route_id INTEGER NOT NULL,
+  agency_name TEXT,
+  route_short_name TEXT,
+  abfahrten_list BIGINT[],
+  h_folge INTEGER[],
+  fz_folge INTERVAL(6)[],
+  hz_folge INTERVAL(6)[],
+  typ TEXT,
+  route_long_name TEXT,
+  shape_id TEXT,
+  geom public.geometry(LINESTRING, 4326),
+  touches_kreis BOOLEAN DEFAULT false NOT NULL,
+  CONSTRAINT routes_pkey PRIMARY KEY(route_id)
+);
+
+CREATE INDEX IF NOT EXISTS routes_linestring_idx ON routes
+  USING gist (geom);
+
+ CREATE TABLE IF NOT EXISTS shapes (
+  shape_id INTEGER NOT NULL,
+  h_folge INTEGER[],
+  CONSTRAINT shapes_pkey PRIMARY KEY(shape_id)
+) ;
+        """
+        self.run_query(sql)
+
+    def truncate_gtfs_tables(self):
+        """Truncate the gtfs tables"""
+        sql = """
+TRUNCATE gtfs_agency;
+TRUNCATE gtfs_calendar;
+TRUNCATE gtfs_calendar_dates;
+TRUNCATE gtfs_frequencies;
+TRUNCATE gtfs_routes;
+TRUNCATE gtfs_shapes;
+TRUNCATE gtfs_stop_times;
+TRUNCATE gtfs_stops;
+TRUNCATE gtfs_transfers;
+TRUNCATE gtfs_trips;
+        """
+        self.run_query(sql)
+
+    def truncate_routes_tables(self):
+        """Truncate the routes tables"""
+        sql = """
+TRUNCATE agencies;
+TRUNCATE routes;
+TRUNCATE shapes;
         """
         self.run_query(sql)
 
