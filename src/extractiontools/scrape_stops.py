@@ -30,6 +30,7 @@ class ExtractStops(Extract):
         """
         """
         self.extract_table('haltestellen')
+        self.copy_route_types()
 
     def final_stuff(self):
         """"""
@@ -39,15 +40,31 @@ class ExtractStops(Extract):
         """
         CREATE INDEX
         """
-
         sql = """
-    ALTER TABLE {schema}.haltestellen ADD PRIMARY KEY ("H_ID");
-    CREATE INDEX idx_haltestellen_geom
-      ON {schema}.haltestellen
-      USING gist
-      (geom);
+ALTER TABLE {schema}.haltestellen ADD PRIMARY KEY ("H_ID");
+CREATE INDEX idx_haltestellen_geom
+ON {schema}.haltestellen USING gist(geom);
+ALTER TABLE {schema}.route_types ADD PRIMARY KEY (typ);
             """.format(schema=self.schema)
         self.run_query(sql, self.conn1)
+
+    def copy_route_types(self):
+        """"""
+        sql = """
+
+CREATE TABLE {temp}.route_types
+(
+  route_type integer NOT NULL,
+  name text,
+  typ text NOT NULL
+);
+
+INSERT INTO {temp}.route_types
+SELECT *
+FROM {schema}.route_types;
+        """
+        self.run_query(sql.format(temp=self.temp, schema=self.schema),
+                       conn=self.conn0)
 
 
 class ScrapeStops(Extract):
