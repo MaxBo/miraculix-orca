@@ -1000,7 +1000,6 @@ WHERE
 UPDATE trips f
 SET stop_id = c.stop1
 
-SELECT *
 FROM
 (SELECT f.abfahrt_id, f.fahrt_index, b.stop1
 
@@ -1503,6 +1502,7 @@ WHERE departure_time IS NULL;
                         logger.info(sql)
                         cur.copy_expert(sql, f)
                     z.write(fn, tablename)
+                    os.remove(fn)
 
 
             sql = '''RESET CLIENT_ENCODING;'''
