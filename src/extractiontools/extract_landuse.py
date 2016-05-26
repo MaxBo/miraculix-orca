@@ -39,6 +39,7 @@ class ExtractLanduse(Extract):
         self.extract_corine_vector()
         self.extract_aster()
         self.extract_all_corine_raster()
+        self.extract_gmes_vector()
 
     def extract_oceans(self):
         """
@@ -168,12 +169,52 @@ WITH NO DATA;
                                   target_srid=self.target_srid),
                        conn=self.conn0)
 
+    def extract_gmes_vector(self):
+        """
+        Extract GMES Urban Atlas Landcover data and transform into target srid
+        """
+        sql = """
+SELECT
+  c.gid, c.country, c.cities, c.fua_or_cit,
+  st_multi(st_transform(c.geom, {target_srid}))::geometry('MULTIPOLYGON',
+  {target_srid}) AS geom
+INTO {temp}.{gmes}
+FROM {schema}.{gmes} c, {temp}.boundary tb
+WHERE
+c.geom && tb.source_geom
+            """
+        self.run_query(sql.format(temp=self.temp, schema=self.schema,
+                                      target_srid=self.target_srid,
+                                      gmes='ua2012_boundary'),
+                       conn=self.conn0, )
+
+        sql = """
+SELECT
+  c.gid, c.country, c.cities, c.fua_or_cit,
+  c.code2012 AS code,
+  c.item2012 AS item,
+  c.prod_date,
+  st_multi(st_transform(c.geom, {target_srid}))::geometry('MULTIPOLYGON',
+  {target_srid}) AS geom
+INTO {temp}.{gmes}
+FROM {schema}.{gmes} c, {temp}.boundary tb
+WHERE
+c.geom && tb.source_geom
+            """
+        for gmes in self.options.gmes:
+            self.run_query(sql.format(temp=self.temp, schema=self.schema,
+                                      target_srid=self.target_srid,
+                                      gmes=gmes),
+                           conn=self.conn0)
+
+
     def create_index(self):
         """
         CREATE INDEX
         """
         self.create_index_oceans()
         self.create_index_corine()
+        self.create_index_gmes()
         self.add_raster_index_and_overviews(self.aster_overviews,
                                             self.schema,
                                             self.raster_table)
@@ -200,6 +241,36 @@ WITH NO DATA;
             self.tables2cluster.append('{schema}.{corine}'.format(
                 schema=self.schema,
                 corine=corine))
+
+    def create_index_gmes(self):
+        """ Corine GMES Index"""
+        sql = """
+    ALTER TABLE {schema}.{gmes} ADD PRIMARY KEY (gid);
+    CREATE INDEX {gmes}_geom_idx
+      ON {schema}.{gmes}
+      USING gist(geom);
+        """
+        self.run_query(sql.format(schema=self.schema,
+                                  gmes='ua2012_boundary'), conn=self.conn1)
+
+
+        sql = """
+    ALTER TABLE {schema}.{gmes} ADD PRIMARY KEY (gid);
+    CREATE INDEX {gmes}_geom_idx
+      ON {schema}.{gmes}
+      USING gist(geom);
+    CREATE INDEX idx_{gmes}_code
+      ON {schema}.{gmes}
+      USING btree(code);
+    ALTER TABLE {schema}.{gmes} CLUSTER ON {gmes}_geom_idx;
+    """
+        for gmes in self.options.gmes:
+
+            self.run_query(sql.format(schema=self.schema,
+                                      gmes=gmes), conn=self.conn1)
+            self.tables2cluster.append('{schema}.{gmes}'.format(
+                schema=self.schema,
+                gmes=gmes))
 
     def create_index_oceans(self):
         """Oceans Index"""
@@ -259,6 +330,10 @@ if __name__ == '__main__':
     parser.add_argument('--corine', action="store", nargs='*',
                         help="specify the corine datasets",
                         dest="corine", default=['clc12'])
+
+    parser.add_argument('--gmes', action="store", nargs='*',
+                        help="specify the corine datasets",
+                        dest="gmes", default=['ua2012'])
 
 
     options = parser.parse_args()
