@@ -53,6 +53,7 @@ class ScriptRunner(DBApp):
         if self.options.recreate_db:
             self.update_metatable()
             self.create_db()
+        self.update_script_ids()
         self.choose_scripts()
         self.run_scripts()
 
@@ -81,6 +82,28 @@ class ScriptRunner(DBApp):
                            user=op.user,
                            password=password,
                            db=op.destination_db)
+
+    def update_script_ids(self):
+        """
+        Update the script ids from the master scripts
+        """
+        with Connection(login=self.login) as conn:
+            self.conn = conn
+            sql = '''
+UPDATE meta.scripts s
+SET id = -m.id
+FROM meta.master_scripts m
+WHERE s.scriptcode = m.scriptcode
+AND s.id != m.id;
+UPDATE meta.scripts s
+SET id = m.id
+FROM meta.master_scripts m
+WHERE s.scriptcode = m.scriptcode
+AND s.id != m.id;
+            '''
+            self.run_query(sql)
+            self.conn.commit()
+
 
     def choose_scripts(self):
         """
