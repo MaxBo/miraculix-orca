@@ -20,13 +20,13 @@ class ScrapeTimetable(ScrapeStops):
                  db='extract'):
         """"""
         super(ScrapeTimetable, self).__init__(options, db=db)
-        self.set_date(options.year, options.month, options.day)
+        self.set_date(options.date)
         self.recreate_tables = options.recreate_tables
 
-    def set_date(self, year, month, day):
+    def set_date(self, date):
         """
         """
-        self.date = Date(year, month, day)
+        self.date = Date.from_string(date)
 
     def scrape(self):
         """"""
@@ -531,15 +531,9 @@ if __name__=='__main__':
                         help="destination database",
                         dest="destination_db", default='extract')
 
-    parser.add_argument('--day', action="store", type=int,
-                        help="day, default: day of today",
-                        dest="day")
-    parser.add_argument('--month', action="store", type=int,
-                        help="month, default: month of today",
-                        dest="month")
-    parser.add_argument('--year', action="store", type=int,
-                        help="year, default: year of today",
-                        dest="year")
+    parser.add_argument('--date', action="store", type=str,
+                        help="date in Format DD.MM.YYYY, default: today",
+                        dest="date")
 
     parser.add_argument('--recreate-tables', action="store_true",
                         help="recreate the tables", default=False,

@@ -11,7 +11,7 @@ import sys
 import codecs
 import csv
 from pyproj import Proj, transform
-from simcommon.matrixio import XRecArray
+#from simcommon.matrixio import XRecArray
 import numpy as np
 
 from extractiontools.utils.utf8csv import UnicodeWriter
@@ -87,7 +87,7 @@ class Table(object):
         return ('NR', )
 
     def get_pkey(self, row):
-        return tuple(getattr(row, col) for col in self.pkey)
+        return tuple(getattr(row, col) for col in self.pkey())
 
     def get_value(self, name, row):
         idx = self.col_idx[name]
@@ -272,8 +272,8 @@ class GTFSTable(object):
         """add a row"""
         self.rows.append(row)
 
-    def add_rows(self.data):
-        self.rows = XRecArray.empty(self.n_rows, dtype=self.cols.dtype)
+    def add_rows(self, data):
+        self.rows = np.recarray.empty(self.n_rows, dtype=self.cols.dtype)
 
     def write_rows(self, writer):
         """write the rows"""

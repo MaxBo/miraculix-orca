@@ -11,15 +11,15 @@ import os
 import zipfile
 
 
-class Hafas(Extract):
+class HafasDB2GTFS(Extract):
     """Convert Hafas to GTFS"""
 
     schema = 'timetables'
 
     def __init__(self, options, db):
-        super(Hafas, self).__init__(destination_db=db, options=options)
+        super(HafasDB2GTFS, self).__init__(destination_db=db, options=options)
         self.options = options
-        self.today = Date(options.year, options.month, options.day)
+        self.today = Date.from_string(options.date)
 
     def convert(self):
         with Connection(self.login1) as conn:
@@ -370,8 +370,23 @@ FROM {schema}.fahrten f;
     def create_aggregate_functions(self):
         """
         """
-        sql = """
-DROP AGGREGATE IF EXISTS public.array_accum (anyelement);
+        # check if aggregate function already exists
+        sql = '''
+SELECT 1
+FROM pg_proc p
+WHERE
+p.pronamespace = 'public'::regnamespace AND
+p.proname = 'array_accum' AND
+p.proisagg
+AND p.prorettype = 'anyarray'::regtype::oid
+AND p.proargtypes = ARRAY['anyelement'::regtype]::oidvector
+;
+        '''
+        cur = self.conn.cursor()
+        cur.execute(sql)
+        # if not exists yet
+        if not cur.rowcount:
+            sql = """
 CREATE AGGREGATE public.array_accum (anyelement)
 (
     sfunc = array_append,
@@ -379,7 +394,7 @@ CREATE AGGREGATE public.array_accum (anyelement)
     initcond = '{}'
 );
         """
-        self.run_query(sql)
+            self.run_query(sql)
 
     def count(self):
         sql = 'SELECT count(*) FROM stops;'
@@ -442,11 +457,21 @@ UPDATE trips SET
         str_tomorrow = '{:%Y%m%d}'.format(self.today + datetime.timedelta(1))
         sql = '''
 TRUNCATE gtfs_calendar;
-INSERT INTO gtfs_calendar VALUES(1,0,0,0,0,0,0,0,{today},{tomorrow});
 TRUNCATE gtfs_calendar_dates;
+'''
+        self.run_query(sql)
+        # if gtfs should be valid only on one day
+        if self.options.only_one_day:
+            sql = '''
+INSERT INTO gtfs_calendar VALUES(1,0,0,0,0,0,0,0,{today},{tomorrow});
 INSERT INTO gtfs_calendar_dates VALUES(1,{today},1);
 INSERT INTO gtfs_calendar_dates VALUES(1,{tomorrow},1);
         '''.format(today=str_today, tomorrow=str_tomorrow)
+        # otherwise its valid on all days
+        else:
+            sql = '''
+INSERT INTO gtfs_calendar VALUES(1,1,1,1,1,1,1,1,20000101,20991231);
+            '''
         self.run_query(sql)
 
     def set_arrival_to_day_before(self):
@@ -1474,10 +1499,14 @@ WHERE departure_time IS NULL;
         """.format(today=self.today.day)
         self.run_query(sql)
 
-    def export_gtfs(self, path=''):
+    def export_gtfs(self):
         """
         exports the data to the path
         """
+        path = os.path.join(self.options.base_path,
+                            self.options.destination_db,
+                            self.options.subfolder)
+
         with Connection(self.login1) as conn:
             self.conn = conn
             self.set_search_path()
@@ -1487,15 +1516,16 @@ WHERE departure_time IS NULL;
             cur.execute(sql.format(encoding=encoding))
             tables = ['stops', 'agency', 'stop_times', 'routes', 'trips', 'shapes',
                       'calendar', 'calendar_dates', 'transfers']
-            if not os.path.exists(path):
-                os.mkdir(path)
-            zipfilename = os.path.join(path,
+            folder = path.replace('~', os.environ['HOME'])
+            if not os.path.exists(folder):
+                os.mkdir(folder)
+            zipfilename = os.path.join(folder,
                                        '{}.zip'.format(self.destination_db))
             with zipfile.ZipFile(zipfilename, 'w') as z:
                 for table in tables:
                     tn = 'gtfs_{tn}'.format(tn=table)
                     tablename = '{tn}.txt'.format(tn=table)
-                    fn = os.path.join(path, tablename)
+                    fn = os.path.join(folder, tablename)
                     logger.info('write {}'.format(fn))
                     with open(fn, 'w') as f:
                         sql = self.conn.copy_sql.format(tn=tn, fn=fn)
@@ -1504,26 +1534,12 @@ WHERE departure_time IS NULL;
                     z.write(fn, tablename)
                     os.remove(fn)
 
-
             sql = '''RESET CLIENT_ENCODING;'''
             cur.execute(sql)
 
 
 if __name__=='__main__':
     parser = ArgumentParser(description="Scrape Stops in a given bounding box")
-
-    parser.add_argument("-t", '--top', action="store",
-                        help="top", type=float,
-                        dest="top", default=54.65)
-    parser.add_argument("-b", '--bottom,', action="store",
-                        help="bottom", type=float,
-                        dest="bottom", default=54.6)
-    parser.add_argument("-r", '--right', action="store",
-                        help="right", type=float,
-                        dest="right", default=10.0)
-    parser.add_argument("-l", '--left', action="store",
-                        help="left", type=float,
-                        dest="left", default=9.95)
 
     parser.add_argument('--host', action="store",
                         help="host",
@@ -1539,29 +1555,34 @@ if __name__=='__main__':
                         help="destination database",
                         dest="destination_db", default='extract')
     parser.add_argument('--source-db', action="store",
-                        help="source database",
+                        help="source database with stop coordinates (Default: Europe)",
                         dest="source_db", default='europe')
 
-    parser.add_argument('--day', action="store", type=int,
-                        help="day, default: day of today",
-                        dest="day")
-    parser.add_argument('--month', action="store", type=int,
-                        help="month, default: month of today",
-                        dest="month")
-    parser.add_argument('--year', action="store", type=int,
-                        help="year, default: year of today",
-                        dest="year")
+    parser.add_argument('--date', action="store", type=str,
+                        help="date in Format DD.MM.YYYY",
+                        dest="date")
 
-    parser.add_argument('--folder', action="store", type=str,
+    parser.add_argument('--only-one-day', action='store_true',
+                        help='''
+if only-one-day is selected, the gtfs-feed will be valid only on the selected date,
+otherwise its valid all days''', dest='only_one_day', default=False)
+
+
+    parser.add_argument('--subfolder', action="store",
+                        help="""subfolder within the project folder
+                        to store the gtfs files""",
+                        dest="subfolder", default='otp')
+
+    parser.add_argument('--base-path', action="store", type=str,
                         help="folder to store the resulting gtfs files",
-                        dest="folder", default=r'/tmp/gtfs')
+                        dest="base_path", default=r'~/gis/projekte')
 
 
     options = parser.parse_args()
 
-    hafas = Hafas(options, db=options.destination_db)
+    hafas = HafasDB2GTFS(options, db=options.destination_db)
     hafas.set_login(host=options.host, port=options.port, user=options.user)
     hafas.get_target_boundary_from_dest_db()
     hafas.get_target_srid_from_dest_db()
     hafas.convert()
-    hafas.export_gtfs(path=options.folder)
+    hafas.export_gtfs()

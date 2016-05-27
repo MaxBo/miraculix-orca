@@ -32,6 +32,19 @@ class Date(datetime.date):
         """"""
         return repr(self)
 
+    @classmethod
+    def from_string(cls, datestring):
+        """Create a Date-instance from a datestring in format DD.MM.YYYY"""
+        if not datestring:
+            return Date.__new__(cls)
+        try:
+            day, month, year = (int(x) for x in datestring.split('.'))
+        except ValueError as e:
+            msg = '{} not valid for format DD.MM.YYYY'.format(datestring)
+
+            raise ValueError(msg)
+        return super(Date, cls).__new__(cls, year, month, day)
+
     def get_timestamp(self, time_to_convert):
         """
         convert a date to a timestamd
