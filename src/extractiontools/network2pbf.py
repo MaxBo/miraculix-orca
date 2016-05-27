@@ -197,7 +197,7 @@ CREATE OR REPLACE VIEW {schema}.users AS
         folder = os.path.join(self.folder,
                               'projekte',
                               self.options.destination_db,
-                              'pbf', )
+                              self.options.subfolder, )
         ret = subprocess.call('mkdir -p {}'.format(folder), shell=self.SHELL)
 
         file_path = os.path.join(folder, fn)
@@ -206,7 +206,7 @@ CREATE OR REPLACE VIEW {schema}.users AS
             to_xml = ' --tee --write-xml file={xml_file}.osm.gz '.format(xml_file=file_path)
         else:
             to_xml = ''
-        cmd = '{OSMOSIS} -v --read-pgsql authFile="{authfile}" host={host}:{port} user={user} database={db} --dataset-dump {to_xml}--write-pbf file={fn}.pbf'
+        cmd = '{OSMOSIS} -v --read-pgsql authFile="{authfile}" host={host}:{port} user={user} database={db} --dataset-dump {to_xml}--write-pbf file={fn}.osm.pbf'
 
         full_cmd = cmd.format(OSMOSIS=self.OSMOSISPATH,
                               authfile=self.AUTHFILE,
@@ -232,7 +232,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--host', action="store",
                         help="host",
-                        dest="host", default='gis.ggr-planung.de')
+                        dest="host", default='localhost')
     parser.add_argument("-p", '--port', action="store",
                         help="port", type=int,
                         dest="port", default=5432)
@@ -245,13 +245,18 @@ if __name__ == '__main__':
                         help="network",
                         dest="network", default='network_fr')
 
+    parser.add_argument('--subfolder', action="store",
+                        help="""subfolder within the project folder
+                        to store the pbf files""",
+                        dest="subfolder", default='otp')
+
     parser.add_argument("-s", '--srid', action="store",
                         help="srid of the target pbf", type=int,
                         dest="srid", default='4326')
 
     parser.add_argument('--xml', action="store_true",
                         help="also export as xml",
-                        dest="xml", default='False')
+                        dest="xml", default=False)
 
     options = parser.parse_args()
 
