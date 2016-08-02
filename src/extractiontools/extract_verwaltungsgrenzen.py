@@ -20,6 +20,7 @@ class ExtractVerwaltungsgrenzen(Extract):
             pkey = self.get_primary_key(self.schema, tn, conn=self.conn0)
             if pkey:
                 self.add_pkey(tn, pkey)
+        self.add_pkey('gem_2014_ew_svb', 'ags')
 
     def add_pkey(self, tn, pkey):
         sql = """
