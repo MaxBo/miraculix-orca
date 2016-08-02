@@ -304,11 +304,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--date-areas', action="store",
                         help="Stichtag Gebietsstand",
-                        dest="date_areas")
+                        dest="date_areas", default='01.01.2016')
 
     parser.add_argument('--date-timetable', action="store",
                         help="Stichtag Fahrplandaten",
-                        dest="date_timetable")
+                        dest="date_timetable", default='01.01.2016')
 
     parser.add_argument('--folder', action="store",
                         help="Ordner, in den die FGDB kopiert werden soll",
