@@ -20,12 +20,13 @@ def main():
 
     args = parser.parse_args()
 
-    cmd = """netstat -nlp|grep :{port} """.format(port=args.port) + \
-        """| awk '{ print $7 }'  | sed 's/\/java//'"""
-    p1 = Popen([cmd, ], shell=True, stdout=PIPE)
-    pid = p1.stdout.read().strip()
-    if pid:
-        p5 = Popen(['kill', '{}'.format(pid)])
+    for port in (args.port, args.secure_port):
+        cmd = """netstat -nlp|grep :{port} """.format(port=port) + \
+            """| awk '{ print $7 }'  | sed 's/\/java//'"""
+        p1 = Popen([cmd, ], shell=True, stdout=PIPE)
+        pid = p1.stdout.read().strip()
+        if pid:
+            p5 = Popen(['kill', '{}'.format(pid)])
 
 if __name__ == "__main__":
     main()
