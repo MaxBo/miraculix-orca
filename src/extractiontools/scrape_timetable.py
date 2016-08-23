@@ -16,8 +16,7 @@ from HTMLParser import HTMLParser
 
 class ScrapeTimetable(ScrapeStops):
 
-    def __init__(self, options,
-                 db='extract'):
+    def __init__(self, options, db):
         """"""
         super(ScrapeTimetable, self).__init__(options, db=db)
         self.set_date(options.date)
@@ -38,6 +37,7 @@ class ScrapeTimetable(ScrapeStops):
             self.conn1.commit()
 
             self.get_fahrten_for_stops()
+            self.add_missing_stops()
 
     def create_timetable_tables(self):
         """(Re-Create the timetable tables)"""
@@ -349,8 +349,35 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
                 exc_type, fname, exc_tb.tb_lineno))
             pass
 
-# create a subclass and override the handler methods
+    def add_missing_stops(self):
+        """Add missing stops from master database to local database"""
+        cur = self.conn.cursor()
+
+        sql = """
+    SELECT dblink_connect_u('conn', 'dbname={sd}');
+    -- füge fehlende Haltestelle aus der Deutschland-Tabelle hinzu
+    INSERT INTO stops
+    ("H_ID", "H_Name", geom, kreis)
+    SELECT "H_ID", "H_Name", st_transform(geom, {srid}) AS geom, kreis
+    FROM dblink('conn',
+    'SELECT h."H_ID", h."H_Name", h.geom, h.kreis
+    FROM timetables.haltestellen AS h') AS hd(
+    "H_ID" integer,
+    "H_Name" text,
+    geom geometry,
+    kreis text)
+    WHERE hd."H_ID" NOT IN (SELECT DISTINCT h."H_ID" FROM stops h)
+    AND hd."H_Name" IN (SELECT DISTINCT f."H_Name" FROM trips AS f);
+    """
+
+        query = sql.format(srid=self.target_srid, sd=self.options.source_db)
+        logger.info(query)
+        cur.execute(query)
+        logger.info('{msg}'.format(msg=cur.statusmessage))
+
+
 class MyHTMLParser(HTMLParser):
+    """create a subclass and override the handler methods"""
     def __init__(self):
         HTMLParser.__init__(self)
         self.recording_route = 0
@@ -530,6 +557,9 @@ if __name__=='__main__':
     parser.add_argument('-n', '--destination-db', action="store",
                         help="destination database",
                         dest="destination_db", default='extract')
+    parser.add_argument('--source-db', action="store",
+                        help="source database",
+                        dest="source_db", default='europe')
 
     parser.add_argument('--date', action="store", type=str,
                         help="date in Format DD.MM.YYYY, default: today",
