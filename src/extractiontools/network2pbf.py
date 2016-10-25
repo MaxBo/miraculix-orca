@@ -203,7 +203,7 @@ CREATE OR REPLACE VIEW {schema}.users AS
         file_path = os.path.join(folder, fn)
 
         if self.options.xml:
-            to_xml = ' --tee --write-xml file={xml_file}.osm.gz '.format(xml_file=file_path)
+            to_xml = ' --tee --write-xml file={xml_file}.osm.bz2 '.format(xml_file=file_path)
         else:
             to_xml = ''
         cmd = '{OSMOSIS} -v --read-pgsql authFile="{authfile}" host={host}:{port} user={user} database={db} --dataset-dump {to_xml}--write-pbf file={fn}.osm.pbf'
