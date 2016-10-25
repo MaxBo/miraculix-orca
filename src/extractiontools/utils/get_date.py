@@ -4,6 +4,11 @@
 
 import datetime
 import time
+import pytz
+
+
+berlin = pytz.timezone('Europe/Berlin')
+
 
 class Date(datetime.date):
     """date with today as default value for year, month and day"""
@@ -67,5 +72,19 @@ class Date(datetime.date):
         return self.timetuple().tm_mday
 
 def get_timestamp2(time_to_convert):
-    if time_to_convert:
-        return time.strftime('%Y-%m-%d %H:%M:%SCEST', time_to_convert)
+    t = time_to_convert
+
+    if t:
+        dt = datetime.datetime(t.tm_year,
+                               t.tm_mon,
+                               t.tm_mday,
+                               t.tm_hour,
+                               t.tm_min,
+                               t.tm_sec)
+
+        # check Sommerzeit
+        local = berlin.localize(dt, is_dst=False)
+        tz = 'CEST' if local.dst() else 'CET'
+        fmt = '%Y-%m-%d %H:%M:%S{tz}'.format(tz=tz)
+
+        return dt.strftime(fmt)
