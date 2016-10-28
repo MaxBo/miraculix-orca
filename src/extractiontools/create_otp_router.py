@@ -2,8 +2,8 @@ import os
 from shutil import move
 from argparse import ArgumentParser
 from subprocess import call
+from extractiontools.otp_config import OTP_JAR
 
-OTP_JAR='/opt/repos/OpenTripPlanner/target/otp-0.20.0-SNAPSHOT-shaded.jar'
 
 def main():
     parser = ArgumentParser(description="OTP Routererzeugung")

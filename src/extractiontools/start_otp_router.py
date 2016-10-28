@@ -2,8 +2,10 @@ import os
 from shutil import move
 from argparse import ArgumentParser
 from subprocess import Popen, call, PIPE
+from extractiontools.otp_config import OTP_JAR
+from extractiontools.stop_otp_router import kill_process_on_port
+import time
 
-OTP_JAR='/opt/repos/OpenTripPlanner/target/otp-0.20.0-SNAPSHOT-shaded.jar'
 
 def main():
     parser = ArgumentParser(description="OTP Routererzeugung")
@@ -44,17 +46,10 @@ def main():
     router_name = '_'.join((args.name, args.suffix))
 
     # stop router if exists
-    cmd = """netstat -nlp|grep :{port} """.format(port=args.port) + \
-        """| awk '{ print $7 }'  | sed 's/\/java//'"""
-    p1 = Popen([cmd, ], shell=True, stdout=PIPE)
-    pid = p1.stdout.read().strip()
-    if pid:
-        p5 = Popen(['kill', '{}'.format(pid)])
+    for port in (args.port, args.secure_port):
+        kill_process_on_port(port)
 
-
-
-    # ToDo: Abfrage, ob wirklich killen
-
+    # start Router
     p2 = Popen(['java', '-Xmx2G', '-jar', OTP_JAR, '--graphs', graph_folder,
           '--router ', router_name,
           '--server ',
