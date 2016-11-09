@@ -37,7 +37,9 @@ class ScrapeTimetable(ScrapeStops):
             self.conn1.commit()
 
             self.get_fahrten_for_stops()
+            self.conn1.commit()
             self.add_missing_stops()
+            self.conn1.commit()
 
     def create_timetable_tables(self):
         """(Re-Create the timetable tables)"""
@@ -351,26 +353,28 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
 
     def add_missing_stops(self):
         """Add missing stops from master database to local database"""
-        cur = self.conn.cursor()
+        cur = self.conn1.cursor()
 
         sql = """
     SELECT dblink_connect_u('conn', 'dbname={sd}');
     -- füge fehlende Haltestelle aus der Deutschland-Tabelle hinzu
-    INSERT INTO stops
+    INSERT INTO {s}.haltestellen
     ("H_ID", "H_Name", geom, kreis)
     SELECT "H_ID", "H_Name", st_transform(geom, {srid}) AS geom, kreis
     FROM dblink('conn',
     'SELECT h."H_ID", h."H_Name", h.geom, h.kreis
-    FROM timetables.haltestellen AS h') AS hd(
+    FROM {s}.haltestellen AS h') AS hd(
     "H_ID" integer,
     "H_Name" text,
     geom geometry,
     kreis text)
-    WHERE hd."H_ID" NOT IN (SELECT DISTINCT h."H_ID" FROM stops h)
-    AND hd."H_Name" IN (SELECT DISTINCT f."H_Name" FROM trips AS f);
+    WHERE hd."H_ID" NOT IN (SELECT DISTINCT h."H_ID" FROM {s}.haltestellen h)
+    AND hd."H_Name" IN (SELECT DISTINCT f."H_Name" FROM {s}.fahrten AS f);
     """
 
-        query = sql.format(srid=self.target_srid, sd=self.options.source_db)
+        query = sql.format(srid=self.target_srid,
+                           sd=self.options.source_db,
+                           s=self.schema)
         logger.info(query)
         cur.execute(query)
         logger.info('{msg}'.format(msg=cur.statusmessage))
