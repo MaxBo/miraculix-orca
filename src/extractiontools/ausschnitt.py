@@ -455,11 +455,24 @@ class ExtractMeta(Extract):
     """
     schema = 'meta'
 
+    def get_credentials(self):
+        """get credentials for db_link user"""
+        sql = """
+SELECT key, value FROM meta_master.credentials;
+        """
+        cursor = self.conn0.cursor()
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        credentials = dict(row for row in rows)
+        return credentials
+
     def additional_stuff(self):
         """
         additional steps, to be defined in the subclass
         """
         cursor = self.conn0.cursor()
+
+        credentials = self.get_credentials()
 
         # create dblink tables
         sql = """
@@ -469,7 +482,7 @@ CREATE OR REPLACE FUNCTION {temp}.select_master_scripts()
 $BODY$
 DECLARE
 BEGIN
-perform dblink_connect_u('conn', 'dbname={sd}');
+perform dblink_connect_u('conn', 'host=localhost dbname={sd} user={source_user} password={source_pw}');
 RETURN QUERY
 SELECT *
 FROM dblink('conn',
@@ -497,7 +510,7 @@ CREATE OR REPLACE FUNCTION {temp}.select_dependencies()
 $BODY$
 DECLARE
 BEGIN
-perform dblink_connect_u('conn', 'dbname={sd}');
+perform dblink_connect_u('conn', 'host=localhost dbname={sd} user={source_user} password={source_pw}');
 RETURN QUERY
 SELECT *
 FROM dblink('conn',
@@ -531,7 +544,9 @@ UNION
     local_dependencies.needs_script
    FROM {temp}.local_dependencies;
         """
-        cursor.execute(sql.format(temp=self.temp, sd=self.source_db))
+        cursor.execute(sql.format(temp=self.temp, sd=self.source_db,
+                                  source_user=credentials['user'],
+                                  source_pw=credentials['password']))
 
         sql = """
 CREATE OR REPLACE FUNCTION {temp}.select_dependent_scripts()
