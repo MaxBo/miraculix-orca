@@ -80,11 +80,11 @@ def get_timestamp2(time_to_convert, date=None):
 
     Returns
     -------
-    timestamp : str
+    timestamp : str or None
     """
     t = time_to_convert
     if not t:
-        return ''
+        return None
 
     if date is None:
         date = Date(year = t.tm_year,
