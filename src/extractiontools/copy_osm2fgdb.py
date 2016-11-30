@@ -25,6 +25,7 @@ class CopyOSM2FGDB(Copy2FGDB):
             self.create_natural()
             self.create_waterways()
             self.create_tourism()
+            self.create_shops()
 
             self.conn.commit()
 
@@ -180,7 +181,7 @@ CREATE OR REPLACE VIEW {schema}.{view} AS
         self.create_layer_by_key(view, keys, geometrytype='polygons')
 
     def create_leisure(self):
-        """create buildings layer"""
+        """create leisure layer"""
         keys = ['leisure']
         view = 'leisure_pnt'
         self.create_layer_by_key(view, keys, geometrytype='nodes')
@@ -190,7 +191,7 @@ CREATE OR REPLACE VIEW {schema}.{view} AS
         self.create_layer_by_key(view, keys, geometrytype='polygons')
 
     def create_tourism(self):
-        """create buildings layer"""
+        """create tourism layer"""
         keys = ['tourism']
         view_pnt = 'tourism_pnt'
         self.create_layer_by_key(view_pnt, keys, geometrytype='nodes')
@@ -203,14 +204,30 @@ CREATE OR REPLACE VIEW {schema}.{view} AS
                                     view_pnt,
                                     view_lines,
                                     view_polys)
+
+    def create_shops(self):
+        """create shops layer"""
+        keys = ['shop']
+        view_pnt = 'shop_pnt'
+        self.create_layer_by_key(view_pnt, keys, geometrytype='nodes')
+        view_lines = 'shop_lines'
+        self.create_layer_by_key(view_lines, keys, geometrytype='lines')
+        view_polys = 'shop_polys'
+        self.create_layer_by_key(view_polys, keys, geometrytype='polygons')
+        self.create_composite_layer('shops',
+                                    self.options.schema,
+                                    view_pnt,
+                                    view_lines,
+                                    view_polys)
+
     def create_natural(self):
-        """create buildings layer"""
+        """create natural layer"""
         keys = ['natural']
         view = 'natural'
         self.create_layer_by_key(view, keys, geometrytype='polygons')
 
     def create_waterways(self):
-        """create buildings layer"""
+        """create waterway layer"""
         keys = ['waterway']
         view_lines = 'waterways_lines'
         self.create_layer_by_key(view_lines, keys, geometrytype='lines')
