@@ -35,6 +35,10 @@ def main():
                         help="port on which the OTP HTTPS Server should listen",
                         dest="secure_port", default=7788)
 
+    parser.add_argument("--analyst", action="store_true",
+                        help="flag to start also the analyst functionality",
+                        dest="analyst")
+
     args = parser.parse_args()
 
     base_path = args.base_path.replace('~', os.environ['HOME'])
@@ -49,13 +53,15 @@ def main():
     for port in (args.port, args.secure_port):
         kill_process_on_port(port)
 
+    analyst = '--analyst' if args.analyst else None
+
     # start Router
     p2 = Popen(['java', '-Xmx2G', '-jar', OTP_JAR, '--graphs', graph_folder,
           '--router ', router_name,
           '--server ',
           '--port ', '{}'.format(args.port),
           '--securePort ', '{}'.format(args.secure_port),
-          ])
+          analyst])
 
     print "Server started"
 
