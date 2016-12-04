@@ -573,7 +573,6 @@ $BODY$
         cursor.execute(sql.format(temp=self.temp))
 
         sql = """
-
 CREATE OR REPLACE FUNCTION {temp}.unselect_dependent_scripts()
   RETURNS trigger AS
 $BODY$
@@ -589,6 +588,22 @@ BEGIN
   END IF;
   RETURN NEW;
 
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+        """
+        cursor.execute(sql.format(temp=self.temp))
+
+        sql = """
+CREATE OR REPLACE FUNCTION {temp}.check_script_id()
+  RETURNS trigger AS
+$BODY$
+DECLARE mid integer;
+BEGIN
+  SELECT m.id INTO mid FROM meta.master_scripts m WHERE m.scriptcode = NEW.scriptcode;
+  NEW.id := mid;
+  RETURN NEW;
 END;
 $BODY$
   LANGUAGE plpgsql VOLATILE
@@ -621,6 +636,11 @@ CREATE TRIGGER scripts_unselect_trigger
   FOR EACH ROW
   EXECUTE PROCEDURE {temp}.unselect_dependent_scripts();
 
+CREATE TRIGGER scripts_update_trigger
+  BEFORE UPDATE
+  ON {temp}.scripts
+  FOR EACH ROW
+  EXECUTE PROCEDURE {temp}.check_script_id();
 '''.format(schema=self.schema, temp=self.temp)
         self.run_query(sql, conn=self.conn0)
         self.conn0.commit()
