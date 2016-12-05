@@ -602,7 +602,9 @@ $BODY$
 DECLARE mid integer;
 BEGIN
   SELECT m.id INTO mid FROM meta.master_scripts m WHERE m.scriptcode = NEW.scriptcode;
-  NEW.id := mid;
+  IF NOT mid IS NULL THEN
+      NEW.id := mid;
+  END IF;
   RETURN NEW;
 END;
 $BODY$
