@@ -14,7 +14,7 @@ def main():
                         help="folder to store the resulting gtfs files",
                         dest="base_path", default=r'~/gis')
 
-    parser.add_argument("--destination-db", "-n", action="store",
+    parser.add_argument("--destination-db", "-n", action="store", nargs='+',
                         help="name of the router",
                         dest="name", required=True)
 
@@ -22,7 +22,7 @@ def main():
                         help="folder with graphs",
                         dest="graph_folder")
 
-    parser.add_argument("--suffix", action="store",
+    parser.add_argument("--suffix", action="store", nargs='+',
                         help="suffix for graph name",
                         dest="suffix", default='ov')
 
@@ -47,7 +47,21 @@ def main():
     graph_folder = args.graph_folder or os.path.join(base_path,
                                                      'otp_graphs')
 
-    router_name = '_'.join((args.name, args.suffix))
+    process_args = ['java', '-Xmx2G', '-jar', OTP_JAR, '--graphs',
+                    graph_folder, ]
+
+    n_names = len(args.name)
+    n_suffix = len(args.suffix)
+    n_routers = max(n_names, n_suffix)
+    if (n_names > 1 and n_suffix > 1 and n_names != n_suffix):
+        raise ValueError(
+            'wrong number of suffixes ({}) given for {} names'.format(n_names,
+                                                                      n_suffix))
+    for i in range(n_routers):
+        name = args.name[0] if n_names == 1 else args.name[i]
+        suffix = args.suffix[0] if n_suffix == 1 else args.suffix[i]
+        router_name = '_'.join((name, suffix))
+        process_args.extend(['--router ', router_name])
 
     # stop router if exists
     for port in (args.port, args.secure_port):
@@ -55,15 +69,16 @@ def main():
 
     analyst = '--analyst' if args.analyst else None
 
-    # start Router
-    p2 = Popen(['java', '-Xmx2G', '-jar', OTP_JAR, '--graphs', graph_folder,
-          '--router ', router_name,
-          '--server ',
+    process_args.extend(['--server ',
           '--port ', '{}'.format(args.port),
           '--securePort ', '{}'.format(args.secure_port),
           analyst])
 
-    print "Server started"
+    # start Router
+    print(process_args)
+    p2 = Popen(process_args)
+
+    print("Server started")
 
 if __name__ == "__main__":
     main()
