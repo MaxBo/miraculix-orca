@@ -24,7 +24,7 @@ def main():
 
     parser.add_argument("--suffix", action="store", nargs='+',
                         help="suffix for graph name",
-                        dest="suffix", default='ov')
+                        dest="suffix", default=['ov'])
 
 
     parser.add_argument("--port", '-p', action="store", type=int,
