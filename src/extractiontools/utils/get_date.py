@@ -45,7 +45,10 @@ class Date(datetime.date):
         try:
             day, month, year = (int(x) for x in datestring.split('.'))
         except ValueError as e:
-            msg = '{} not valid for format DD.MM.YYYY'.format(datestring)
+            day, month, year = (int(x) for x in datestring.split('/'))
+        except ValueError as e:
+            msg = '{} not valid for format DD.MM.YYYY or DD/MM/YYYY'.format(
+                datestring)
 
             raise ValueError(msg)
         return super(Date, cls).__new__(cls, year, month, day)

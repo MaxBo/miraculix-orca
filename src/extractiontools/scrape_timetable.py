@@ -164,8 +164,10 @@ FROM haltestellen
             try:
                 subtree = tree.xpath('//*[@id="sqResult"]/table')
                 # count number of trips
-                # remove 3 rows for header & footer
-                fahrten_count = len(subtree[0].findall("tr")) - 3
+                elements = subtree[0].findall("tr")
+                # only elements with a attribute "key"
+                journey_rows = [e for e in elements if e.attrib.has_key('id')]
+                fahrten_count = len(journey_rows)
 
             except:
                 errCode = tree.xpath('//div[@class="errormsg leftMargin"]/text()')
@@ -181,8 +183,9 @@ FROM haltestellen
                 self.n_new = 0
                 self.n_already_in_db = 0
                 self.last_stunde = '-1'
-                for fahrt_no in range(0, fahrten_count + 1):
-                    self.parse_fahrten(fahrt_no,
+                journeys = (j.attrib['id'] for j in journey_rows)
+                for journey in journeys:
+                    self.parse_fahrten(journey,
                                        fahrten_count,
                                        tree,
                                        H_ID_Abfahrtstafel,
@@ -200,20 +203,24 @@ FROM haltestellen
                 exc_type, fname, exc_tb.tb_lineno))
 
     def parse_fahrten(self,
-                      fahrt_no,
+                      journey,
                       fahrten_count,
                       tree,
                       H_ID_Abfahrtstafel,
                       cursor,
                       H_Name_Abfahrtstafel):
         """
-        Parse Fahrt fahrt_no in the tree and query the Fahrtverlauf
+        Parse Fahrt journey in the tree and query the Fahrtverlauf
         look in Fahrten, if Fahrt already exists
         """
         try:
-            xpath_base = '//*[@id="journeyRow_'+str(fahrt_no)+'"]'
-            Fahrt_Ziel = tree.xpath(xpath_base+'/td[4]/span/a/text()')[0].replace('\n','')
-            Abfahrten = tree.xpath(xpath_base+'/td[4]/text()')[2:][0].split('\n')
+            xpath_base = '//*[@id="{}"]'.format(journey)
+            try:
+                Fahrt_Ziel = tree.xpath(xpath_base+'/td[4]/span/a/text()')[0].replace('\n','')
+                Abfahrten = tree.xpath(xpath_base+'/td[4]/text()')[2:][0].split('\n')
+            except IndexError:
+                print('Fehler beim parsen der Abfahrtstafel von {}'.format(
+                    H_Name_Abfahrtstafel))
             Abfahrtshaltestelle = Abfahrten[1].strip()
             Abfahrtsuhrzeit = Abfahrten[2]
             Ankunftsuhrzeit = Abfahrten[-2]
@@ -228,15 +235,12 @@ FROM haltestellen
                 hstID_Abfahrt = H_ID_Abfahrtstafel
 
         except:
-            if fahrt_no < fahrten_count:
-                # if there is an error, wait, except for the last fahrt
-                # this fahrt normally does not exist, but sometimes
-                # the fahrt_no journey_row start with 1 instead of 0
-                logger.warn('fehler beim Auslesen der BHF-Tafel')
-                exc_type, exc_obj, exc_tb = sys.exc_info()
-                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                print(exc_type, fname, exc_tb.tb_lineno)
-                time.sleep(10)
+            # if there is an error, wait
+            logger.warn('fehler beim Auslesen der BHF-Tafel')
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            print(exc_type, fname, exc_tb.tb_lineno)
+            time.sleep(10)
             return
 
         try:
@@ -463,16 +467,10 @@ class MyHTMLParser(HTMLParser):
                     self.first_linefeed = True
             else:
                 try:
-                    #if self.ist_Starthaltestelle:
-                        #if len(data.strip()) > 0:
-                            ## wenn Abfahrt an der Starthaltestelle vor 4 Uhr
-                            #if int(data.strip()[:2]) < 4:
-                                ## und Ankunft an der Starthaltestelle vor 4 Uhr
-                                #if self.Ankunft_vor_4Uhr:
-                                    ## korrigiere das Datum auf den Tag der Anfrage
-                                    #self.date = self.query_date
-                        #self.ist_Starthaltestelle = False
-                    zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
+                    # if tag is Delay marker
+                    if data.startswith(u'+'):
+                        return
+                    zeit = self.get_time(data)
                     if self.data_departures:
                         z = len(self.data_departures)-1
                         while z >= 0:
@@ -481,7 +479,7 @@ class MyHTMLParser(HTMLParser):
                                 if zeit < abfahrtszeit:
                                     # setze auf Folgetag
                                     self.date = self.date.shift_day(1)
-                                    zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
+                                    zeit = self.get_time(data)
                                 break
                             z -= 1
                 except Exception as F:
@@ -497,6 +495,11 @@ class MyHTMLParser(HTMLParser):
                     self.first_linefeed = False
                 else:
                     self.first_linefeed = True
+
+            # Delay Marker
+            elif data.startswith(u'+'):
+                return
+            # normal time
             else:
                 try:
                     if self.ist_Starthaltestelle:
@@ -508,11 +511,11 @@ class MyHTMLParser(HTMLParser):
                                     # korrigiere das Datum auf den Tag der Anfrage
                                     self.date = self.query_date
                         self.ist_Starthaltestelle = False
-                    zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
+                    zeit = self.get_time(data)
                     if self.data_arrivals[-1]:
                         if zeit < self.data_arrivals[-1]:
                             self.date = self.date.shift_day(1)
-                            zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
+                            zeit = self.get_time(data)
                     else:
                         # wenn keine Ankunftszeit angegeben ist, schaue, ob Zeitsprung an Abfahrt an vorheriger Haltestelle
                         z = len(self.data_departures)-1
@@ -522,12 +525,34 @@ class MyHTMLParser(HTMLParser):
                                 if zeit < abfahrtszeit:
                                     # setze auf Folgetag
                                     self.date = self.date.shift_day(1)
-                                    zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
+                                    zeit = self.get_time(data)
                                 break
                             z -= 1
                 except:
                     zeit = None
                 self.data_departures.append(zeit)
+
+    def get_time(self, data):
+        """
+        return a Time-object with the current date from the time given as string
+        in the data Parameter
+
+        Parameters
+        ----------
+        data : str
+            the time in format '14:23'
+
+        Returns
+        -------
+        zeit : time.struct_time instance
+
+        """
+        try:
+            zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
+        except ValueError as e:
+            print('"{}" could not be processed by time.strptime'.format(data))
+            raise e
+        return zeit
 
 
 if __name__=='__main__':
