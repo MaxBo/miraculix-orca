@@ -192,7 +192,7 @@ FROM haltestellen
                                        cursor,
                                        H_Name_Abfahrtstafel)
                 if self.n_new:
-                    print
+                    logger.info('')
                 logger.info(u'{} new, {} already in db'.format(
                     self.n_new,
                     self.n_already_in_db))
@@ -219,7 +219,7 @@ FROM haltestellen
                 Fahrt_Ziel = tree.xpath(xpath_base+'/td[4]/span/a/text()')[0].replace('\n','')
                 Abfahrten = tree.xpath(xpath_base+'/td[4]/text()')[2:][0].split('\n')
             except IndexError:
-                print('Fehler beim parsen der Abfahrtstafel von {}'.format(
+                logger.warn('Fehler beim parsen der Abfahrtstafel von {}'.format(
                     H_Name_Abfahrtstafel))
             Abfahrtshaltestelle = Abfahrten[1].strip()
             Abfahrtsuhrzeit = Abfahrten[2]
@@ -239,7 +239,7 @@ FROM haltestellen
             logger.warn('fehler beim Auslesen der BHF-Tafel')
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print(exc_type, fname, exc_tb.tb_lineno)
+            logger.warn(exc_type, fname, exc_tb.tb_lineno)
             time.sleep(10)
             return
 
@@ -284,7 +284,7 @@ VALUES (%s, %s, %s, %s, %s, %s);"""
                     time.sleep(sleeptime)
                     Fahrtverlauf = self.urlquery(Fahrt_URL)
                 except:
-                    print 'fehler in Abfrage des Fahrtverlaufs'
+                    logger.warn('Fehler in Abfrage des Fahrtverlaufs')
                     pass
 
                 try:
@@ -483,7 +483,7 @@ class MyHTMLParser(HTMLParser):
                                 break
                             z -= 1
                 except Exception as F:
-                    print F
+                    logger.warning(F)
                     zeit = None
                     raise
                 self.data_arrivals.append(zeit)
@@ -548,9 +548,11 @@ class MyHTMLParser(HTMLParser):
 
         """
         try:
-            zeit = time.strptime(data.strip() + ' %s' %self.date, '%H:%M %d.%m.%y')
+            zeit = time.strptime('{t} {d}'.format(t=data.strip(), d=self.date),
+                                 '%H:%M %d.%m.%y')
         except ValueError as e:
-            print('"{}" could not be processed by time.strptime'.format(data))
+            logger.warn(
+                '"{}" could not be processed by time.strptime'.format(data))
             raise e
         return zeit
 

@@ -5,7 +5,7 @@ from argparse import ArgumentParser
 
 import logging
 logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
+#logger.addHandler(logging.StreamHandler())
 logger.level = logging.DEBUG
 import sys
 import os
