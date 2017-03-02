@@ -321,11 +321,11 @@ SELECT a.attname
 FROM   pg_index i
 JOIN   pg_attribute a ON a.attrelid = i.indrelid
                      AND a.attnum = ANY(i.indkey)
-WHERE  i.indrelid = '{s}.{t}'::regclass
+WHERE  i.indrelid = '"{s}"."{t}"'::regclass
 AND    i.indisprimary;
         """.format(s=schema, t=tablename)
         cur = conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
-        pkey = ', '.join([r[0] for r in rows])
+        pkey = ', '.join(['"{}"'.format(r[0]) for r in rows])
         return pkey
