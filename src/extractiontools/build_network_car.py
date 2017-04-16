@@ -1279,19 +1279,20 @@ SELECT count(*) FROM {network}.edges_reached;
 
 CREATE OR REPLACE VIEW {network}.reached_from AS
 -- Knoten, die in Hinrichtung erreicht werden
-SELECT seq, id1 AS node, cost
+SELECT seq, node::integer, agg_cost AS cost
 FROM pgr_drivingDistance(
-'SELECT id, source, target, cost, reverse_cost FROM {network}.edge_table',
-{startvertex}, {maxcosts}, true, true
+'SELECT id, source, target, cost, reverse_cost
+FROM {network}.edge_table',
+{startvertex}, {maxcosts}, true
 );
 
 CREATE OR REPLACE VIEW {network}.reached_to AS
 -- Knoten, die in Hinrichtung erreicht werden
-SELECT seq, id1 AS node, cost
+SELECT seq, node::integer, agg_cost AS cost
 FROM pgr_drivingDistance(
-'SELECT id, source, target, reverse_cost as cost,
- cost as reverse_cost FROM {network}.edge_table',
-{startvertex}, {maxcosts}, true, true
+'SELECT id, source, target, reverse_cost as cost, cost as reverse_cost
+ FROM {network}.edge_table',
+{startvertex}, {maxcosts}, true
 );
 """.format(startvertex=startvertex, maxcosts=maxcosts, network=self.network)
         self.run_query(sql)
