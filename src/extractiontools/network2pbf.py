@@ -131,7 +131,18 @@ AND rm.member_type = 'R'
 AND rm.member_id = ar.id
 AND NOT EXISTS (SELECT 1 FROM {schema}.active_relations ar WHERE r.id = ar.id);
 
-CREATE OR REPLACE VIEW {schema}.relations AS
+        """.format(schema=self.options.user,
+                   network=self.options.network,
+                   srid=self.options.srid)
+        self.run_query(sql)
+
+        sql = """
+CREATE INDEX node_user_id_idx ON {schema}.nodes
+USING btree(user_id);
+CREATE INDEX ways_user_id_idx ON {schema}.ways
+USING btree(user_id);
+DROP VIEW IF EXISTS {schema}.relations CASCADE;
+CREATE MATERIALIZED VIEW {schema}.relations AS
  SELECT r.id,
     r.version,
     r.user_id,
@@ -141,8 +152,14 @@ CREATE OR REPLACE VIEW {schema}.relations AS
    FROM osm.relations r,
    {schema}.active_relations ar
    WHERE r.id = ar.id;
+CREATE INDEX relations_id_idx ON {schema}.relations
+USING btree(id);
+ANALYZE {schema}.relations;
+ANALYZE {schema}.nodes;
+ANALYZE {schema}.ways;
 
-CREATE OR REPLACE VIEW {schema}.relation_members AS
+DROP VIEW IF EXISTS {schema}.relation_members CASCADE;
+CREATE MATERIALIZED VIEW {schema}.relation_members AS
  SELECT rm.relation_id,
     rm.member_id,
     rm.member_type,
@@ -151,8 +168,11 @@ CREATE OR REPLACE VIEW {schema}.relation_members AS
    FROM osm.relation_members rm,
    {schema}.active_relations ar
    WHERE rm.relation_id = ar.id;
+CREATE INDEX relation_members_id_idx ON {schema}.relation_members
+USING btree(relation_id, sequence_id);
 
-CREATE OR REPLACE VIEW {schema}.users AS
+DROP VIEW IF EXISTS {schema}.users CASCADE;
+CREATE MATERIALIZED VIEW {schema}.users AS
  SELECT u.id,
     u.name
    FROM osm.users u
@@ -162,6 +182,8 @@ CREATE OR REPLACE VIEW {schema}.users AS
    (SELECT 1 FROM {schema}.ways w WHERE u.id = w.user_id)
    OR EXISTS
    (SELECT 1 FROM {schema}.nodes n WHERE u.id = n.user_id);
+CREATE INDEX users_pkey ON {schema}.users
+USING btree(id);
 
         """.format(schema=self.options.user,
                    network=self.options.network,
@@ -206,7 +228,7 @@ CREATE OR REPLACE VIEW {schema}.users AS
             to_xml = ' --tee --write-xml file={xml_file}.osm.bz2 '.format(xml_file=file_path)
         else:
             to_xml = ''
-        cmd = '{OSMOSIS} -v --read-pgsql authFile="{authfile}" host={host}:{port} user={user} database={db} --dataset-dump {to_xml}--write-pbf file={fn}.osm.pbf'
+        cmd = '{OSMOSIS} -v --read-pgsql authFile="{authfile}" host={host}:{port} user={user} database={db} --dataset-dump {to_xml}--write-pbf omitmetadata=true file={fn}.osm.pbf'
 
         full_cmd = cmd.format(OSMOSIS=self.OSMOSISPATH,
                               authfile=self.AUTHFILE,
