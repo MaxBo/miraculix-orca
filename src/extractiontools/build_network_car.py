@@ -347,55 +347,6 @@ ORDER BY wayid, segment, idx DESC;
         """.format(network=self.network)
         self.run_query(sql)
 
-    def way_marked_junctions(self):
-        sql = '''
--- markiere in in der inneren Select-Abfrage die junctions
--- in der nodelist (isjunction) und zähle die Anzahl der Knoten (lastindex)
--- in der äußeren Abfrage setze dann nur die Junctions
--- auch wirklich auf 'isjunction'=1,
--- die nicht am Anfang (wm.idx>0) oder am Ende (wm.idx < (wm.lastindex-1))
--- des Weges sind, da der Weg nur in der Mitte aufgespalten werden soll
-
-CREATE OR REPLACE VIEW {network}.way_marked_junctions AS
-SELECT
-  wm.id,
-  wm.idx,
-  wm.nodeid,
-  (wm.idx < (wm.lastindex - 1) AND wm.idx > 0
-   AND wm.isjunction IS NOT NULL)::integer AS isjunction
-FROM (
-  SELECT
-    wn.way_id AS id,
-    wn.sequence_id AS idx,
-    wn.node_id AS nodeid,
-    j.nodeid AS isjunction,
-    count(*) OVER (PARTITION BY wn.way_id) AS lastindex
-  FROM
-    osm.way_nodes wn LEFT JOIN {network}.junctions j ON wn.node_id = j.nodeid,
-    {network}.roads r
-  WHERE wn.way_id = r.id AND way_id IN (SELECT wayid FROM modify_ways)
-     ) wm;
-COMMIT;
-
-
--- erstelle einzelne Segmente aus den ways, in dem an nodes, die junctions sind, der Weg aufgespalten wird
--- zähle dazu die Segmente eines Wegs (PARTITION BY id) durch, indem die Zahl der Junctions (sum(isjunction) bis zum aktuellen node (PRECEDING) aufsummiert wird
--- dabei wird der Weg nach dem idx aufsteigend sortiert (ORDER BY idx)
-CREATE OR REPLACE VIEW n{network}.ays2links AS
-SELECT
-  id,
-  idx,
-  nodeid,
-  isjunction,
-  sum(isjunction) OVER (PARTITION BY id ORDER BY idx RANGE UNBOUNDED PRECEDING) AS segment
-FROM {network}.way_marked_junctions
-GROUP BY id, idx, nodeid, isjunction
-ORDER BY id, idx;
-COMMIT;
-
-        '''.format(network=self.network)
-        self.run_query(sql)
-
     def drop_temp_wayids(self):
         sql = '''
 DROP TABLE IF EXISTS {network}.temp_wayids;
@@ -626,7 +577,7 @@ BEGIN
     w.tags -> 'name' AS linkname, w.tags -> 'ref' AS linkref
     FROM
     (
-	SELECT fromnode, tonode, wayid, segment, St_MakeLine(geom) geom
+	SELECT fromnode, tonode, wayid, segment, St_MakeLine(geom ORDER BY lp.idx ASC) geom
 	FROM
 	 (SELECT ft.fromnode,
 		 ft.tonode,
@@ -643,7 +594,6 @@ BEGIN
 	    and lp.nodeid = n.id
 	    AND lp.wayid>fl.rowidfrom and lp.wayid <= fl.rowidto
 	    AND ft.wayid>fl.rowidfrom and ft.wayid <= fl.rowidto
-	  ORDER BY lp.idx ASC
 	)lp
 	GROUP BY fromnode, tonode, wayid, segment) AS l,
     osm.ways w
