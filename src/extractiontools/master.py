@@ -190,7 +190,7 @@ script {name} finished at {time} with returncode {ret}'''
 
                 if ret:
                     self.run_query(error_sql, values={'sc': row.scriptcode,
-                                                      'time': starttime})
+                                                      'time': endtime})
                     msg = '{script} returned ErrorCode {code}'
                     self.conn.commit()
                     raise ScriptError(msg.format(script=command, code=ret))
