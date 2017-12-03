@@ -10,6 +10,7 @@ import sys
 import datetime
 import random
 import time
+import traceback
 from extractiontools.scrape_stops import ScrapeStops, logger, Connection, logger
 from extractiontools.utils.get_date import Date, get_timestamp2
 from HTMLParser import HTMLParser
@@ -163,6 +164,9 @@ FROM haltestellen
                 t += 1
             try:
                 subtree = tree.xpath('//*[@id="sqResult"]/table')
+                if not subtree:
+                    logger.warn(u'fehler beim Lesen der BhfTafel für {}: {}:'.format(H_IDstr, H_Name_Abfahrtstafel))
+                    return
                 # count number of trips
                 elements = subtree[0].findall("tr")
                 # only elements with a attribute "key"
@@ -170,6 +174,7 @@ FROM haltestellen
                 fahrten_count = len(journey_rows)
 
             except:
+                logger.warn(traceback.format_exc())
                 errCode = tree.xpath('//div[@class="errormsg leftMargin"]/text()')
                 logger.warn(u'fehler beim Lesen der BhfTafel für {}: {}:'.format(
                     H_IDstr, H_Name_Abfahrtstafel))
@@ -197,6 +202,7 @@ FROM haltestellen
                     self.n_new,
                     self.n_already_in_db))
         except Exception:
+            logger.warn(traceback.format_exc())
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             logger.warn('{} {} {}'.format(
@@ -219,6 +225,7 @@ FROM haltestellen
                 Fahrt_Ziel = tree.xpath(xpath_base+'/td[4]/span/a/text()')[0].replace('\n','')
                 Abfahrten = tree.xpath(xpath_base+'/td[4]/text()')[2:][0].split('\n')
             except IndexError:
+                logger.warn(traceback.format_exc())
                 logger.warn('Fehler beim parsen der Abfahrtstafel von {}'.format(
                     H_Name_Abfahrtstafel))
             Abfahrtshaltestelle = Abfahrten[1].strip()
@@ -235,6 +242,7 @@ FROM haltestellen
                 hstID_Abfahrt = H_ID_Abfahrtstafel
 
         except:
+            logger.warn(traceback.format_exc())
             # if there is an error, wait
             logger.warn('fehler beim Auslesen der BHF-Tafel')
             exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -284,6 +292,7 @@ VALUES (%s, %s, %s, %s, %s, %s);"""
                     time.sleep(sleeptime)
                     Fahrtverlauf = self.urlquery(Fahrt_URL)
                 except:
+                    logger.warn(traceback.format_exc())
                     logger.warn('Fehler in Abfrage des Fahrtverlaufs')
                     pass
 
@@ -291,6 +300,7 @@ VALUES (%s, %s, %s, %s, %s, %s);"""
                     VerlaufParser = MyHTMLParser()
                     VerlaufParser.query_date = self.date
                 except:
+                    logger.warn(traceback.format_exc())
                     logger.warn('Fehler bei VerlaufParser')
                     pass
                 # wenn Uhrzeit zwischen 0 und 4 h und Ankunft vor 4 Uhr ist,
@@ -301,7 +311,8 @@ VALUES (%s, %s, %s, %s, %s, %s);"""
 
                 try:
                     html_verlauf = self.htmlentitydecode(Fahrtverlauf)
-                except:
+                except Exception as e:
+                    logger.warn(traceback.format_exc())
                     logger.warn('HTML Verlauf Fehler')
                     pass
                 VerlaufParser.feed(html_verlauf)
@@ -348,7 +359,8 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
                                 H_Name_Abfahrtstafel,
                                 self.date.get_timestamp(Fahrt_Abfahrt),
                                 Fahrt_Ziel))
-        except Exception:
+        except Exception as e:
+            logger.warn(traceback.format_exc())
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             logger.warn('{} {} {}'.format(
@@ -404,6 +416,7 @@ class MyHTMLParser(HTMLParser):
         self.first_linefeed = True
 
     def handle_starttag(self, tag, attrs):
+        
         if tag == 'td':
             if attrs:
                 #print attrs[0][1] ##
@@ -427,7 +440,7 @@ class MyHTMLParser(HTMLParser):
                             self.links.append(value)
 
         elif tag == 'h3':
-            if attrs[0][1] == 'trainroute':
+            if attrs and attrs[0][1] == 'trainroute':
                 self.recording_trainroute = 1
 
     def handle_endtag(self, tag):
@@ -447,7 +460,7 @@ class MyHTMLParser(HTMLParser):
                 self.data_route.append(data)
         if self.recording_trainroute:
             if data <> '\n':
-                date = data.split('Fahrtverlauf vom: ')[1].rstrip(')')
+                date = data.split('Fahrtverlauf vom ')[1].rstrip(')').replace('\n','')
                 d, m, y = date.split('.')
                 yyyy = int(y) + 2000
                 self.date = Date(yyyy, m, d)
@@ -466,6 +479,7 @@ class MyHTMLParser(HTMLParser):
                 else:
                     self.first_linefeed = True
             else:
+                data = data.replace('an ','').replace('ab ','')
                 try:
                     # if tag is Delay marker
                     if data.startswith(u'+'):
@@ -483,6 +497,7 @@ class MyHTMLParser(HTMLParser):
                                 break
                             z -= 1
                 except Exception as F:
+                    logger.warn(traceback.format_exc())
                     logger.warning(F)
                     zeit = None
                     raise
@@ -501,6 +516,7 @@ class MyHTMLParser(HTMLParser):
                 return
             # normal time
             else:
+                data = data.replace('an ','').replace('ab ','')
                 try:
                     if self.ist_Starthaltestelle:
                         if len(data.strip()) > 0:
@@ -529,6 +545,7 @@ class MyHTMLParser(HTMLParser):
                                 break
                             z -= 1
                 except:
+                    logger.warn(traceback.format_exc())
                     zeit = None
                 self.data_departures.append(zeit)
 
@@ -551,6 +568,7 @@ class MyHTMLParser(HTMLParser):
             zeit = time.strptime('{t} {d}'.format(t=data.strip(), d=self.date),
                                  '%H:%M %d.%m.%y')
         except ValueError as e:
+            logger.warn(traceback.format_exc())
             logger.warn(
                 '"{}" could not be processed by time.strptime'.format(data))
             raise e
