@@ -132,6 +132,7 @@ FROM haltestellen
         cursor.execute(sql)
         rows = cursor.fetchall()
         self.abfahrt_id = rows[0][0] or 0
+        fahrten_count = 0
 
         #Abfahrten auslesen
         H_IDstr = str(H_ID_Abfahrtstafel)
@@ -139,74 +140,90 @@ FROM haltestellen
         # grab data from station timetable for the whole day
         # use 24:00 instead of 00:00 to really get all departures also on stations
         # with a lot of departures
-        bhftafel_URL = 'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&evaId=%s&bt=dep&time=24:00&maxJourneys=10000&date=%s&productsFilter=1111111111&max=10000&start=yes' %(
-            H_IDstr, self.date)
+        bhftafel_ID_URL = 'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&evaId={i}&bt=dep&time=24:00&maxJourneys=10000&date={d}&productsFilter=1111111111&max=10000&start=yes'.format(
+            i=H_IDstr, d=self.date)
+        bhftafel_Name_URL = 'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&input={n}&bt=dep&time=24:00&maxJourneys=10000&date={d}&productsFilter=1111111111&max=10000&start=yes'.format(
+            n=H_Name_Abfahrtstafel, d=self.date)
+        urls = [bhftafel_ID_URL, bhftafel_Name_URL]
 
         try:
             # wait a bit
             sleeptime = random.randint(1, 4)
             time.sleep(sleeptime)
             # try first time to get the Bahnhofstafel
-            tree = self.getRequestsTree(bhftafel_URL)
-            errCode = tree.xpath('//div[@class="hafasContent error"]/text()')
-
             MAX_TRIES = 10
-            t = 0
-            while t < MAX_TRIES and errCode:
-                # if not successful,
-                # try to get the page MAX_TRIES times
-                WAITTIME = 15
-                logger.info('wait {} secs and try again {} for url {}'.format(
-                    WAITTIME, t, bhftafel_URL))
-                time.sleep(WAITTIME)
-                tree = self.getRequestsTree(bhftafel_URL)
-                errCode = tree.xpath('//div[@class="hafasContent error"]/text()')
-                t += 1
-            try:
-                subtree = tree.xpath('//*[@id="sqResult"]/table')
-                if not subtree:
-                    logger.warn(u'fehler beim Lesen der BhfTafel für {}: {}:'.format(H_IDstr, H_Name_Abfahrtstafel))
-                    return
-                # count number of trips
-                elements = subtree[0].findall("tr")
-                # only elements with a attribute "key"
-                journey_rows = [e for e in elements if e.attrib.has_key('id')]
-                fahrten_count = len(journey_rows)
 
-            except:
-                logger.warn(traceback.format_exc())
-                errCode = tree.xpath('//div[@class="errormsg leftMargin"]/text()')
-                logger.warn(u'fehler beim Lesen der BhfTafel für {}: {}:'.format(
-                    H_IDstr, H_Name_Abfahrtstafel))
-                if errCode:
-                    logger.warn(errCode[0])
-                return
-            if fahrten_count:
-                logger.info(u'{} abfahrten in {}: {}'.format(fahrten_count,
-                                                            H_IDstr,
-                                                            H_Name_Abfahrtstafel))
-                self.n_new = 0
-                self.n_already_in_db = 0
-                self.last_stunde = '-1'
-                journeys = (j.attrib['id'] for j in journey_rows)
-                for journey in journeys:
-                    self.parse_fahrten(journey,
-                                       fahrten_count,
-                                       tree,
-                                       H_ID_Abfahrtstafel,
-                                       cursor,
-                                       H_Name_Abfahrtstafel)
-                if self.n_new:
-                    logger.info('')
-                logger.info(u'{} new, {} already in db'.format(
-                    self.n_new,
-                    self.n_already_in_db))
+            # try first the URL with the ID and if not successfully,
+            # try the URL with the stop name
+            for url in urls:
+                self.t = 0
+                tree = self.getRequestsTree(url)
+                self.errCode = tree.xpath('//div[@class="hafasContent error"]/text()')
+
+                while self.t < MAX_TRIES and self.errCode:
+                    tree = self.wait_and_retry(url)
+                try:
+                    subtree = tree.xpath('//*[@id="sqResult"]/table')
+                    if not subtree:
+                        logger.warn(u'Fehler beim Lesen der BhfTafel für {}: {}:'.format(H_IDstr, H_Name_Abfahrtstafel))
+                        # try next URL
+                        continue
+                    # count number of trips
+                    elements = subtree[0].findall("tr")
+                    # only elements with a attribute "key"
+                    journey_rows = [e for e in elements if e.attrib.has_key('id')]
+                    fahrten_count = len(journey_rows)
+
+                except:
+                    logger.warn(traceback.format_exc())
+                    errCode = tree.xpath('//div[@class="errormsg leftMargin"]/text()')
+                    logger.warn(u'Fehler beim Lesen der BhfTafel für {}: {}:'.format(
+                        H_IDstr, H_Name_Abfahrtstafel))
+                    if errCode:
+                        logger.warn(errCode[0])
+                    # try next URL
+                    continue
+                # found a Bahnhofstafel
+                if fahrten_count:
+                    logger.info(u'{} abfahrten in {}: {}'.format(fahrten_count,
+                                                                H_IDstr,
+                                                                H_Name_Abfahrtstafel))
+                    self.n_new = 0
+                    self.n_already_in_db = 0
+                    self.last_stunde = '-1'
+                    journeys = (j.attrib['id'] for j in journey_rows)
+                    for journey in journeys:
+                        self.parse_fahrten(journey,
+                                           fahrten_count,
+                                           tree,
+                                           H_ID_Abfahrtstafel,
+                                           cursor,
+                                           H_Name_Abfahrtstafel)
+                    if self.n_new:
+                        logger.info('')
+                    logger.info(u'{} new, {} already in db'.format(
+                        self.n_new,
+                        self.n_already_in_db))
+                    # return and don't try next URL
+                    return
         except Exception:
             logger.warn(traceback.format_exc())
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             logger.warn('{} {} {}'.format(
                 exc_type, fname, exc_tb.tb_lineno))
+
+    def wait_and_retry(self, bhftafel_URL):
+        # if not successful,
+        # try to get the page MAX_TRIES times
+        WAITTIME = 15
+        logger.info('wait {} secs and try again {} for url {}'.format(
+            WAITTIME, t, bhftafel_URL))
+        time.sleep(WAITTIME)
+        tree = self.getRequestsTree(bhftafel_URL)
+        self.errCode = tree.xpath('//div[@class="hafasContent error"]/text()')
+        self.t += 1
+        return tree
 
     def parse_fahrten(self,
                       journey,
@@ -416,7 +433,7 @@ class MyHTMLParser(HTMLParser):
         self.first_linefeed = True
 
     def handle_starttag(self, tag, attrs):
-        
+
         if tag == 'td':
             if attrs:
                 #print attrs[0][1] ##
