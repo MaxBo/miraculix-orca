@@ -140,9 +140,9 @@ FROM haltestellen
         # grab data from station timetable for the whole day
         # use 24:00 instead of 00:00 to really get all departures also on stations
         # with a lot of departures
-        bhftafel_ID_URL = 'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&evaId={i}&bt=dep&time=24:00&maxJourneys=10000&date={d}&productsFilter=1111111111&max=10000&start=yes'.format(
+        bhftafel_ID_URL = u'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&evaId={i}&bt=dep&time=24:00&maxJourneys=10000&date={d}&productsFilter=1111111111&max=10000&start=yes'.format(
             i=H_IDstr, d=self.date)
-        bhftafel_Name_URL = 'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&input={n}&bt=dep&time=24:00&maxJourneys=10000&date={d}&productsFilter=1111111111&max=10000&start=yes'.format(
+        bhftafel_Name_URL = u'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&input={n}&bt=dep&time=24:00&maxJourneys=10000&date={d}&productsFilter=1111111111&max=10000&start=yes'.format(
             n=H_Name_Abfahrtstafel, d=self.date)
         urls = [bhftafel_ID_URL, bhftafel_Name_URL]
 
@@ -166,6 +166,7 @@ FROM haltestellen
                     subtree = tree.xpath('//*[@id="sqResult"]/table')
                     if not subtree:
                         logger.warn(u'Fehler beim Lesen der BhfTafel für {}: {}:'.format(H_IDstr, H_Name_Abfahrtstafel))
+                        logger.warn(url)
                         # try next URL
                         continue
                     # count number of trips
