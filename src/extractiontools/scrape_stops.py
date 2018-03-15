@@ -87,7 +87,7 @@ class ScrapeStops(Extract):
 
     def getSessionIDs(self):
         #SessionID von der Bahn bekommen
-        ID_URL = 'http://mobile.bahn.de/bin/mobil/query2.exe/dox?country=DEU&rt=1&use_realtime_filter=1&stationNear=1)'
+        ID_URL = 'http://mobile.bahn.de/bin/mobil/query.exe/dox?country=DEU&rt=1&use_realtime_filter=1&stationNear=1)'
         ID_URL = self.urlquery(ID_URL)
 
         ID_URL1 = ID_URL.split('amp;i=')
@@ -235,7 +235,7 @@ class ScrapeStops(Extract):
 
                 try:
                     # URL zusammensetzen
-                    URL = ''.join(('http://mobile.bahn.de/bin/mobil/query2.exe/dox?ld=',
+                    URL = ''.join(('http://mobile.bahn.de/bin/mobil/query.exe/dox?ld=',
                                    str(ID_URL2),
                                    '&n=1&i=',
                                    ID_URL1,
