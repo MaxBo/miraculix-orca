@@ -304,7 +304,7 @@ VALUES (%s, %s, %s, %s, %s, %s);"""
                                 self.date.get_timestamp(Fahrt_Abfahrt),
                                 H_ID_Abfahrtstafel,
                                 Fahrt_Ziel))
-                print u'{}'.format(Fahrt_Name),
+                print u'{}'.format(Fahrt_Name).encode('utf8'),
                 try:
                     sleeptime = float(random.randint(1,3))/20.
                     time.sleep(sleeptime)
