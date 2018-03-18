@@ -219,7 +219,7 @@ FROM haltestellen
         # try to get the page MAX_TRIES times
         WAITTIME = 15
         logger.info('wait {} secs and try again {} for url {}'.format(
-            WAITTIME, t, bhftafel_URL))
+            WAITTIME, self.t, bhftafel_URL))
         time.sleep(WAITTIME)
         tree = self.getRequestsTree(bhftafel_URL)
         self.errCode = tree.xpath('//div[@class="hafasContent error"]/text()')
