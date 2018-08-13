@@ -664,12 +664,14 @@ AND w.tags @> lt.tag2;
         sql = """
 -- erzeuge speed_zulaessig
 ALTER TABLE {network}.links
-ADD COLUMN speed_zulaessig INTEGER DEFAULT 50;
+  ADD COLUMN speed_zulaessig INTEGER;
+ALTER TABLE {network}.links
+  ALTER COLUMN speed_zulaessig SET DEFAULT 50;
 
 -- setze maxspeed aus tags
 UPDATE {network}.links l
 SET maxspeed = substring(w.tags -> 'maxspeed' FROM '[-+]?\d*\.\d+|\d+')::float,
-    speed_zulaessig = substring(w.tags -> 'maxspeed' FROM '[-+]?\d*\.\d+|\d+')::float::integer,
+    speed_zulaessig = substring(w.tags -> 'maxspeed' FROM '[-+]?\d*\.\d+|\d+')::float::integer
 FROM osm.ways w
 WHERE l.wayid=w.id and w.tags ? 'maxspeed';
 
