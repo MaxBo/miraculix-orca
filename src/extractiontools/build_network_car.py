@@ -662,27 +662,34 @@ AND w.tags @> lt.tag2;
         """
         """
         sql = """
+-- erzeuge speed_zulaessig
+ALTER TABLE {network}.links
+ADD COLUMN speed_zulaessig INTEGER DEFAULT 50;
+
 -- setze maxspeed aus tags
 UPDATE {network}.links l
-SET maxspeed = substring(w.tags -> 'maxspeed' FROM '[-+]?\d*\.\d+|\d+')::float
+SET maxspeed = substring(w.tags -> 'maxspeed' FROM '[-+]?\d*\.\d+|\d+')::float,
+    speed_zulaessig = substring(w.tags -> 'maxspeed' FROM '[-+]?\d*\.\d+|\d+')::float::integer,
 FROM osm.ways w
 WHERE l.wayid=w.id and w.tags ? 'maxspeed';
 
 -- setze maxspeed auf 120 für BAB-Abschnitte mit Wechselanzeigen
 UPDATE {network}.links l
-SET maxspeed = 120
+SET maxspeed = 120,
+    speed_zulaessig = 120
 FROM osm.ways w
 WHERE l.wayid=w.id and w.tags -> 'maxspeed' = 'signals';
 
 -- setze maxspeed auf 150 für BAB-Abschnitte ohne Geschwindigkeitsbegrenzung
 UPDATE {network}.links l
-SET maxspeed = 150
+SET maxspeed = 150,
+    speed_zulaessig = 150
 FROM osm.ways w
 WHERE l.wayid=w.id and w.tags -> 'maxspeed' = 'none';
 
-
 UPDATE {network}.links l
-SET maxspeed = ld.v_kfz
+SET maxspeed = ld.v_kfz,
+    speed_zulaessig = ld.v_kfz_zulaessig
 FROM classifications.link_defaults ld, classifications.linktypes lt
 WHERE
 ld.linktype_number = lt.id AND
