@@ -40,6 +40,7 @@ class BuildNetwork(DBApp):
             self.get_srid()
             self.set_session_authorization(self.conn)
             self.create_views()
+
             # select roads and junctions
             self.create_roads()
             self.create_junctions()
@@ -1082,13 +1083,33 @@ FROM {network}.links l;
         """
         create and analyze the topology
         """
-        sql = """
-SELECT pgr_createTopology('{network}.edge_table', {tolerance},
-'geom','id','source','target');
+        chunksize = 50000
+        cursor = self.conn.cursor()
+        sql = 'SELECT max(e.id) FROM {network}.edge_table e;'
+        cursor.execute(sql.format(network=self.network))
+        n_edges = cursor.fetchone()[0]
 
+        for fromrow in xrange(0, n_edges, chunksize):
+            torow = fromrow + chunksize
+            sql = """
+SELECT pgr_createTopology('{network}.edge_table',
+    {tolerance},
+    'geom',
+    'id',
+    'source',
+    'target',
+    rows_where:='id >= {fromrow} AND id < {torow}');
+COMMIT;
+""".format(tolerance=0.000001, network=self.network,
+           fromrow=fromrow, torow=torow)
+            logger.info('create topology for edges {} to {}'.format(fromrow, torow))
+            self.run_query(sql)
+
+        sql = """
 SELECT pgr_analyzeGraph('{network}.edge_table',{tolerance},
 'geom','id','source','target');
         """.format(tolerance=0.000001, network=self.network)
+        logger.info('Analyze Graph')
         self.run_query(sql)
 
     def create_edge_reached(self):
