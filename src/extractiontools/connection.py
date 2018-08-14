@@ -5,6 +5,7 @@ import psycopg2
 from psycopg2.extras import NamedTupleConnection, DictCursor
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from collections import OrderedDict
+import sqlparse
 
 from types import MethodType
 import os
@@ -177,8 +178,8 @@ class DBApp(object):
         """
         conn = conn or self.conn
         cur = conn.cursor()
-        for query in sql.split(';'):
-            if query.strip():
+        for query in sqlparse.split(sql):
+            if query.strip().rstrip(';'):
                 logger.info(query)
                 query_without_comments = '\n'.join([
                     q for q in query.split(os.linesep)

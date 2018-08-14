@@ -37,6 +37,7 @@ setup(
         'setuptools',
         'psycopg2>=2.4.6',
         'numpy>=1.9',
+        'sqlparse',
         # -*- Extra requirements: -*-
     ],
 
