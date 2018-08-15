@@ -2,7 +2,7 @@ import os
 from shutil import move
 from argparse import ArgumentParser
 from subprocess import call
-from extractiontools.otp_config import OTP_JAR
+from extractiontools.otp_config import OTP_JAR, JAVA
 
 
 def main():
@@ -47,7 +47,7 @@ def main():
     graph_folder = args.graph_folder or os.path.join(base_path,
                                                      'otp_graphs')
 
-    call(['java', '-Xmx12G', '-jar', OTP_JAR, '--build', folder])
+    call([JAVA, '-Xmx12G', '-jar', OTP_JAR, '--build', folder])
 
     graph_file = os.path.join(folder, "Graph.obj")
     router_name = '_'.join((args.name, args.suffix))

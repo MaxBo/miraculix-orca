@@ -2,7 +2,7 @@ import os
 from shutil import move
 from argparse import ArgumentParser
 from subprocess import Popen, call, PIPE
-from extractiontools.otp_config import OTP_JAR
+from extractiontools.otp_config import OTP_JAR, JAVA
 from extractiontools.stop_otp_router import kill_process_on_port
 import time
 
@@ -47,7 +47,7 @@ def main():
     graph_folder = args.graph_folder or os.path.join(base_path,
                                                      'otp_graphs')
 
-    process_args = ['java', '-Xmx2G', '-jar', OTP_JAR, '--graphs',
+    process_args = [JAVA, '-Xmx2G', '-jar', OTP_JAR, '--graphs',
                     graph_folder, ]
 
     n_names = len(args.name)

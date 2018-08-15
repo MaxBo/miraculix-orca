@@ -2,8 +2,8 @@ import os
 from shutil import move
 from argparse import ArgumentParser
 from subprocess import Popen, call, PIPE
+from otp_config import OTP_JAR, JAVA
 
-OTP_JAR='/opt/repos/OpenTripPlanner/target/otp-0.20.0-SNAPSHOT-shaded.jar'
 
 def main():
     parser = ArgumentParser(description="OTP Graph-Visualisierung")
@@ -55,7 +55,7 @@ def main():
 
     # ToDo: Abfrage, ob wirklich killen
 
-    p2 = Popen(['java', '-Xmx2G', '-jar', OTP_JAR, '--graphs', graph_folder,
+    p2 = Popen([JAVA, '-Xmx2G', '-jar', OTP_JAR, '--graphs', graph_folder,
           '--router ', router_name,
           '--visualize ',
           '--port ', '{}'.format(args.port),
