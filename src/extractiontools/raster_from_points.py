@@ -431,7 +431,8 @@ WHERE v.cellcode=l.cellcode;
     def create_matview_point_with_raster(self,
                                          tablename,
                                          source_table,
-                                         value_column=None):
+                                         value_column=None,
+                                         geom='geom'):
         """
         Create a materialized view for a point raster intersected
         with the raster polygon
@@ -449,7 +450,7 @@ l.cellcode,
 {val}
 FROM {st} g,
 {rv} l
-WHERE st_within(g.geom, l.geom)
+WHERE st_within(g.{geom}, l.geom)
 GROUP BY l.cellcode;
 CREATE INDEX {tn}_pkey ON
 {sc}.{tn} USING btree(cellcode);
@@ -468,7 +469,8 @@ WHERE v.cellcode=l.cellcode;
                                   tn=tablename,
                                   st=source_table,
                                   rv=self.reference_vector,
-                                  val=val))
+                                  val=val,
+                                  geom=geom))
 
     def create_raster_for_polygon(self,
                                   tablename,
@@ -508,7 +510,8 @@ WHERE v.cellcode=l.cellcode;
                                 source_table,
                                 value_column=None,
                                 pixeltype='32BF',
-                                noData=0):
+                                noData=0,
+                                geom='geom'):
         """
         intersect point feature with raster and create raster tiff
 
@@ -525,9 +528,11 @@ WHERE v.cellcode=l.cellcode;
             the pixeltype of the resulting raster
         noData : numeric, optional(Default=0)
             the no-data-value of the resulting raster
+        geom : str, optional(Default='geom')
+            the name of the geometry column
         """
         self.create_matview_point_with_raster(
-            tablename, source_table, value_column)
+            tablename, source_table, value_column, geom)
 
         self.create_raster_for_table(tablename, pixeltype, noData)
 

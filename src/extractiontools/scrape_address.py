@@ -138,7 +138,7 @@ WHERE NOT EXISTS (SELECT 1 FROM {s}.{t} a WHERE a.id = %s);
         step = self.options.step
         decoder = json.JSONDecoder()
         #for (lon0, lon1, lat0, lat1) in gridcells:
-        #lat0 = 52.80
+        lat0 = 53.60
         for i0 in np.arange(lat0, lat1, step):
             i1 = i0 + step
             for j0 in np.arange(lon0, lon1, step):
@@ -182,14 +182,14 @@ WHERE NOT EXISTS (SELECT 1 FROM {s}.{t} a WHERE a.id = %s);
 
                     cursor.execute(
                         sql_insert,
-                        sql_insert_strasse,
+                        #sql_insert_strasse,
                         (fid,
                          p['bundesland'],
                          p['kreis'],
-                         p['verwgem'],
+                         p.get('verwgem', ''),
                          p['rs'],
                          p['ags'],
-                         p['gemeinde'],
+                         p.get('gemeinde', ''),
                          p['plz'],
                          p['ort'],
                          p['ortsteil'],

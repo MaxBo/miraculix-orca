@@ -98,7 +98,8 @@ class Extract(DBApp):
         """
         establishes a connection and executes some code
         """
-        with Connection(login=self.login0) as conn0, Connection(login=self.login1) as conn1:
+        with Connection(login=self.login0) as conn0, \
+             Connection(login=self.login1) as conn1:
             self.run_query(sql)
 
     def extract(self):
@@ -110,7 +111,8 @@ class Extract(DBApp):
             else:
                 self.create_target_db(self.login1)
             self.create_serverside_folder()
-        with Connection(login=self.login0) as conn0, Connection(login=self.login1) as conn1:
+        with Connection(login=self.login0) as conn0, \
+             Connection(login=self.login1) as conn1:
             self.conn0 = conn0
             self.conn1 = conn1
             self.set_session_authorization(self.conn0)
