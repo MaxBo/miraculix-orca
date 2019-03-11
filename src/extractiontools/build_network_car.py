@@ -1324,7 +1324,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--corine", action="store",
                         help="corine landuse table",
-                        dest="corine", default='clc12')
+                        dest="corine", default='clc18')
 
     options = parser.parse_args()
 
