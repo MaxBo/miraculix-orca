@@ -25,7 +25,7 @@ class DoubleComma(np.double):
     '''np.double for comma separated values'''
     dtype = 'f8'
     def __new__(cls, val):
-        if isinstance(val, (str, unicode)):
+        if isinstance(val, (bytes, str)):
             val = val.replace(',', '.')
         return super(DoubleComma, cls).__new__(cls, val)
 
@@ -37,15 +37,15 @@ class DoubleComma(np.double):
     def __str__(self):
         return repr(self)
 
-    def __unicode__(self):
-        return unicode(repr(self))
+    def __bytes__(self):
+        return bytes(repr(self))
 
 
 class DoubleCommaLength(DoubleComma):
     '''np.double for comma separated values in km'''
     def __new__(cls, val):
         km = False
-        if isinstance(val, (str, unicode)):
+        if isinstance(val, (bytes, str)):
             if val.endswith('km'):
                 km = True
             val = val.replace(',', '.').rstrip('km')
@@ -65,7 +65,7 @@ class DoubleCommaTime(DoubleComma):
     '''np.double for comma separated values in min, sec or days'''
     def __new__(cls, val):
         factor = 1
-        if isinstance(val, (str, unicode)):
+        if isinstance(val, (bytes, str)):
             if val.endswith('s') or val.endswith('sec'):
                 factor = 1
             elif val.endswith('m') or val.endswith('min'):
@@ -183,7 +183,7 @@ class Visum(Base):
         with codecs.open(self.netfile, encoding='latin-1', mode='w') as f:
             header = '$VISION\n'
             f.writelines(header)
-            for table in self._tables.itervalues():
+            for table in self._tables.values():
                 f.writelines(os.linesep)
                 f.writelines('*{0}\n'.format(table.tablename))
                 table.write_rows(f)
@@ -227,7 +227,7 @@ class VisumTable(Table):
                 else:
                     converter = self.cols.converters[c]
                     l.append(converter(vals[c]))
-            line = ';'.join([unicode(x) for x in l])
+            line = ';'.join([str(x) for x in l])
             writer.write(line+os.linesep)
 
 
