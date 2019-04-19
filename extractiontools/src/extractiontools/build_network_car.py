@@ -429,7 +429,7 @@ DELETE FROM {network}.links WHERE st_NumPoints(geom) = 0;
         Create functions to create link_points and links
         """
         cur = self.conn.cursor()
-        sql = u'''
+        sql = '''
 
 CREATE OR REPLACE FUNCTION {network}.createlink_points(lim int, offs int)
   RETURNS integer AS
@@ -1089,7 +1089,7 @@ FROM {network}.links l;
         cursor.execute(sql.format(network=self.network))
         n_edges = cursor.fetchone()[0]
 
-        for fromrow in xrange(0, n_edges, chunksize):
+        for fromrow in range(0, n_edges, chunksize):
             torow = fromrow + chunksize
             sql = """
 SELECT pgr_createTopology('{network}.edge_table',

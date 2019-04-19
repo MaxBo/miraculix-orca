@@ -26,7 +26,7 @@ class Date_S8(np.datetime64):
     unit = 'D'
 
     def __new__(cls, val):
-        if isinstance(val, (str, unicode)):
+        if isinstance(val, (bytes, str)):
             if len(val) == 8:
                 val = '{Y}-{M}-{D}'.format(Y=val[:4], M=val[4:6], D=val[6:])
             elif len(val) == 6:
@@ -73,20 +73,19 @@ class GTFS(Base):
 
     def read_tables(self):
         """read all tables"""
-        for table in self._tables.itervalues():
+        for table in self._tables.values():
             table.read_file()
 
     def write_tables(self):
         """write the tables"""
         if os.path.exists(self.path):
             os.remove(self.path)
-        for table in self._tables.itervalues():
+        for table in self._tables.values():
             table.write_file()
 
 
-class GTFSTable(Table):
+class GTFSTable(Table, metaclass=ABCMeta):
     """Base Class for a gtfs file"""
-    __metaclass__ = ABCMeta
 
     def open(self, mode='a'):
         zipfilepath = self.tables.path
@@ -103,7 +102,7 @@ class GTFSTable(Table):
             reader = UnicodeReader(f, delimiter=self.sep,
                                    quotechar='"',
                                    quoting=csv.QUOTE_MINIMAL)
-            header = reader.next()
+            header = next(reader)
             lines = [line for line in reader if line]
             self.convert_lines(header, lines)
 
@@ -119,7 +118,7 @@ class GTFSTable(Table):
     def write_rows(self, writer):
         """write the rows"""
         for row in self.rows:
-            line = self.sep.join([unicode(c) for c in row.tolist()])
+            line = self.sep.join([str(c) for c in row.tolist()])
             writer.writerow(row.tolist())
 
 
@@ -223,7 +222,7 @@ class Agency(GTFSTable):
         self.add_column('agency_id', int)
         self.add_column('agency_name', np.dtype('U255'))
         self.add_column('agency_url', np.dtype('U255'), 'www.example.com')
-        self.add_column('agency_timezone', np.dtype('U255'), u'Europe/Berlin')
+        self.add_column('agency_timezone', np.dtype('U255'), 'Europe/Berlin')
 
 
 class Calendar(GTFSTable):

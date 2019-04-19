@@ -12,7 +12,7 @@ import sys
 import os
 import subprocess
 
-from connection import Connection, DBApp, Login
+from .connection import Connection, DBApp, Login
 
 
 class BBox(object):
@@ -119,7 +119,7 @@ class Extract(DBApp):
             self.set_search_path('conn0')
             self.create_temp_schema()
             self.create_target_boundary()
-            for tn, geom in self.tables.iteritems():
+            for tn, geom in self.tables.items():
                 self.extract_table(tn, geom)
             self.additional_stuff()
             self.conn0.commit()

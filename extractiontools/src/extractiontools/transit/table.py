@@ -27,7 +27,7 @@ class Dictlist(dict):
         self = Dictlist()
         length = len(keys)
         assert length == len(values), 'there must be as many keys as values'
-        for i in xrange(length):
+        for i in range(length):
             self[keys[i]] = values[i]
         return self
 
@@ -39,9 +39,8 @@ class Dictlist(dict):
         self[key].append(value)
 
 
-class Base(object):
+class Base(object, metaclass=ABCMeta):
     """The base class for projects"""
-    __metaclass__ = ABCMeta
 
     def __init__(self):
         """Init to specify in the subclass"""
@@ -75,7 +74,7 @@ class Base(object):
 
     def __str__(self):
         lines = [repr(self)]
-        for table in self._tables.itervalues():
+        for table in self._tables.values():
             lines.append(table.__repr__())
         return os.linesep.join(lines)
 
@@ -92,12 +91,12 @@ class Columns(OrderedDict):
     """"""
     @property
     def dtype(self):
-        vals = self.values()
+        vals = list(self.values())
         #formats = [getattr(v, 'dtype', v)
                    #if isinstance(getattr(v, 'dtype', v), np.dtype)
                    #else v
                    #for v in vals]
-        dtype = {'names': self.keys(),
+        dtype = {'names': list(self.keys()),
                 'formats': vals,}
         return dtype
 
@@ -141,9 +140,8 @@ class Columns(OrderedDict):
         return col_index
 
 
-class Table(object):
+class Table(object, metaclass=ABCMeta):
     """Base Class for a table"""
-    __metaclass__ = ABCMeta
 
     def __init__(self, tables, sep=','):
         self.tables= tables
@@ -180,7 +178,7 @@ class Table(object):
     @property
     def header(self):
         """The file header of the output file"""
-        return self.cols.keys()
+        return list(self.cols.keys())
 
     @abstractmethod
     def write_file(self):
@@ -221,7 +219,7 @@ class Table(object):
         colname [, colname [, colname...]]: str
             the columns that form the primary key
         """
-        assert [isinstance(p, (str, unicode)) for p in args]
+        assert [isinstance(p, (bytes, str)) for p in args]
         self.pkey_cols = list(args)
 
     def get_columns_by_names(self, colnames):
@@ -294,7 +292,7 @@ class Table(object):
                                  dtype=self.cols.dtype,
                                  mask=False)
         converters = self.cols.converters
-        for c, column in enumerate(self.cols.iteritems()):
+        for c, column in enumerate(self.cols.items()):
             colname, dtype = column
             converter = converters[c]
             idx = col_index[c]
@@ -319,7 +317,7 @@ class Table(object):
     def get_rows_by_key(self, col_key, colname_value, data,
                          missing_value=-1):
         col_values = getattr(self, colname_value)
-        d = dict(zip(col_key, col_values))
+        d = dict(list(zip(col_key, col_values)))
         def get_values(key):
             name = d.get(key, missing_value)
             return name

@@ -38,7 +38,7 @@ class PixelType(object):
             self.description = self.pixeltypes[pixeltype]
             self.pixeltype = pixeltype
         except KeyError:
-            allTypes = '\n '.join(self.pixeltypes.iterkeys())
+            allTypes = '\n '.join(iter(self.pixeltypes.keys()))
             msg = 'pixeltype {p} not defined. Please try one of these:\n{a}'
             raise ValueError(msg.format(p=pixeltype,
                                         a=allTypes))

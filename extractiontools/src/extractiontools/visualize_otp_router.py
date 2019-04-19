@@ -2,7 +2,7 @@ import os
 from shutil import move
 from argparse import ArgumentParser
 from subprocess import Popen, call, PIPE
-from otp_config import OTP_JAR, JAVA
+from .otp_config import OTP_JAR, JAVA
 
 
 def main():

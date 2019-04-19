@@ -110,7 +110,7 @@ class GTFSVISUM(object):
         # station gets an 'S' in front of the station number
         hp_hstber = gtfs_stops.rows.parent_station
         station = (
-            np.full_like(hp_hstber, u'S') +
+            np.full_like(hp_hstber, 'S') +
             hp_angefahren.HSTBERNR.astype(hp_hstber.dtype))
         hp_hstber[:] = station
 
@@ -139,7 +139,7 @@ class GTFSVISUM(object):
         result = []
         transfer_type = tf.defaults['transfer_type']
         min_transfer_times = gz.ZEIT
-        for i in xrange(gz.n_rows):
+        for i in range(gz.n_rows):
             if in_stops[i]:
                 min_transfer_time = min_transfer_times[i]
                 for von_stop in von_hp[i]:
@@ -176,7 +176,7 @@ class GTFSVISUM(object):
         line_vsyscode = visum_linie.rows.VSYSCODE
         vsyscode =  self.visum.vsys.rows.CODE
         vsysname = self.visum.vsys.rows.NAME
-        d = dict(zip(vsyscode, vsysname))
+        d = dict(list(zip(vsyscode, vsysname)))
         def get_gtfs_name(key):
             name = d.get(key, -1)
             gtfs_type = net_types_map.get(name, -1)

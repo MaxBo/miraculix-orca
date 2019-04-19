@@ -15,7 +15,7 @@ class ExtractVerwaltungsgrenzen(Extract):
     role = 'group_osm'
 
     def final_stuff(self):
-        for tn, geom in self.tables.iteritems():
+        for tn, geom in self.tables.items():
             self.add_geom_index(tn, geom)
             pkey = self.get_primary_key(self.schema, tn, conn=self.conn0)
             if pkey:
