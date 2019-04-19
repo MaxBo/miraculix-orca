@@ -28,7 +28,7 @@ class ScriptError(BaseException):
 
 class ScriptRunner(DBApp):
     """
-    Master Class to run the differenz scripts
+    Master Class to run the different scripts
     """
     def __init__(self, options):
         self.options = options
