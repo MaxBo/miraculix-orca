@@ -44,9 +44,7 @@ class Connection(object):
     Connection object
     """
     def __init__(self, login=None):
-        if login is None:
-            login = Login()
-        self.login = login
+        self.login = login or Login()
 
     def __enter__(self):
         login = self.login
@@ -95,8 +93,7 @@ class Connection(object):
             self.set_isolation_level(old_isolation_level)
 
         self.conn.vacuum_analyze = MethodType(vacuum_analyze,
-                                              self.conn,
-                                              self.conn.__class__)
+                                              self.conn)
 
     def get_dict_cursor(self):
         return self.conn.cursor(cursor_factory=DictCursor)
@@ -149,10 +146,13 @@ class DBApp(object):
 
     """
     role = None
-    def __init__(self, schema='osm'):
+    def __init__(self, schema='osm', conn=None):
         """
         """
         self.schema = schema
+        self.conn = conn
+        self.conn1 = conn
+        self.conn2 = conn
 
     def set_db_user(self, login):
         """

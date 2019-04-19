@@ -79,7 +79,7 @@ class Extract(DBApp):
             self.folder = '$HOME/gis'
             self.SHELL = True
 
-    def set_login(self, host, port, user, password=None):
+    def set_login(self, host, port, user, password=None, **kwargs):
         """
         set login information for source and destination database
         to self.login0 and self.login1
