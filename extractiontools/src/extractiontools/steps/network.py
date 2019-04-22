@@ -5,6 +5,7 @@ from extractiontools.build_network_car import BuildNetwork
 from extractiontools.build_network_walk_cycle import BuildNetworkWalkCycle
 from extractiontools.scrape_stops import ScrapeStops
 from extractiontools.scrape_timetable import ScrapeTimetable
+from extractiontools.hafasdb2gtfs import HafasDB2GTFS
 
 @orca.step()
 def build_network_car(login: Login,
@@ -96,3 +97,38 @@ def scrape_timetables(login: Login,
     scrape.set_login01(login, source_db)
     scrape.get_target_boundary_from_dest_db()
     scrape.scrape()
+
+
+@orca.injectable()
+def gtfs_only_one_day() -> bool:
+    """gtfs valid only on the given day?"""
+    return False
+
+
+@orca.injectable()
+def tbl_kreise() -> str:
+    """table with the county geometries"""
+    return 'verwaltungsgrenzen.krs_2018_12'
+
+
+
+@orca.step()
+def timetables_to_gtfs(login: Login,
+                      date_timetable: str,
+                      gtfs_only_one_day: bool,
+                      base_path: str,
+                      subfolder_otp: str,
+                      tbl_kreise: str):
+    """
+    Export Timetables as GTFS-file
+    """
+    hafas = HafasDB2GTFS(db=login.db,
+                         date=date_timetable,
+                         only_one_day=gtfs_only_one_day,
+                         base_path=base_path,
+                         subfolder=subfolder_otp,
+                         tbl_kreise=tbl_kreise)
+    hafas.login1 = login
+    hafas.get_target_boundary_from_dest_db()
+    hafas.convert()
+    hafas.export_gtfs()

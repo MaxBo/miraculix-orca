@@ -117,18 +117,20 @@ FROM {schema}.route_types;
         sql_update = """
     UPDATE haltestellen h
     SET "H_Name" = %s,
-    geom = st_transform(st_setsrid(st_makepoint( %s, %s), 4326 ), %s::integer)
+    geom = st_transform(st_setsrid(st_makepoint( %s, %s), 4326 ), %s::integer),
+    in_area=True::boolean
     WHERE h."H_ID" = %s;
                                 """
 
         sql_insert = """
     INSERT INTO haltestellen
-    ("H_Name", "H_ID", geom)
+    ("H_Name", "H_ID", geom, in_area)
     SELECT
       %s,
       %s,
       st_transform(st_setsrid(st_makepoint( %s, %s), 4326 ),
-      %s::integer)
+      %s::integer),
+      True::boolean
     WHERE NOT EXISTS (SELECT 1 FROM haltestellen h WHERE h."H_ID" = %s);
                                 """
         lon0, lon1, lat0, lat1 = self.bbox.rounded()

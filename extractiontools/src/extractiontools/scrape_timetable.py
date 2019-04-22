@@ -101,12 +101,10 @@ TRUNCATE fahrten;
 
     def get_fahrten_for_stops(self):
         """get the stops in the area"""
-        # testdata: Lübeck: 8000237 (> 1000 Abfahrten)
-        # Bremen, Cranzer Straße: 627106 (No Abfahrten)
         sql = """
 SELECT "H_ID", "H_Name"
 FROM haltestellen
---WHERE "H_ID" = 692757;
+WHERE in_area;
         """
         cursor = self.get_cursor()
         cursor.execute(sql)
@@ -504,10 +502,12 @@ class MyHTMLParser(HTMLParser):
                 self.data_route.append(data)
         if self.recording_trainroute:
             if data != '\n':
-                date = data.split('Fahrtverlauf vom ')[1].rstrip(')').replace('\n','')
-                d, m, y = date.split('.')
-                yyyy = int(y) + 2000
-                self.date = Date(yyyy, m, d)
+                trainroute_str = data.split('Fahrtverlauf vom ')
+                if len(trainroute_str) > 1:
+                    date = trainroute_str[1].rstrip(')').replace('\n','')
+                    d, m, y = date.split('.')
+                    yyyy = int(y) + 2000
+                    self.date = Date(yyyy, m, d)
         elif self.recording_train:
             if data != '\n':
                 self.data_train.append(data)

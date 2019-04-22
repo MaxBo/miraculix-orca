@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 #coding:utf-8
 
-import numpy as np
 import datetime
-from argparse import ArgumentParser
-from connection import Connection, DBApp, logger
-from extractiontools.ausschnitt import Extract
-from extractiontools.utils.get_date import Date
 import os
 import zipfile
+from argparse import ArgumentParser
+import numpy as np
+from extractiontools.connection import Connection, logger
+from extractiontools.ausschnitt import Extract
+from extractiontools.utils.get_date import Date
 
 
 class HafasDB2GTFS(Extract):
@@ -16,10 +16,20 @@ class HafasDB2GTFS(Extract):
 
     schema = 'timetables'
 
-    def __init__(self, options, db):
-        super(HafasDB2GTFS, self).__init__(destination_db=db, options=options)
-        self.options = options
-        self.today = Date.from_string(options.date)
+    def __init__(self,
+                 db: str,
+                 date: str,
+                 only_one_day: bool,
+                 base_path: str,
+                 subfolder: str,
+                 tbl_kreise:str,
+                 ):
+        self.destination_db = db
+        self.today = Date.from_string(date)
+        self.only_one_day = only_one_day
+        self.base_path = base_path
+        self.subfolder = subfolder
+        self.tbl_kreise = tbl_kreise
 
     def convert(self):
         with Connection(self.login1) as conn:
@@ -61,22 +71,19 @@ class HafasDB2GTFS(Extract):
             #self.cleanup_haltestellen()
 
             self.update_stop_id_from_similar_routes()
-            self.intersect_kreise()
+            self.intersect_kreise(self.tbl_kreise)
 
             ### GTFS
             self.fill_gtfs_stops()
-            self.identify_kreis()
+            self.identify_kreis(self.tbl_kreise)
             self.line_type()
             self.make_routes()
             self.make_agencies()
             self.make_shapes()
             self.make_stop_times()
-
             #self.mark_abfahrten_around_kreis()
-
-
             self.conn.commit()
-            pass
+
 
     def create_gtfs_tables(self):
         """Create the gtfs tables if not yet exists"""
@@ -365,7 +372,7 @@ FROM {schema}.fahrten f;
         sql = 'show search_path ;'
         cur.execute(sql)
         rows = cur.fetchall()
-        print rows
+        logger.info(rows)
 
     def create_aggregate_functions(self):
         """
@@ -461,7 +468,7 @@ TRUNCATE gtfs_calendar_dates;
 '''
         self.run_query(sql)
         # if gtfs should be valid only on one day
-        if self.options.only_one_day:
+        if self.only_one_day:
             sql = '''
 INSERT INTO gtfs_calendar VALUES(1,0,0,0,0,0,0,0,{today},{tomorrow});
 INSERT INTO gtfs_calendar_dates VALUES(1,{today},1);
@@ -689,7 +696,7 @@ where "H_Abfahrt" < "H_Ankunft";
         cur.execute(sql)
         result2 = cur.fetchone()
         if result[0] or result2[0]:
-            logger.warn('''There exist still negative travel times with
+            logger.warning('''There exist still negative travel times with
             departures before arrivals!''')
             if result[0]:
                 sql = """
@@ -1503,9 +1510,9 @@ WHERE departure_time IS NULL;
         """
         exports the data to the path
         """
-        path = os.path.join(self.options.base_path,
-                            self.options.destination_db,
-                            self.options.subfolder)
+        path = os.path.join(self.base_path,
+                            self.destination_db,
+                            self.subfolder)
 
         with Connection(self.login1) as conn:
             self.conn = conn
@@ -1576,12 +1583,22 @@ otherwise its valid all days''', dest='only_one_day', default=False)
                         help="folder to store the resulting gtfs files",
                         dest="base_path", default=r'~/gis/projekte')
 
+    parser.add_argument('--tbl-kreise', action="store", type=str,
+                        help="table with the county geometries",
+                        dest="tbl_kreise",
+                        default='verwaltungsgrenzen.krs_2014_12')
+
 
     options = parser.parse_args()
 
-    hafas = HafasDB2GTFS(options, db=options.destination_db)
+    hafas = HafasDB2GTFS(db=options.destination_db,
+                         date=options.date,
+                         only_one_day=options.only_one_day,
+                         base_path=options.base_path,
+                         subfolder=options.subfolder,
+                         tbl_kreise=options.tbl_kreise)
     hafas.set_login(host=options.host, port=options.port, user=options.user)
     hafas.get_target_boundary_from_dest_db()
-    hafas.get_target_srid_from_dest_db()
+
     hafas.convert()
     hafas.export_gtfs()

@@ -87,9 +87,22 @@ def corine() -> List[str]:
     return ['clc18']
 
 
+
 @orca.injectable()
-def subfolder() -> str:
+def base_path() -> str:
+    return r'~/gis/projekte'
+
+
+@orca.injectable()
+def subfolder_tiffs() -> str:
     return 'tiffs'
+
+
+@orca.injectable()
+def subfolder_otp() -> str:
+    """subfolder for the OpenTripPlanner"""
+    return 'otp'
+
 
 
 @orca.injectable()

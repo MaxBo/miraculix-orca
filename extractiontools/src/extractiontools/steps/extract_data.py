@@ -79,11 +79,11 @@ def extract_laea_raster(source_db: str, login: Login):
     extract.extract()
 
 @orca.step()
-def zensus2raster(login: Login, subfolder: str):
+def zensus2raster(login: Login, subfolder_tiffs: str):
     """
     create views for zensus data on raster grid
     """
-    z2r = Zensus2Raster(db=login.db, subfolder=subfolder)
+    z2r = Zensus2Raster(db=login.db, subfolder=subfolder_tiffs)
     z2r.login1 = login
     z2r.run()
 
