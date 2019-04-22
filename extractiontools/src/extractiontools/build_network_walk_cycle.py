@@ -356,7 +356,7 @@ CREATE OR REPLACE VIEW {network}.line_barriers_cycle AS
         """
         Updates the edge_table
         """
-        if self.options.routing_walk:
+        if self.routing_walk:
             cost = 'l.t_foot_hin'
             reverse_cost = 'l.t_foot_rueck'
         else:
@@ -437,7 +437,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--corine", action="store",
                         help="corine landuse table",
-                        dest="corine", default='clc12')
+                        dest="corine", default='clc18')
 
 
     options = parser.parse_args()
@@ -445,7 +445,11 @@ if __name__ == '__main__':
     build_network = BuildNetworkWalkCycle(schema='osm',
                                  network_schema='network_fr',
                                  db=options.db,
-                                 options=options,)
+                                 limit=options.limit,
+                                 chunksize=options.chunksize,
+                                 links_to_find=options.links_to_find,
+                                 corine=options.corine,
+                                 routing_walk=options.routing_walk)
     build_network.set_login(host=options.host,
                             port=options.port,
                             user=options.user)

@@ -18,19 +18,18 @@ class ExtractLanduse(Extract):
 
 
     def __init__(self,
-                 options,
                  source_db,
                  destination_db,
+                 gmes,
+                 corine,
                  temp='temp',
-                 target_srid=31467,
-                 recreate_db=False):
-        self.options = options
-        super(ExtractLanduse, self).__init__(
-            destination_db=destination_db,
-        temp=temp,
-        target_srid=target_srid,
-        recreate_db=recreate_db,
-        source_db=source_db)
+                 target_srid=31467):
+        super().__init__(destination_db=destination_db,
+                         temp=temp,
+                         target_srid=target_srid,
+                         source_db=source_db)
+        self.gmes = gmes
+        self.corine = corine
 
     def additional_stuff(self):
         """
@@ -72,7 +71,7 @@ c.geom && tb.source_geom
     WHERE
     c.geom && tb.source_geom
             """
-        for corine in self.options.corine:
+        for corine in self.corine:
             self.run_query(sql.format(temp=self.temp, schema=self.schema,
                                       target_srid=self.target_srid,
                                       corine=corine),
@@ -86,7 +85,7 @@ c.geom && tb.source_geom
         """
         Extract the Corine Raster data
         """
-        for corine in self.options.corine:
+        for corine in self.corine:
             corine_raster = self.get_corine_raster_name(corine)
             self.extract_corine_raster(corine_raster)
 
@@ -201,7 +200,7 @@ FROM {schema}.{gmes} c, {temp}.boundary tb
 WHERE
 c.geom && tb.source_geom
             """
-        for gmes in self.options.gmes:
+        for gmes in self.gmes:
             self.run_query(sql.format(temp=self.temp, schema=self.schema,
                                       target_srid=self.target_srid,
                                       gmes=gmes),
@@ -234,7 +233,7 @@ c.geom && tb.source_geom
       USING btree(code);
     ALTER TABLE {schema}.{corine} CLUSTER ON {corine}_geom_idx;
     """
-        for corine in self.options.corine:
+        for corine in self.corine:
 
             self.run_query(sql.format(schema=self.schema,
                                       corine=corine), conn=self.conn1)
@@ -264,7 +263,7 @@ c.geom && tb.source_geom
       USING btree(code);
     ALTER TABLE {schema}.{gmes} CLUSTER ON {gmes}_geom_idx;
     """
-        for gmes in self.options.gmes:
+        for gmes in self.gmes:
 
             self.run_query(sql.format(schema=self.schema,
                                       gmes=gmes), conn=self.conn1)
@@ -298,7 +297,7 @@ ANALYZE {schema}.aster_centroids;
         """
         add index to all corine rasters requiered in the arguments
         """
-        for corine in self.options.corine:
+        for corine in self.corine:
             corine_raster = self.get_corine_raster_name(corine)
             self.add_raster_index_and_overviews(overviews=self.corine_overviews,
                                                 schema=self.schema,
@@ -338,10 +337,10 @@ if __name__ == '__main__':
 
     options = parser.parse_args()
 
-    extract = ExtractLanduse(options=options,
-                             source_db=options.source_db,
+    extract = ExtractLanduse(source_db=options.source_db,
                              destination_db=options.destination_db,
-                             recreate_db=False)
+                             gmes=options.gmes,
+                             corine=options.corine)
     extract.set_login(host=options.host,
                       port=options.port,
                       user=options.user)

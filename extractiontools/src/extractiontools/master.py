@@ -69,10 +69,10 @@ class ScriptRunner(DBApp):
 
         extract = ExtractMeta(destination_db=options.destination_db,
                               target_srid=options.srid,
-                              recreate_db=True,
                               source_db =options.source_db)
         extract.set_login(host=options.host, port=options.port, user=options.user)
         extract.get_target_boundary(bbox)
+        extract.recreate_db()
         extract.extract()
 
     def set_login(self, password=None):

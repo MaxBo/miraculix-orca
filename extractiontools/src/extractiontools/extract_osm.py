@@ -301,8 +301,7 @@ if __name__ == '__main__':
     options = parser.parse_args()
 
     extract = ExtractOSM(source_db=options.source_db,
-                         destination_db=options.destination_db,
-                         recreate_db=False)
+                         destination_db=options.destination_db)
     extract.set_login(host=options.host,
                       port=options.port,
                       user=options.user)

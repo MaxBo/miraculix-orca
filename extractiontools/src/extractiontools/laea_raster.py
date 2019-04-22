@@ -326,8 +326,7 @@ if __name__ == '__main__':
 
     extract = ExtractLAEA(source_db=options.source_db,
                           destination_db=options.destination_db,
-                          target_srid=None,
-                          recreate_db=False)
+                          target_srid=None)
     extract.set_login(host=options.host, port=options.port, user=options.user)
     extract.get_target_boundary_from_dest_db()
     extract.extract()

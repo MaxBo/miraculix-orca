@@ -57,11 +57,6 @@ def source_db() -> str:
 
 
 @orca.injectable()
-def recreate_db() -> bool:
-    return False
-
-
-@orca.injectable()
 def source_srid() -> int:
     return 4326
 
@@ -70,3 +65,55 @@ def source_srid() -> int:
 def target_srid() -> int:
     return 25832
 
+
+@orca.injectable()
+def verwaltungsgrenzen_tables() -> List[str]:
+    tables = ['gem_2018_12',
+              'vwg_2018_12',
+              'krs_2018_12',
+              'lan_2018_12',
+              'gem_2014_ew_svb',
+              'plz_2016']
+    return tables
+
+
+@orca.injectable()
+def gmes() -> List[str]:
+    return ['ua2012']
+
+
+@orca.injectable()
+def corine() -> List[str]:
+    return ['clc18']
+
+
+@orca.injectable()
+def subfolder() -> str:
+    return 'tiffs'
+
+
+@orca.injectable()
+def limit4links() -> int:
+    """
+    limit the creation of links to limit4links * chunksize
+    if limit4links is 0, create all links
+    """
+    return 0
+
+
+@orca.injectable()
+def chunksize() -> int:
+    """number of links to calculate in a chunk"""
+    return 1000
+
+
+@orca.injectable()
+def links_to_find() -> float:
+    """proportion of all network links to be found from starting point"""
+    return 0.25
+
+
+@orca.injectable()
+def routing_walk() -> bool:
+    """routing for walking"""
+    return False

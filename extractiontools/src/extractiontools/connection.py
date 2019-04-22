@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 #coding:utf-8
 
+import subprocess
+import sys
 import psycopg2
 from psycopg2.extras import NamedTupleConnection, DictCursor
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
@@ -46,7 +48,7 @@ class Connection(object):
     def __init__(self, login=None):
         self.login = login or Login()
 
-    def __enter__(self):
+    def __enter__(self) -> NamedTupleConnection:
         login = self.login
         conn = psycopg2.connect(host=login.host,
                               user=login.user,
@@ -159,6 +161,31 @@ class DBApp(object):
         set login user
         """
         self.login = login
+
+    def check_platform(self):
+        """
+        check the platform
+        """
+        if sys.platform.startswith('win'):
+            self.folder = r'C:\temp'
+            self.SHELL = False
+            self.mkdir = 'mkdir'
+        else:
+            self.folder = '$HOME/gis'
+            self.SHELL = True
+            self.mkdir = '/bin/mkdir'
+
+    def make_folder(self, folder: str):
+        """
+        create the subfolder `folder`, if it does not exist
+        raise an IOError, if this fails
+        """
+        self.check_platform()
+        cmd = f'{self.mkdir} -p {folder}'
+        logger.debug(cmd)
+        ret = subprocess.call(cmd, shell=self.SHELL)
+        if ret:
+            raise IOError(f'folder {folder} could not be created')
 
     def run_query(self, sql, conn=None, values=None, many=False):
         """

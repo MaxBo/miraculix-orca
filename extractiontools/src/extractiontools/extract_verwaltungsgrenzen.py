@@ -20,7 +20,8 @@ class ExtractVerwaltungsgrenzen(Extract):
             pkey = self.get_primary_key(self.schema, tn, conn=self.conn0)
             if pkey:
                 self.add_pkey(tn, pkey)
-        self.add_pkey('gem_2014_ew_svb', 'ags')
+            else:
+                self.add_pkey(tn, 'ags')
 
     def add_pkey(self, tn, pkey):
         sql = """
@@ -70,8 +71,7 @@ if __name__ == '__main__':
     options = parser.parse_args()
 
     extract = ExtractVerwaltungsgrenzen(source_db=options.source_db,
-                         destination_db=options.destination_db,
-                         recreate_db=False)
+                         destination_db=options.destination_db)
     extract.tables = dict([(f, 'geom') for f in options.tabellen])
 
     extract.set_login(host=options.host,

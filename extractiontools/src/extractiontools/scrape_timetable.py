@@ -3,33 +3,34 @@
 
 from argparse import ArgumentParser
 
-import numpy as np
-import logging
 import os
 import sys
-import datetime
 import random
 import time
 import traceback
-from extractiontools.scrape_stops import ScrapeStops, logger, Connection, logger
+from html.parser import HTMLParser
+import requests
+from lxml import html
+from extractiontools.utils.htmlentity import htmlentitydecode
+from extractiontools.scrape_stops import ScrapeStops, Connection, logger
 from extractiontools.utils.get_date import Date, get_timestamp2
-from HTMLParser import HTMLParser
+
 
 class ScrapeTimetable(ScrapeStops):
 
-    def __init__(self, options, db):
+    def __init__(self,
+                 db: str,
+                 date: str,
+                 source_db: str,
+                 recreate_tables: bool=True):
         """"""
-        super(ScrapeTimetable, self).__init__(options, db=db)
-        self.set_date(options.date)
-        self.recreate_tables = options.recreate_tables
-
-    def set_date(self, date):
-        """
-        """
-        self.date = Date.from_string(date)
+        self.destination_db = db
+        self.date: Date = Date.from_string(date)
+        self.recreate_tables = recreate_tables
+        self.source_db = source_db
 
     def scrape(self):
-        """"""
+        """scrape timetables"""
         with Connection(login=self.login1) as conn1:
             self.conn1 = conn1
             self.create_timetable_tables()
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS abfahrten
   "H_ID" integer,
   abfahrt_id bigint NOT NULL,
   "Fahrt_Ziel" text,
+  "Fahrt_Nr" text,
   CONSTRAINT abfahrten_pkey PRIMARY KEY (abfahrt_id),
   CONSTRAINT abfahrten_fk FOREIGN KEY ("H_ID")
       REFERENCES haltestellen ("H_ID") MATCH SIMPLE
@@ -109,22 +111,23 @@ FROM haltestellen
         cursor = self.get_cursor()
         cursor.execute(sql)
         rows = cursor.fetchall()
+        n_total = len(rows)
         i = 0
         for row in rows:
-            H_ID = row[0]
-            H_Name = row[1].decode('utf8')
+            h_id = row[0]
+            h_name = row[1]
             i += 1
-            #logger.info(u'{}: {}: {}'.format(i, H_ID, H_Name))
-            self.readFahrten(
-                H_ID_Abfahrtstafel=H_ID,
-                H_Name_Abfahrtstafel=H_Name)
+            logger.info(f'{i}/{n_total}: {h_id}: {h_name}')
+            self.read_fahrten(
+                h_id_abfahrtstafel=h_id,
+                h_name_abfahrtstafel=h_name)
             if not i % 1:
                 self.conn1.commit()
         self.conn1.commit()
 
-    def readFahrten(self,
-                    H_ID_Abfahrtstafel,
-                    H_Name_Abfahrtstafel):
+    def read_fahrten(self,
+                    h_id_abfahrtstafel,
+                    h_name_abfahrtstafel):
         """Lies Fahrten"""
         cursor = self.get_cursor()
 
@@ -135,20 +138,29 @@ FROM haltestellen
         fahrten_count = 0
 
         #Abfahrten auslesen
-        H_IDstr = str(H_ID_Abfahrtstafel)
+        h_id_str = str(h_id_abfahrtstafel)
 
         # grab data from station timetable for the whole day
         # use 24:00 instead of 00:00 to really get all departures also on stations
         # with a lot of departures
-        bhftafel_ID_URL = u'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&evaId={i}&bt=dep&time=24:00&maxJourneys=10000&date={d}&productsFilter=1111111111&max=10000&start=yes'.format(
-            i=H_IDstr, d=self.date)
-        bhftafel_Name_URL = u'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?ld=96242&country=DEU&rt=1&input={n}&bt=dep&time=24:00&maxJourneys=10000&date={d}&productsFilter=1111111111&max=10000&start=yes'.format(
-            n=H_Name_Abfahrtstafel, d=self.date)
-        urls = [bhftafel_ID_URL, bhftafel_Name_URL]
+        bhftafel_id_url = (
+            f'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?'
+            f'ld=96242&country=DEU&rt=1&evaId={h_id_str}&'
+            f'bt=dep&time=24:00&maxJourneys=10000&'
+            f'date={self.date}&productsFilter=1111111111&max=10000&start=yes'
+        )
+
+        bhftafel_name_url = (
+            f'http://reiseauskunft.bahn.de/bin/bhftafel.exe/dn?'
+            f'ld=96242&country=DEU&rt=1&input={h_name_abfahrtstafel}&'
+            f'bt=dep&time=24:00&maxJourneys=10000&date={self.date}&'
+            f'productsFilter=1111111111&max=10000&start=yes'
+            )
+        urls = [bhftafel_id_url, bhftafel_name_url]
 
         try:
             # wait a bit
-            sleeptime = random.randint(1, 4)
+            sleeptime = random.randint(2, 4)
             time.sleep(sleeptime)
             # try first time to get the Bahnhofstafel
             MAX_TRIES = 10
@@ -157,7 +169,8 @@ FROM haltestellen
             # try the URL with the stop name
             for url in urls:
                 self.t = 0
-                tree = self.getRequestsTree(url)
+                r = requests.get(url)
+                tree = html.fromstring(r.content)
                 self.errCode = tree.xpath('//div[@class="hafasContent error"]/text()')
 
                 while self.t < MAX_TRIES and self.errCode:
@@ -165,8 +178,9 @@ FROM haltestellen
                 try:
                     subtree = tree.xpath('//*[@id="sqResult"]/table')
                     if not subtree:
-                        logger.warn(u'Fehler beim Lesen der BhfTafel für {}: {}:'.format(H_IDstr, H_Name_Abfahrtstafel))
-                        logger.warn(url)
+                        logger.warning(f'Fehler beim Lesen der BhfTafel für '
+                                       f'{h_id_str}: {h_name_abfahrtstafel}:')
+                        logger.warning(url)
                         # try next URL
                         continue
                     # count number of trips
@@ -176,19 +190,18 @@ FROM haltestellen
                     fahrten_count = len(journey_rows)
 
                 except:
-                    logger.warn(traceback.format_exc())
-                    errCode = tree.xpath('//div[@class="errormsg leftMargin"]/text()')
-                    logger.warn(u'Fehler beim Lesen der BhfTafel für {}: {}:'.format(
-                        H_IDstr, H_Name_Abfahrtstafel))
-                    if errCode:
-                        logger.warn(errCode[0])
+                    logger.warning(traceback.format_exc())
+                    err_code = tree.xpath('//div[@class="errormsg leftMargin"]/text()')
+                    logger.warning(f'Fehler beim Lesen der BhfTafel für '
+                                   f'{h_id_str}: {h_name_abfahrtstafel}:')
+                    if err_code:
+                        logger.warning(err_code[0])
                     # try next URL
                     continue
                 # found a Bahnhofstafel
                 if fahrten_count:
-                    logger.info(u'{} abfahrten in {}: {}'.format(fahrten_count,
-                                                                H_IDstr,
-                                                                H_Name_Abfahrtstafel))
+                    logger.info(f'{fahrten_count} abfahrten in '
+                                f'{h_id_str}: {h_name_abfahrtstafel}')
                     self.n_new = 0
                     self.n_already_in_db = 0
                     self.last_stunde = '-1'
@@ -197,31 +210,31 @@ FROM haltestellen
                         self.parse_fahrten(journey,
                                            fahrten_count,
                                            tree,
-                                           H_ID_Abfahrtstafel,
+                                           h_id_abfahrtstafel,
                                            cursor,
-                                           H_Name_Abfahrtstafel)
+                                           h_name_abfahrtstafel)
                     if self.n_new:
                         logger.info('')
-                    logger.info(u'{} new, {} already in db'.format(
-                        self.n_new,
-                        self.n_already_in_db))
+                    logger.info(f'{self.n_new} new, '
+                                f'{self.n_already_in_db} already in db')
                     # return and don't try next URL
                     return
-        except Exception:
-            logger.warn(traceback.format_exc())
+        except Exception as e:
+            logger.warning(traceback.format_exc())
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            logger.warn('{} {} {}'.format(
-                exc_type, fname, exc_tb.tb_lineno))
+            logger.warning(f'{exc_type} {fname} {exc_tb.tb_lineno}')
+            raise e
 
-    def wait_and_retry(self, bhftafel_URL):
+    def wait_and_retry(self, bhftafel_url: str, waittime: int=15):
         # if not successful,
         # try to get the page MAX_TRIES times
-        WAITTIME = 15
-        logger.info(u'wait {} secs and try again {} for url {}'.format(
-            WAITTIME, self.t, bhftafel_URL))
-        time.sleep(WAITTIME)
-        tree = self.getRequestsTree(bhftafel_URL)
+        logger.info(f'wait {waittime} secs and try again {self.t} '
+                    f'for url {bhftafel_url}')
+        time.sleep(waittime)
+        r = requests.get(bhftafel_url)
+        tree = html.fromstring(r.content)
+
         self.errCode = tree.xpath('//div[@class="hafasContent error"]/text()')
         self.t += 1
         return tree
@@ -230,42 +243,51 @@ FROM haltestellen
                       journey,
                       fahrten_count,
                       tree,
-                      H_ID_Abfahrtstafel,
+                      h_id_abfahrtstafel,
                       cursor,
-                      H_Name_Abfahrtstafel):
+                      h_name_abfahrtstafel):
         """
         Parse Fahrt journey in the tree and query the Fahrtverlauf
         look in Fahrten, if Fahrt already exists
         """
         try:
-            xpath_base = '//*[@id="{}"]'.format(journey)
+            xpath_base = f'//*[@id="{journey}"]'
             try:
-                Fahrt_Ziel = tree.xpath(xpath_base+'/td[4]/span/a/text()')[0].replace('\n','')
-                Abfahrten = tree.xpath(xpath_base+'/td[4]/text()')[2:][0].split('\n')
+                fahrt_ziel = tree.xpath(xpath_base+'/td[4]/span/a/text()')[0].replace('\n','')
+                abfahrten = tree.xpath(xpath_base+'/td[4]/text()')[2:][0].split('\n')
             except IndexError:
-                logger.warn(traceback.format_exc())
-                logger.warn('Fehler beim parsen der Abfahrtstafel von {}'.format(
-                    H_Name_Abfahrtstafel))
-            Abfahrtshaltestelle = Abfahrten[1].strip()
-            Abfahrtsuhrzeit = Abfahrten[2]
-            Ankunftsuhrzeit = Abfahrten[-2]
-            Fahrt_Abfahrt = time.strptime(Abfahrtsuhrzeit, '%H:%M')
-            Fahrt_Name = tree.xpath(xpath_base+'//td[3]/a/text()')[0].split('\n')[1]
-
-            Fahrt_URL = 'http://reiseauskunft.bahn.de/'+tree.xpath(xpath_base+'//td[3]/a/@href')[0]
-
-            if Fahrt_URL:
-                hstID_Abfahrt = int(Fahrt_URL.split('station_evaId=')[1].split('&')[0])
+                logger.warning(traceback.format_exc())
+                logger.warning(f'Fehler beim parsen der Abfahrtstafel von {h_name_abfahrtstafel}')
+            abfahrtshaltestelle = abfahrten[1].strip()
+            abfahrtsuhrzeit = abfahrten[2]
+            ankunftsuhrzeit = abfahrten[-2]
+            fahrt_abfahrt = time.strptime(abfahrtsuhrzeit, '%H:%M')
+            xpath_fahrt_base = xpath_base+'//td[3]/a'
+            # search trip name, which can be marked as <span>
+            name_span = tree.xpath(xpath_fahrt_base+'/span/text()')
+            name_without_span = tree.xpath(xpath_fahrt_base+'/text()')
+            if name_span:
+                #  in this case, the second row is the trip number
+                fahrt_name = name_span[0]
+                fahrt_nr = name_without_span[-1].strip('\n()')
             else:
-                hstID_Abfahrt = H_ID_Abfahrtstafel
+                fahrt_name = name_without_span[0].strip('\n')
+                fahrt_nr = None
+
+            fahrt_url = 'http://reiseauskunft.bahn.de/'+tree.xpath(xpath_base+'//td[3]/a/@href')[0]
+
+            if fahrt_url:
+                hst_id_abfahrt = int(fahrt_url.split('station_evaId=')[1].split('&')[0])
+            else:
+                hst_id_abfahrt = h_id_abfahrtstafel
 
         except:
-            logger.warn(traceback.format_exc())
+            logger.warning(traceback.format_exc())
             # if there is an error, wait
-            logger.warn('fehler beim Auslesen der BHF-Tafel')
+            logger.warning('fehler beim Auslesen der BHF-Tafel')
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            logger.warn(exc_type, fname, exc_tb.tb_lineno)
+            logger.warning(exc_type, fname, exc_tb.tb_lineno)
             time.sleep(10)
             return
 
@@ -278,72 +300,76 @@ AND a."Fahrt_Name" = %s AND f."H_Name" = %s
 AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
 
             cursor.execute(sql,
-                           (Fahrt_Name,
-                           Abfahrtshaltestelle,
-                           self.date.get_timestamp(Fahrt_Abfahrt),
-                           Fahrt_Ziel))
+                           (fahrt_name,
+                            abfahrtshaltestelle,
+                            self.date.get_timestamp(fahrt_abfahrt),
+                            fahrt_ziel))
             rows = cursor.fetchall()
             if not rows:
                 self.n_new += 1
                 self.abfahrt_id += 1
 
-                stunde = Abfahrtsuhrzeit[:2]
+                stunde = abfahrtsuhrzeit[:2]
                 if stunde != self.last_stunde:
                     self.last_stunde = stunde
-                    print os.linesep, stunde, ':',
+                    print(os.linesep, stunde, end=',')
 
                 #Fahrten in Tabelle Abfahrten schreiben
                 sql1 = """
 INSERT INTO abfahrten
-(abfahrt_id, "Fahrt_URL", "Fahrt_Name", "Fahrt_Abfahrt", "H_ID", "Fahrt_Ziel")
-VALUES (%s, %s, %s, %s, %s, %s);"""
+(abfahrt_id, "Fahrt_URL", "Fahrt_Name", "Fahrt_Abfahrt", "H_ID", "Fahrt_Ziel", "Fahrt_Nr")
+VALUES (%s, %s, %s, %s, %s, %s, %s);"""
                 cursor.execute(sql1,
                                (self.abfahrt_id,
-                                Fahrt_URL,
-                                Fahrt_Name,
-                                self.date.get_timestamp(Fahrt_Abfahrt),
-                                H_ID_Abfahrtstafel,
-                                Fahrt_Ziel))
-                print u'{}'.format(Fahrt_Name).encode('utf8'),
+                                fahrt_url,
+                                fahrt_name,
+                                self.date.get_timestamp(fahrt_abfahrt),
+                                h_id_abfahrtstafel,
+                                fahrt_ziel,
+                                fahrt_nr))
+                print(f'{fahrt_name}', end=',')
                 try:
                     sleeptime = float(random.randint(1,3))/20.
                     time.sleep(sleeptime)
-                    Fahrtverlauf = self.urlquery(Fahrt_URL)
+                    r = requests.get(fahrt_url)
+                    fahrtverlauf = htmlentitydecode(r.content)
+
                 except:
-                    logger.warn(traceback.format_exc())
-                    logger.warn('Fehler in Abfrage des Fahrtverlaufs')
+                    logger.warning(traceback.format_exc())
+                    logger.warning('Fehler in Abfrage des Fahrtverlaufs')
                     pass
 
                 try:
-                    VerlaufParser = MyHTMLParser()
-                    VerlaufParser.query_date = self.date
+                    verlauf_parser = MyHTMLParser()
+                    verlauf_parser.query_date = self.date
                 except:
-                    logger.warn(traceback.format_exc())
-                    logger.warn('Fehler bei VerlaufParser')
+                    logger.warning(traceback.format_exc())
+                    logger.warning('Fehler bei VerlaufParser')
                     pass
                 # wenn Uhrzeit zwischen 0 und 4 h und Ankunft vor 4 Uhr ist,
                 # wird der Vortag als "Zuglauf" ausgegeben
                 # dies muss korrigiert werden
-                VerlaufParser.Ankunft_vor_4Uhr = int(Ankunftsuhrzeit[:2]) < 4
-                VerlaufParser.ist_Starthaltestelle = True
+                verlauf_parser.Ankunft_vor_4Uhr = int(ankunftsuhrzeit[:2]) < 4
+                verlauf_parser.ist_Starthaltestelle = True
 
-                try:
-                    html_verlauf = self.htmlentitydecode(Fahrtverlauf)
-                except Exception as e:
-                    logger.warn(traceback.format_exc())
-                    logger.warn('HTML Verlauf Fehler')
-                    pass
-                VerlaufParser.feed(html_verlauf)
-                for h in xrange(len(VerlaufParser.data_stations)):
-                    H_Name = VerlaufParser.data_stations[h]
-                    #print VerlaufParser.data_arrivals ##
-                    H_Ankunft = VerlaufParser.data_arrivals[h]
-                    H_Abfahrt = VerlaufParser.data_departures[h]
+                #try:
+                    #html_verlauf = html.fromstring(Fahrtverlauf.content)
+                #except Exception as e:
+                    #logger.warning(traceback.format_exc())
+                    #logger.warning('HTML Verlauf Fehler')
+                    #pass
 
-                    if H_Name == H_Name_Abfahrtstafel:
-                        akt_H_ID = H_ID_Abfahrtstafel
+                verlauf_parser.feed(fahrtverlauf)
+                for h in range(len(verlauf_parser.data_stations)):
+                    h_name = verlauf_parser.data_stations[h]
+
+                    h_ankunft = verlauf_parser.data_arrivals[h]
+                    h_abfahrt = verlauf_parser.data_departures[h]
+
+                    if h_name == h_name_abfahrtstafel:
+                        akt_h_id = h_id_abfahrtstafel
                     else:
-                        akt_H_ID = None
+                        akt_h_id = None
 
 
                     sql3 = """
@@ -352,13 +378,13 @@ INSERT INTO fahrten
 VALUES (%s, %s, %s,%s,%s,%s,%s);"""
                     cursor.execute(sql3,
                                    (self.abfahrt_id,
-                                    Fahrt_Name,
+                                    fahrt_name,
                                     h+1,
-                                    H_Name,
-                                    get_timestamp2(H_Ankunft),
-                                    get_timestamp2(H_Abfahrt),
-                                    akt_H_ID))
-                VerlaufParser.close()
+                                    h_name,
+                                    get_timestamp2(h_ankunft),
+                                    get_timestamp2(h_abfahrt),
+                                    akt_h_id))
+                verlauf_parser.close()
 
             else:
                 # wenn Fahrt schon vorhanden
@@ -372,18 +398,18 @@ AND f."H_ID" IS NULL
 AND a."Fahrt_Name" = %s AND f."H_Name" = %s
 AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
                 cursor.execute(sql,
-                               (H_ID_Abfahrtstafel,
-                                Fahrt_Name,
-                                H_Name_Abfahrtstafel,
-                                self.date.get_timestamp(Fahrt_Abfahrt),
-                                Fahrt_Ziel))
+                               (h_id_abfahrtstafel,
+                                fahrt_name,
+                                h_name_abfahrtstafel,
+                                self.date.get_timestamp(fahrt_abfahrt),
+                                fahrt_ziel))
         except Exception as e:
-            logger.warn(traceback.format_exc())
+            logger.warning(traceback.format_exc())
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            logger.warn('{} {} {}'.format(
+            logger.warning('{} {} {}'.format(
                 exc_type, fname, exc_tb.tb_lineno))
-            pass
+            raise e
 
     def add_missing_stops(self):
         """Add missing stops from master database to local database"""
@@ -407,11 +433,11 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
     """
 
         query = sql.format(srid=self.target_srid,
-                           sd=self.options.source_db,
+                           sd=self.source_db,
                            s=self.schema)
         logger.info(query)
         cur.execute(query)
-        logger.info('{msg}'.format(msg=cur.statusmessage))
+        logger.info(f'{cur.statusmessage}')
 
 
 class MyHTMLParser(HTMLParser):
@@ -432,12 +458,13 @@ class MyHTMLParser(HTMLParser):
         self.data_arrivals = []
         self.data_departures = []
         self.first_linefeed = True
+        self.date = Date()
 
     def handle_starttag(self, tag, attrs):
 
         if tag == 'td':
             if attrs:
-                #print attrs[0][1] ##
+
                 if attrs[0][1] == 'route':
                     self.recording_route = 1
                 elif attrs[0][1] == 'train':
@@ -471,28 +498,27 @@ class MyHTMLParser(HTMLParser):
         if tag == 'h3':
             self.recording_trainroute = 0
 
-
     def handle_data(self, data):
         if self.recording_route:
-            if data <> '\n':
+            if data != '\n':
                 self.data_route.append(data)
         if self.recording_trainroute:
-            if data <> '\n':
+            if data != '\n':
                 date = data.split('Fahrtverlauf vom ')[1].rstrip(')').replace('\n','')
                 d, m, y = date.split('.')
                 yyyy = int(y) + 2000
                 self.date = Date(yyyy, m, d)
         elif self.recording_train:
-            if data <> '\n':
+            if data != '\n':
                 self.data_train.append(data)
         elif self.recording_station:
-            if data <> '\n':
+            if data != '\n':
                 self.data_stations.append(data)
         elif self.recording_arrival:
-            if data == '\n':
+            if data in ['\n', '\n\xa0\n']: # geschütztes Leerzeichen bei Ankunft
+                zeit = None
+                self.data_arrivals.append(zeit)
                 if self.first_linefeed:
-                    zeit = None
-                    self.data_arrivals.append(zeit)
                     self.first_linefeed = False
                 else:
                     self.first_linefeed = True
@@ -500,7 +526,7 @@ class MyHTMLParser(HTMLParser):
                 data = data.replace('an ','').replace('ab ','')
                 try:
                     # if tag is Delay marker
-                    if data.startswith(u'+'):
+                    if data.startswith('+'):
                         return
                     zeit = self.get_time(data)
                     if self.data_departures:
@@ -515,26 +541,26 @@ class MyHTMLParser(HTMLParser):
                                 break
                             z -= 1
                 except Exception as F:
-                    logger.warn(traceback.format_exc())
+                    logger.warning(traceback.format_exc())
                     logger.warning(F)
                     zeit = None
                     raise
                 self.data_arrivals.append(zeit)
         elif self.recording_departure:
-            if data == '\n':
+            if data in ['\n', '\n\xa0\n']: # geschütztes Leerzeichen bei Abfahrt
+                zeit = None
+                self.data_departures.append(zeit)
                 if self.first_linefeed:
-                    zeit = None
-                    self.data_departures.append(zeit)
                     self.first_linefeed = False
                 else:
                     self.first_linefeed = True
 
             # Delay Marker
-            elif data.startswith(u'+'):
+            elif data.startswith('+'):
                 return
             # normal time
             else:
-                data = data.replace('an ','').replace('ab ','')
+                data = data.replace('an ', '').replace('ab ', '')
                 try:
                     if self.ist_Starthaltestelle:
                         if len(data.strip()) > 0:
@@ -551,7 +577,8 @@ class MyHTMLParser(HTMLParser):
                             self.date = self.date.shift_day(1)
                             zeit = self.get_time(data)
                     else:
-                        # wenn keine Ankunftszeit angegeben ist, schaue, ob Zeitsprung an Abfahrt an vorheriger Haltestelle
+                        # wenn keine Ankunftszeit angegeben ist, schaue,
+                        # ob Zeitsprung an Abfahrt an vorheriger Haltestelle
                         z = len(self.data_departures)-1
                         while z >= 0:
                             abfahrtszeit = self.data_departures[z]
@@ -563,7 +590,7 @@ class MyHTMLParser(HTMLParser):
                                 break
                             z -= 1
                 except:
-                    logger.warn(traceback.format_exc())
+                    logger.warning(traceback.format_exc())
                     zeit = None
                 self.data_departures.append(zeit)
 
@@ -583,14 +610,15 @@ class MyHTMLParser(HTMLParser):
 
         """
         try:
-            zeit = time.strptime('{t} {d}'.format(t=data.strip(), d=self.date),
+            zeit = time.strptime(f'{data.strip()} {self.date}',
                                  '%H:%M %d.%m.%y')
         except ValueError as e:
-            logger.warn(traceback.format_exc())
-            logger.warn(
-                '"{}" could not be processed by time.strptime'.format(data))
+            logger.warning(traceback.format_exc())
+            logger.warning(
+                f'"{data}" could not be processed by time.strptime')
             raise e
         return zeit
+
 
 
 if __name__=='__main__':
@@ -638,7 +666,10 @@ if __name__=='__main__':
 
     options = parser.parse_args()
 
-    scrape = ScrapeTimetable(options, options.destination_db)
+    scrape = ScrapeTimetable(db=options.destination_db,
+                             date=options.date,
+                             source_db=options.source_db,
+                             recreate_tables=options.recreate_tables)
     scrape.set_login(host=options.host, port=options.port, user=options.user)
     scrape.get_target_boundary_from_dest_db()
     scrape.scrape()

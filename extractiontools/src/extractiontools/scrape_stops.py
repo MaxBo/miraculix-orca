@@ -1,31 +1,68 @@
 #!/usr/bin/env python
 #coding:utf-8
 
-import numpy as np
-import logging
+
 import time
 from argparse import ArgumentParser
-import urllib2
 import random
 
-from HTMLParser import HTMLParser
 from lxml import html
-import re, sets, requests, sys
-
-import htmlentitydefs
-htmlentitydefs.name2codepoint['apos'] = 39
-htmlentitydefs.entitydefs['apos'] = '\x27'
-htmlentitydefs.codepoint2name[39] = 'apos'
+import requests
+from urllib.parse import urlparse, parse_qs
 
 import os
 import datetime
-from extractiontools.ausschnitt import DBApp, Extract, Connection, BBox, logger
+from extractiontools.ausschnitt import Extract, Connection, BBox, logger
 
 
-class ExtractStops(Extract):
+class ScrapeStops(Extract):
     tables = {}
     schema = 'timetables'
     role = 'group_osm'
+
+    def scrape(self):
+        """"""
+        with Connection(login=self.login1) as conn1:
+            self.conn1 = conn1
+            self.readHaltestellen()
+            self.conn1.commit()
+
+    def get_session_id(self):
+        """get a session_id"""
+        url = 'http://mobile.bahn.de/bin/mobil/query.exe/dox?country=DEU&rt=1&use_realtime_filter=1&stationNear=1)'
+        r = requests.get(url)
+        tree = html.fromstring(r.content)
+        elems = tree.xpath('/html/body/div/div[2]/div/div/div/form')
+        if not elems:
+            logger.warn('connection failed, no valid response')
+
+        elem = elems[0]
+        o = urlparse(elem.action)
+        query = parse_qs(o.query)
+        try:
+            id2 = query['ld'][0]
+            id1 = query['i'][0]
+        except (KeyError, IndexError):
+            logger.warn('no valid response')
+
+        return id1, id2
+
+    def get_agent(self):
+        """
+        return a random agent
+        """
+        agents = ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.17 (KHTML, like Gecko) Chrome/24.0.1309.0 Safari/537.17',
+                  'Mozilla/5.0 (compatible; MSIE 10.6; Windows NT 6.1; Trident/5.0; InfoPath.2; SLCC1; .NET CLR 3.0.4506.2152; .NET CLR 3.5.30729; .NET CLR 2.0.50727) 3gpp-gba UNTRUSTED/1.0',
+                  'Opera/12.80 (Windows NT 5.1; U; en) Presto/2.10.289 Version/12.02',
+                  'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)',
+                  'Mozilla/3.0',
+                  'Mozilla/5.0 (iPhone; U; CPU like Mac OS X; en) AppleWebKit/420+ (KHTML, like Gecko) Version/3.0 Mobile/1A543a Safari/419.3',
+                  'Mozilla/5.0 (Linux; U; Android 0.5; en-us) AppleWebKit/522+ (KHTML, like Gecko) Safari/419.3',
+                  'Opera/9.00 (Windows NT 5.1; U; en)']
+
+        agent = random.choice(agents)
+        return agent
+
     def additional_stuff(self):
         """
         """
@@ -66,125 +103,6 @@ FROM {schema}.route_types;
         self.run_query(sql.format(temp=self.temp, schema=self.schema),
                        conn=self.conn0)
 
-
-class ScrapeStops(Extract):
-    schema = 'timetables'
-    role = 'group_osm'
-
-    def __init__(self,
-                 options,
-                 db='extract'):
-        super(ScrapeStops, self).__init__(destination_db=db, options=options)
-        self.db = db
-        self.options = options
-
-    def scrape(self):
-        """"""
-        with Connection(login=self.login1) as conn1:
-            self.conn1 = conn1
-            self.readHaltestellen()
-            self.conn1.commit()
-
-    def getSessionIDs(self):
-        #SessionID von der Bahn bekommen
-        ID_URL = 'http://mobile.bahn.de/bin/mobil/query.exe/dox?country=DEU&rt=1&use_realtime_filter=1&stationNear=1)'
-        ID_URL = self.urlquery(ID_URL)
-
-        ID_URL1 = ID_URL.split('amp;i=')
-        ID_URL1 = ID_URL1[1]
-        ID_URL1 = ID_URL1.split('&amp;')
-        ID_URL1 = ID_URL1[0]
-        #print ID_URL1
-
-        ID_URL2 = ID_URL.split('dox?ld=')
-        ID_URL2 = ID_URL2[1]
-        ID_URL2 = ID_URL2.split('&amp;')
-        ID_URL2 = ID_URL2[0]
-        #print ID_URL2
-        return ID_URL1, ID_URL2
-
-    def get_agent(self):
-        """
-        return a random agent
-        """
-        agents = ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.17 (KHTML, like Gecko) Chrome/24.0.1309.0 Safari/537.17',
-                  'Mozilla/5.0 (compatible; MSIE 10.6; Windows NT 6.1; Trident/5.0; InfoPath.2; SLCC1; .NET CLR 3.0.4506.2152; .NET CLR 3.5.30729; .NET CLR 2.0.50727) 3gpp-gba UNTRUSTED/1.0',
-                  'Opera/12.80 (Windows NT 5.1; U; en) Presto/2.10.289 Version/12.02',
-                  'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)',
-                  'Mozilla/3.0',
-                  'Mozilla/5.0 (iPhone; U; CPU like Mac OS X; en) AppleWebKit/420+ (KHTML, like Gecko) Version/3.0 Mobile/1A543a Safari/419.3',
-                  'Mozilla/5.0 (Linux; U; Android 0.5; en-us) AppleWebKit/522+ (KHTML, like Gecko) Safari/419.3',
-                  'Opera/9.00 (Windows NT 5.1; U; en)']
-
-        agent = random.choice(agents)
-        return agent
-
-    def urlquery(self, url):
-        # function cycles randomly through different user agents and time intervals to simulate more natural queries
-        try:
-
-            sleeptime = float(random.randint(1,5))/10
-            time.sleep(sleeptime)
-            agent = self.get_agent()
-
-            opener = urllib2.build_opener()
-            opener.addheaders = [('User-agent', agent)]
-            #print agent
-
-            html = opener.open(url).read()
-
-            return html
-
-        except:
-            logger.warn("fehler in urlquery:")
-            logger.warn(url)
-            pass
-
-    def getRequestsTree(self, url):
-        """"""
-        agent = self.get_agent()
-        headers = {'User-Agent': agent}
-        old_loglevel = logger.level
-        logger.level = logging.WARN
-        page = requests.get(url, headers=headers)
-        logger.level = old_loglevel
-        tree = html.fromstring(page.content)
-        return tree
-
-    def htmlentitydecode(self, s):
-        try:
-            u = s.decode('cp1252')
-            for k,v in htmlentitydefs.entitydefs.items():
-                if v.startswith('&'):
-                    u = u.replace(v, unichr(htmlentitydefs.name2codepoint[k]))
-            for k in htmlentitydefs.codepoint2name.keys():
-                u = u.replace('&#%s;' %k, unichr(k))
-        except:
-            u=s
-        return u
-
-    def unescape(self, text):
-        def fixup(m):
-            text = m.group(0)
-            if text[:2] == "&#":
-                # character reference
-                try:
-                    if text[:3] == "&#x":
-                        return unichr(int(text[3:-1], 16))
-                    else:
-                        return unichr(int(text[2:-1]))
-                except ValueError:
-                    pass
-            else:
-                # named entity
-                try:
-                    text = unichr(htmlentitydefs.name2codepoint[text[1:-1]])
-
-                except KeyError:
-                    pass
-            return text # leave as is
-        return re.sub("&#?\w+;", fixup, text)
-
     def get_cursor(self):
         """erzeuge Datenbankverbindung1 und Cursor"""
         cursor = self.conn1.cursor()
@@ -216,100 +134,82 @@ class ScrapeStops(Extract):
         lon0, lon1, lat0, lat1 = self.bbox.rounded()
         stops_found = 0
         stops_inserted = 0
-        for i in range(int(lat0*10), int(lat1*10)):
-            for j in range(int(lon0*10),int(lon1*10)):
+        for j in range(int(lat0*10), int(lat1*10)):
+            for i in range(int(lon0*10),int(lon1*10)):
                 stops_found_in_tile = 0
                 stops_inserted_in_tile = 0
 
                 time.sleep(0.5)
 
-                lat = i * 100000
-                lon = j * 100000
+                lat = j * 100000
+                lon = i * 100000
 
-                lon = str(lon)
-                lat = str(lat)
 
                 logger.info('search in {}, {}'.format(i, j))
 
-                ID_URL1, ID_URL2 = self.getSessionIDs()
+                id1, id2 = self.get_session_id()
 
                 try:
                     # URL zusammensetzen
-                    URL = ''.join(('http://mobile.bahn.de/bin/mobil/query.exe/dox?ld=',
-                                   str(ID_URL2),
-                                   '&n=1&i=',
-                                   ID_URL1,
-                                   '&rt=1&use_realtime_filter=1&performLocating=2&tpl=stopsnear&look_maxdist=10000&look_stopclass=1023&look_x=', ))
-
-                    URL = ''.join((URL, lon, "&look_y=", lat, "&"))
+                    url = (
+                        f'http://mobile.bahn.de/bin/mobil/query.exe/dox?'
+                        f'ld={id2}&n=1&i={id1}&rt=1&use_realtime_filter=1&'
+                        f'performLocating=2&tpl=stopsnear&look_maxdist=10000&'
+                        f'look_stopclass=1023&look_x={lon}&look_y={lat}&'
+                    )
                 except:
-                    print 'fehler URL'
+                    print('fehler URL')
                     pass
 
                 try:
+                    r = requests.get(url) # agent...
+                    tree = html.fromstring(r.content)
                     #HTML auslesen
 
-                    html = self.urlquery(URL)
+                    overview_clicktable = '//div[@class="overview clicktable"]/*'
+                    elems = tree.xpath(overview_clicktable)
+                    if not elems:
+                        logger.warn('connection failed, no valid response')
 
-                    html = html.split('<div class="overview clicktable">')
-                    html = html[1]
-                    html = html.split('<div class="bline">')
-                    html = html[0]
-                    html = html.split('<a class="uLine')
+                    for elem in elems:
+                        link = elem.xpath('a')[0]
+                        H_Name = link.text
+                        href = link.get('href')
+                        o = urlparse(href)
+                        station_query = parse_qs(o.query)['HWAI'][0]
+                        station_params = {}
+                        for param in station_query.split('!'):
+                            param_tuple = param.split('=')
+                            if len(param_tuple) > 1:
+                                station_params[param_tuple[0]] = param_tuple[1]
+                        #HaltestellenID
+                        H_ID = station_params['id']
+                        H_Lat = float(station_params['Y']) / 1000000.
+                        H_Lon = float(station_params['X']) / 1000000.
 
-                    for element in html:
+                        #Datenobjekt erzeugen und in DB schreiben
+                        # wenn schon vorhanden, dann Geometrie aktualisieren
 
-                        if len(element) < 80: x = 0
-                        else:
-                            element = element.split('</div>')
-                            element = element[0]
-
-                            #Haltestellenname
-                            H_Name = element.split('>')
-                            H_Name = H_Name[1]
-                            H_Name = H_Name.replace('</a','')
-                            H_Name = self.unescape(H_Name)
-
-                            #HaltestellenID
-                            H_ID = element.split('!id=')
-                            H_ID = H_ID[1].split('!dist=')
-                            H_ID = H_ID[0]
-
-                            #HaltestellenLat
-                            H_Lat = element.split('!Y=')
-                            H_Lat = H_Lat[1].split('!id=')
-                            H_Lat = float(H_Lat[0])
-                            H_Lat /= 1000000.
-
-                            #HaltestellenLat
-                            H_Lon = element.split('!X=')
-                            H_Lon = H_Lon[1].split('!Y=')
-                            H_Lon = float(H_Lon[0])
-                            H_Lon /= 1000000.
-
-                            #Datenobjekt erzeugen und in DB schreiben
-                            # wenn schon vorhanden, dann Geometrie aktualisieren
-
-                            cursor.execute(sql_insert,
+                        cursor.execute(sql_insert,
+                                       (H_Name,
+                                        H_ID,
+                                        H_Lon, H_Lat,
+                                        self.target_srid,
+                                        H_ID))
+                        stops_found += 1
+                        stops_found_in_tile += 1
+                        stops_inserted += cursor.rowcount
+                        stops_inserted_in_tile += cursor.rowcount
+                        if not cursor.rowcount:
+                            # update name and geom if stop is already in db
+                            cursor.execute(sql_update,
                                            (H_Name,
-                                            H_ID,
                                             H_Lon, H_Lat,
                                             self.target_srid,
                                             H_ID))
-                            stops_found += 1
-                            stops_found_in_tile += 1
-                            stops_inserted += cursor.rowcount
-                            stops_inserted_in_tile += cursor.rowcount
-                            if not cursor.rowcount:
-                                # update name and geom if stop is already in db
-                                cursor.execute(sql_update,
-                                               (H_Name,
-                                                H_Lon, H_Lat,
-                                                self.target_srid,
-                                                H_ID))
 
-                            if not stops_found % 1000:
-                                self.conn1.commit()
+                        if not stops_found % 1000:
+                            self.conn1.commit()
 
                 except IndexError:
                     pass
@@ -349,13 +249,10 @@ if __name__=='__main__':
 
     options = parser.parse_args()
 
-    if options.copy_from_source_db:
-        extract = ExtractStops(destination_db=options.destination_db)
-        extract.set_login(host=options.host, port=options.port, user=options.user)
-        extract.get_target_boundary_from_dest_db()
-        extract.extract()
 
     scrape = ScrapeStops(options, db=options.destination_db)
     scrape.set_login(host=options.host, port=options.port, user=options.user)
     scrape.get_target_boundary_from_dest_db()
+    if options.copy_from_source_db:
+        scrape.extract()
     scrape.scrape()

@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 #coding:utf-8
 
-
+from __future__ import annotations
 import datetime
-import time
 import pytz
 
 
-berlin = pytz.timezone('Europe/Berlin')
+BERLIN = pytz.timezone('Europe/Berlin')
 
 
 class Date(datetime.date):
@@ -38,7 +37,7 @@ class Date(datetime.date):
         return repr(self)
 
     @classmethod
-    def from_string(cls, datestring):
+    def from_string(cls, datestring: str) -> Date:
         """Create a Date-instance from a datestring in format DD.MM.YYYY"""
         if not datestring:
             return Date.__new__(cls)
@@ -47,8 +46,7 @@ class Date(datetime.date):
         except ValueError as e:
             day, month, year = (int(x) for x in datestring.split('/'))
         except ValueError as e:
-            msg = '{} not valid for format DD.MM.YYYY or DD/MM/YYYY'.format(
-                datestring)
+            msg = f'{datestring} not valid for format DD.MM.YYYY or DD/MM/YYYY'
 
             raise ValueError(msg)
         return super(Date, cls).__new__(cls, year, month, day)
@@ -90,9 +88,9 @@ def get_timestamp2(time_to_convert, date=None):
         return None
 
     if date is None:
-        date = Date(year = t.tm_year,
-                    month = t.tm_mon,
-                    day = t.tm_mday)
+        date = Date(year=t.tm_year,
+                    month=t.tm_mon,
+                    day=t.tm_mday)
 
     dt = datetime.datetime(date.year,
                            date.month,
@@ -102,7 +100,7 @@ def get_timestamp2(time_to_convert, date=None):
                            t.tm_sec)
 
     # check Sommerzeit
-    local = berlin.localize(dt, is_dst=False)
+    local = BERLIN.localize(dt, is_dst=False)
     tz = 'CEST' if local.dst() else 'CET'
     fmt = '%Y-%m-%d %H:%M:%S{tz}'.format(tz=tz)
 

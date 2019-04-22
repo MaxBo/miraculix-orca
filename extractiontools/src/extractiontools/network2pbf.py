@@ -5,7 +5,6 @@ from argparse import ArgumentParser
 
 import logging
 logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
 logger.level = logging.DEBUG
 import sys
 import os
@@ -220,7 +219,7 @@ USING btree(id);
                               'projekte',
                               self.options.destination_db,
                               self.options.subfolder, )
-        ret = subprocess.call('mkdir -p {}'.format(folder), shell=self.SHELL)
+        self.make_folder(folder)
 
         file_path = os.path.join(folder, fn)
 

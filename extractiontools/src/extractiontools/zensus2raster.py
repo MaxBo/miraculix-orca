@@ -170,7 +170,8 @@ if __name__ == '__main__':
     options = parser.parse_args()
 
     z2r = Zensus2Raster(options,
-                        db=options.destination_db)
+                        db=options.destination_db,
+                        subfolder=options.subfolder)
     z2r.set_login(host=options.host,
                   port=options.port,
                   user=options.user)

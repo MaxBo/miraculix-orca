@@ -5,8 +5,7 @@ from argparse import ArgumentParser
 
 import logging
 logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
-logger.level = logging.DEBUG
+logger.level = logging.INFO
 
 from extractiontools.connection import Connection, DBApp, Login
 
@@ -18,14 +17,23 @@ class BuildNetwork(DBApp):
     role = 'group_osm'
 
     def __init__(self,
-                 options,
                  schema='osm',
                  network_schema='network',
-                 db='extract'):
+                 db='extract',
+                 limit: int=None,
+                 chunksize:int=1000,
+                 links_to_find:float=0.25,
+                 corine:str='clc18',
+                 routing_walk=False,
+                 ):
         self.schema = schema
         self.network = network_schema
         self.db = db
-        self.options = options
+        self.limit = limit
+        self.chunksize = chunksize
+        self.links_to_find = links_to_find
+        self.corine = corine
+        self.routing_walk = False
 
     def set_login(self, host, port, user, password=None):
         self.login = Login(host, port, user, password, db=self.db)
@@ -415,13 +423,15 @@ WITH (
         """
         fill the links
         """
-        sql = """
+        network = self.network
+        limit = self.limit or 'NULL'
+        sql = f"""
 TRUNCATE {network}.links;
 SELECT {network}.create_links({limit}, 0);
 
 -- lösche links ohne Geometrie
 DELETE FROM {network}.links WHERE st_NumPoints(geom) = 0;
-        """.format(network=self.network, limit=self.options.limit)
+        """
         self.run_query(sql)
 
     def create_functions(self):
@@ -497,7 +507,7 @@ $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
   COMMIT;
-  '''.format(chunksize=self.options.chunksize, network=self.network)
+  '''.format(chunksize=self.chunksize, network=self.network)
         cur.execute(sql)
 
         sql = '''
@@ -599,7 +609,7 @@ BEGIN
 	GROUP BY fromnode, tonode, wayid, segment) AS l,
     osm.ways w
     WHERE w.id = l.wayid;
-	RAISE NOTICE 'Noch % links: Erstelle links von % bis %', fl.todo, fl.rowidfrom, fl.rowidto;
+    RAISE NOTICE 'Noch % links: Erstelle links von % bis %', fl.todo, fl.rowidfrom, fl.rowidto;
   END LOOP;
 RETURN fl.rowidto;
 END;
@@ -607,13 +617,13 @@ $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
 COMMIT;
-        """.format(chunksize=self.options.chunksize, network=self.network)
+        """.format(chunksize=self.chunksize, network=self.network)
         cur.execute(sql)
 
     def update_linktypes(self):
         """
         """
-        corine = self.options.corine
+        corine = self.corine[0]
         sql = """
 UPDATE {network}.links l
 SET linktype = s.linktype_id
@@ -858,7 +868,7 @@ INSERT INTO {network}.wayid_chunk SELECT max(wayid) AS id FROM {network}.link_po
 ALTER TABLE {network}.wayid_chunk ADD PRIMARY KEY(id);
 COMMIT;
 
-        """.format(chunksize=self.options.chunksize, network=self.network)
+        """.format(chunksize=self.chunksize, network=self.network)
         self.run_query(sql)
 
     def create_barriers(self):
@@ -1243,13 +1253,13 @@ SELECT count(*) FROM {network}.edges_reached;
             links_reached = float(row.count)
             msg2 = '{f} out of {n} edges reached'
             logger.info(msg2.format(f=int(links_reached), n=self.n_links))
-            if links_reached > self.n_links * self.options.links_to_find:
+            if links_reached > self.n_links * self.links_to_find:
                 sql = 'ANALYZE {network}.edges_reached;'.format(network=self.network)
                 self.run_query(sql)
                 return
 
         msg = 'No Vertex has been found that is accessible at least by at least {n:0.0f}% of the links in the network'
-        raise ValueError(msg.format(n=self.options.links_to_find * 100))
+        raise ValueError(msg.format(n=self.links_to_find * 100))
 
     def update_pgr_driving_distance(self, startvertex=1, maxcosts=10000000):
         """
@@ -1331,7 +1341,10 @@ if __name__ == '__main__':
     build_network = BuildNetwork(schema='osm',
                                  network_schema='network',
                                  db=options.db,
-                                 options=options,)
+                                 limit=options.limit,
+                                 chunksize=options.chunksize,
+                                 links_to_find=options.links_to_find,
+                                 corine=corine)
     build_network.set_login(host=options.host,
                             port=options.port,
                             user=options.user)

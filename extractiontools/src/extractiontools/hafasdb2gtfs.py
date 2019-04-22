@@ -1517,8 +1517,7 @@ WHERE departure_time IS NULL;
             tables = ['stops', 'agency', 'stop_times', 'routes', 'trips', 'shapes',
                       'calendar', 'calendar_dates', 'transfers']
             folder = path.replace('~', os.environ['HOME'])
-            if not os.path.exists(folder):
-                os.mkdir(folder)
+            self.make_folder(folder)
             zipfilename = os.path.join(folder,
                                        '{}.zip'.format(self.destination_db))
             with zipfile.ZipFile(zipfilename, 'w') as z:

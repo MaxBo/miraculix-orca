@@ -1,0 +1,10 @@
+
+psycopg2>=2.4.6
+numpy>=1.9
+sqlparse
+orca
+django>=2
+django-bootstrap4
+requests
+lxml
+-e git+git://github.com/MaxBo/orcadjango.git#egg=orcadjango

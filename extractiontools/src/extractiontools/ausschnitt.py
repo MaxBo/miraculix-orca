@@ -6,8 +6,7 @@ from argparse import ArgumentParser
 import numpy as np
 import logging
 logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
-logger.level = logging.DEBUG
+logger.level = logging.INFO
 import sys
 import os
 import subprocess
@@ -57,27 +56,14 @@ class Extract(DBApp):
                  destination_db='extract',
                  temp='temp',
                  target_srid=31467,
-                 recreate_db=False,
                  **options):
         self.srid = 4326
         self.target_srid = target_srid
         self.temp = temp
         self.source_db = options.get('source_db', 'europe')
         self.destination_db = destination_db
-        self.recreate_db = recreate_db
         self.tables2cluster = []
         self.check_platform()
-
-    def check_platform(self):
-        """
-        check the platform
-        """
-        if sys.platform.startswith('win'):
-            self.folder = r'C:\temp'
-            self.SHELL = False
-        else:
-            self.folder = '$HOME/gis'
-            self.SHELL = True
 
     def set_login(self, host, port, user, password=None, **kwargs):
         """
@@ -94,6 +80,21 @@ class Extract(DBApp):
         self.login0 = Login(host, port, user, password, db=self.source_db)
         self.login1 = Login(host, port, user, password, db=self.destination_db)
 
+    def set_login01(self, login: Login, source_db):
+        """
+        set login information for source and destination database
+        to self.login0 and self.login1
+
+        Parameters
+        ----------
+        login : Login
+        source_db : str
+        """
+        self.login0 = Login(login.host, login.port,
+                            login.user, login.password,
+                            db=source_db)
+        self.login1 = login
+
     def execute_query(self, sql):
         """
         establishes a connection and executes some code
@@ -102,15 +103,17 @@ class Extract(DBApp):
              Connection(login=self.login1) as conn1:
             self.run_query(sql)
 
+    def recreate_db(self):
+        self.set_pg_path()
+        exists = self.check_if_database_exists(self.destination_db)
+        if exists:
+            self.truncate_db()
+        else:
+            self.create_target_db(self.login1)
+        self.create_serverside_folder()
+
     def extract(self):
         self.set_pg_path()
-        if self.recreate_db:
-            exists = self.check_if_database_exists(self.destination_db)
-            if exists:
-                self.truncate_db()
-            else:
-                self.create_target_db(self.login1)
-            self.create_serverside_folder()
         with Connection(login=self.login0) as conn0, \
              Connection(login=self.login1) as conn1:
             self.conn0 = conn0
@@ -445,10 +448,9 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
 
     def create_serverside_folder(self):
         """ Create a project folder on the server"""
+        self.check_platform()
         folder = os.path.join(self.folder, 'projekte', self.destination_db)
-        cmd = 'mkdir -p {}'.format(folder)
-        logger.info(cmd)
-        subprocess.call(cmd, shell=self.SHELL)
+        self.make_folder(folder)
 
 
 class ExtractMeta(Extract):
@@ -804,8 +806,7 @@ if __name__ == '__main__':
                 left=options.left, right=options.right)
     extract = ExtractMeta(source_db=options.source_db,
                          destination_db=options.destination_db,
-                         target_srid=options.srid,
-                         recreate_db=options.recreate)
+                         target_srid=options.srid)
     extract.set_login(host=options.host, port=options.port, user=options.user)
     extract.get_target_boundary(bbox)
     extract.extract()

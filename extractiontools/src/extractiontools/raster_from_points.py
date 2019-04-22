@@ -7,8 +7,7 @@ import tempfile
 import subprocess
 import logging
 logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
-logger.level = logging.DEBUG
+logger.level = logging.INFO
 from extractiontools.connection import Connection, DBApp, Login
 
 
@@ -55,25 +54,15 @@ class Points2Raster(DBApp):
     srid = 3035
 
     def __init__(self,
-                 options,
-                 db='extract'):
+                 db: str='extract',
+                 subfolder: str='tiffs'):
         self.db = db
         self.check_platform()
-        self.options = options
+        self.destination_db = db
+        self.subfolder = subfolder
 
-    def set_login(self, host, port, user, password=None):
+    def set_login(self, host, port, user, password=None, db=None):
         self.login = Login(host, port, user, password, db=self.db)
-
-    def check_platform(self):
-        """
-        check the platform
-        """
-        if sys.platform.startswith('win'):
-            self.folder = r'C:\temp'
-            self.SHELL = False
-        else:
-            self.folder = '$HOME/gis'
-            self.SHELL = True
 
     def run(self):
         """
@@ -229,9 +218,9 @@ WHERE
 
         folder = os.path.join(self.folder,
                               'projekte',
-                              self.options.destination_db,
-                              self.options.subfolder, )
-        ret = subprocess.call('mkdir -p {}'.format(folder), shell=self.SHELL)
+                              self.destination_db,
+                              self.subfolder, )
+        self.make_folder(folder)
 
         fn = '{tn}.tiff'.format(tn=tablename)
         file_path = os.path.join(folder, fn)
@@ -255,8 +244,7 @@ COPY (
             cur.copy_expert(copy_sql, f)
             f.close()
 
-            cmd = 'xxd -p -r {tf} > {file_path}'.format(tf=f.name,
-                                                        file_path=file_path)
+            cmd = f'/usr/bin/xxd -p -r {f.name} > {file_path}'
             logger.info(cmd)
             ret = subprocess.call(cmd, shell=self.SHELL)
             try:
@@ -264,8 +252,8 @@ COPY (
             except IOError:
                 pass
         if ret:
-            msg = 'Raster Table {tn} could copied to {df}'
-            raise IOError(msg.format(tn=tablename, df=file_path))
+            msg = f'Raster Table {tablename} could not be copied to {file_path}'
+            raise IOError(msg)
 
     def create_matview_poly_with_raster(self,
                                         tablename,

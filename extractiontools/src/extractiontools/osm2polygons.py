@@ -6,22 +6,18 @@ from argparse import ArgumentParser
 import logging
 logger = logging.getLogger()
 logger.addHandler(logging.StreamHandler())
-logger.level = logging.DEBUG
+logger.level = logging.INFO
 
 from extractiontools.connection import Connection, Login
 from extractiontools.ausschnitt import Extract
 
-class CopyOSM2FGDB(Extract):
+class CreatePolygons(Extract):
     """"""
-    def __init__(self, options):
+    def __init__(self, login):
 
         """"""
-        self.options = options
         self.check_platform()
-        self.login1 = Login(self.options.host,
-                            self.options.port,
-                            self.options.user,
-                            db=self.options.destination_db)
+        self.login1 = login
 
     def create_poly_and_multipolygons(self, schema='osm'):
         """
@@ -400,7 +396,6 @@ WHERE NOT EXISTS
             self.run_query(sql_delete_unused_simple_polygons)
             self.run_query(sql_update_tags)
             self.run_query(sql_create_index)
-            #self.conn.commit()
             self.run_query(sql_create_view.format(
                 srid=self.target_srid))
             self.conn.commit()
@@ -433,6 +428,7 @@ if __name__ == '__main__':
                         dest="schema", default='osm')
 
     options = parser.parse_args()
-    copy2fgdb = CopyOSM2FGDB(options)
+    login = Login(**options.__dict__)
+    copy2fgdb = CreatePolygons(login)
     copy2fgdb.get_target_boundary_from_dest_db()
     copy2fgdb.create_poly_and_multipolygons()

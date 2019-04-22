@@ -5,8 +5,7 @@ from argparse import ArgumentParser
 
 import logging
 logger = logging.getLogger()
-#logger.addHandler(logging.StreamHandler())
-logger.level = logging.DEBUG
+logger.level = logging.INFO
 import sys
 import os
 import subprocess
@@ -54,8 +53,7 @@ class Copy2FGDB(Extract):
                               'projekte',
                               self.options.destination_db,
                               'fgdb', )
-        ret = subprocess.call('mkdir -p {}'.format(folder),
-                              shell=self.SHELL)
+        self.make_folder(folder)
         path = os.path.join(folder, gdbname)
 
         full_cmd = cmd.format(OGR2OGR=self.OGR2OGRPATH,
