@@ -61,7 +61,7 @@ def extract_verwaltungsgrenzen(source_db: str, login: Login,
     """
     extract = ExtractVerwaltungsgrenzen(source_db=source_db,
                                         destination_db=login.db)
-    extract.tables = dict([(f, 'geom') for f in verwaltungsgrenzen_tables])
+    extract.tables = {f: 'geom' for f in verwaltungsgrenzen_tables}
     extract.set_login01(login, source_db)
     extract.get_target_boundary_from_dest_db()
     extract.extract()

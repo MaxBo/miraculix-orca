@@ -3,47 +3,50 @@
 
 
 import time
+import os
+import datetime
 from argparse import ArgumentParser
 import random
 
-from lxml import html
-import requests
 from urllib.parse import urlparse, parse_qs
+import requests
+from lxml import html
 
-import os
-import datetime
-from extractiontools.ausschnitt import Extract, Connection, BBox, logger
+from extractiontools.ausschnitt import Extract, Connection, logger
 
 
 class ScrapeStops(Extract):
+    """Scrape Stops in bounding box"""
     tables = {}
     schema = 'timetables'
     role = 'group_osm'
 
     def scrape(self):
-        """"""
+        """scrape stop from railway page"""
         with Connection(login=self.login1) as conn1:
             self.conn1 = conn1
-            self.readHaltestellen()
+            self.read_haltestellen()
             self.conn1.commit()
 
-    def get_session_id(self):
+    @staticmethod
+    def get_session_id():
         """get a session_id"""
-        url = 'http://mobile.bahn.de/bin/mobil/query.exe/dox?country=DEU&rt=1&use_realtime_filter=1&stationNear=1)'
+        url = 'http://mobile.bahn.de/bin/mobil/query.exe/dox?'\
+            'country=DEU&rt=1&use_realtime_filter=1&stationNear=1)'
         r = requests.get(url)
         tree = html.fromstring(r.content)
         elems = tree.xpath('/html/body/div/div[2]/div/div/div/form')
         if not elems:
-            logger.warn('connection failed, no valid response')
+            logger.warning('connection failed, no valid response')
 
         elem = elems[0]
         o = urlparse(elem.action)
-        query = parse_qs(o.query)
+        query = (o.query)
         try:
             id2 = query['ld'][0]
             id1 = query['i'][0]
         except (KeyError, IndexError):
-            logger.warn('no valid response')
+            logger.warning('no valid response')
 
         return id1, id2
 
@@ -109,7 +112,7 @@ FROM {schema}.route_types;
         cursor.execute('SET search_path TO timetables, public')
         return cursor
 
-    def readHaltestellen(self):
+    def read_haltestellen(self):
         """Lies Haltestellen und füge sie in DB ein bzw. aktualisiere sie"""
 
         cursor = self.get_cursor()
@@ -147,7 +150,7 @@ FROM {schema}.route_types;
                 lon = i * 100000
 
 
-                logger.info('search in {}, {}'.format(i, j))
+                logger.info(f'search in {i}, {j}')
 
                 id1, id2 = self.get_session_id()
 
@@ -171,11 +174,11 @@ FROM {schema}.route_types;
                     overview_clicktable = '//div[@class="overview clicktable"]/*'
                     elems = tree.xpath(overview_clicktable)
                     if not elems:
-                        logger.warn('connection failed, no valid response')
+                        logger.warning('connection failed, no valid response')
 
                     for elem in elems:
                         link = elem.xpath('a')[0]
-                        H_Name = link.text
+                        h_name = link.text
                         href = link.get('href')
                         o = urlparse(href)
                         station_query = parse_qs(o.query)['HWAI'][0]
@@ -185,19 +188,19 @@ FROM {schema}.route_types;
                             if len(param_tuple) > 1:
                                 station_params[param_tuple[0]] = param_tuple[1]
                         #HaltestellenID
-                        H_ID = station_params['id']
-                        H_Lat = float(station_params['Y']) / 1000000.
-                        H_Lon = float(station_params['X']) / 1000000.
+                        h_id = station_params['id']
+                        h_lat = float(station_params['Y']) / 1000000.
+                        h_lon = float(station_params['X']) / 1000000.
 
                         #Datenobjekt erzeugen und in DB schreiben
                         # wenn schon vorhanden, dann Geometrie aktualisieren
 
                         cursor.execute(sql_insert,
-                                       (H_Name,
-                                        H_ID,
-                                        H_Lon, H_Lat,
+                                       (h_name,
+                                        h_id,
+                                        h_lon, h_lat,
                                         self.target_srid,
-                                        H_ID))
+                                        h_id))
                         stops_found += 1
                         stops_found_in_tile += 1
                         stops_inserted += cursor.rowcount
@@ -205,10 +208,10 @@ FROM {schema}.route_types;
                         if not cursor.rowcount:
                             # update name and geom if stop is already in db
                             cursor.execute(sql_update,
-                                           (H_Name,
-                                            H_Lon, H_Lat,
+                                           (h_name,
+                                            h_lon, h_lat,
                                             self.target_srid,
-                                            H_ID))
+                                            h_id))
 
                         if not stops_found % 1000:
                             self.conn1.commit()
@@ -218,15 +221,13 @@ FROM {schema}.route_types;
                 except TypeError:
                     pass
 
-                logger.info(' found {} new stops'.format(
-                    stops_inserted_in_tile))
+                logger.info(f' found {stops_inserted_in_tile} new stops')
                 self.conn1.commit()
 
-        logger.info('{} stops found and inserted'.format(
-            stops_inserted))
+        logger.info(f'{stops_inserted} stops found and inserted')
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
 
 
     parser = ArgumentParser(description="Scrape Stops in a given bounding box")
