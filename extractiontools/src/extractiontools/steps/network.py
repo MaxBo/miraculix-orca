@@ -9,6 +9,7 @@ from extractiontools.scrape_timetable import ScrapeTimetable
 from extractiontools.hafasdb2gtfs import HafasDB2GTFS
 from extractiontools.network2pbf import CopyNetwork2Pbf
 from extractiontools.stop_otp_router import OTPServer
+from extractiontools.copy2fgdb import Copy2FGDB
 
 
 @orca.step()
@@ -239,3 +240,47 @@ def create_router(otp_routers: Dict[str, str],
         otp_server.create_router(build_folder, target_folder)
 
 
+@orca.injectable()
+def network_layers() -> Dict[str, str]:
+    """the network layers to export to the corresponding schema in a FGDB"""
+    layers = {'autobahn': 'network_car',
+              'hauptstr': 'network_car',
+              'nebennetz': 'network_car',
+              'faehren': 'network_car',
+              'unaccessible_links': 'network_car',
+              }
+    return layers
+
+@orca.injectable()
+def network_fr_layers() -> Dict[str, str]:
+    """the network layers to export to the corresponding schema in a FGDB"""
+    layers = {'links': 'network_fr',
+              'unaccessible_links': 'network_car',
+              }
+    return layers
+
+@orca.injectable()
+def gdbname(project) -> str:
+    """the name of the File Geodatabase"""
+    return f'{project}.gdb'
+
+
+@orca.step()
+def copy_network_to_fgdb(login: Login,
+                         network_layers: Dict[str, str]):
+    """copy network to a file-gdb"""
+    copy2fgdb = Copy2FGDB(login=login,
+                          layers=network_layers,
+                          gdbname='network_car.gdb',
+                          schema='network')
+    copy2fgdb.copy_layers()
+
+
+@orca.step()
+def copy_network_fr_to_fgdb(login: Login,
+                            network_fr_layers: Dict[str, str]):
+    """copy network to a file-gdb"""
+    copy2fgdb = Copy2FGDB(login=login, layers=network_fr_layers,
+                          gdbname='network_fr.gdb',
+                          schema='network_fr')
+    copy2fgdb.copy_layers()

@@ -31,7 +31,7 @@ class CopyOSM2FGDB(Copy2FGDB):
 
     def create_dest_schema(self):
         """Create the destination schema if not exists"""
-        schema = self.options.schema
+        schema = self.schema
         sql = """
 CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
         """.format(schema=schema)
@@ -169,7 +169,7 @@ CREATE OR REPLACE VIEW {schema}.{view} AS
         view_polys = 'amenity_polys'
         self.create_layer_by_key(view_polys, keys, geometrytype='polygons')
         self.create_composite_layer('amenities',
-                                    self.options.schema,
+                                    self.schema,
                                     view_pnt,
                                     view_lines,
                                     view_polys)
@@ -200,7 +200,7 @@ CREATE OR REPLACE VIEW {schema}.{view} AS
         view_polys = 'tourism_polys'
         self.create_layer_by_key(view_polys, keys, geometrytype='polygons')
         self.create_composite_layer('tourism',
-                                    self.options.schema,
+                                    self.schema,
                                     view_pnt,
                                     view_lines,
                                     view_polys)
@@ -215,7 +215,7 @@ CREATE OR REPLACE VIEW {schema}.{view} AS
         view_polys = 'shop_polys'
         self.create_layer_by_key(view_polys, keys, geometrytype='polygons')
         self.create_composite_layer('shops',
-                                    self.options.schema,
+                                    self.schema,
                                     view_pnt,
                                     view_lines,
                                     view_polys)
@@ -234,7 +234,7 @@ CREATE OR REPLACE VIEW {schema}.{view} AS
         view_polys = 'waterways_polys'
         self.create_layer_by_key(view_polys, keys, geometrytype='polygons')
         self.create_composite_layer('waterways',
-                                    self.options.schema,
+                                    self.schema,
                                     view_lines,
                                     view_polys)
 

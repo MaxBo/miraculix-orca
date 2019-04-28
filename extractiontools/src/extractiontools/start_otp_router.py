@@ -74,7 +74,7 @@ class OTPServer:
         cmd = (f"netstat -nlp|grep :{port}"
                "| awk '{ print $7 }'  | sed 's/\/java//'")
         p1 = Popen([cmd, ], shell=True, stdout=PIPE)
-        pid = p1.stdout.read().strip()
+        pid = p1.stdout.read().decode('utf-8').strip()
         if pid:
             if pid == '-':
                 raise IOError(f"""

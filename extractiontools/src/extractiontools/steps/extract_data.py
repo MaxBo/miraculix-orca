@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 import orca
 from extractiontools.injectables.database import Login
 from extractiontools.extract_osm import ExtractOSM, Extract
@@ -7,6 +7,7 @@ from extractiontools.extract_landuse import ExtractLanduse
 from extractiontools.extract_verwaltungsgrenzen import ExtractVerwaltungsgrenzen
 from extractiontools.laea_raster import ExtractLAEA
 from extractiontools.zensus2raster import Zensus2Raster
+from extractiontools.copy_osm2fgdb import CopyOSM2FGDB
 
 import extractiontools.steps.create_db
 import extractiontools.steps.network
@@ -88,6 +89,31 @@ def zensus2raster(login: Login, subfolder_tiffs: str):
     z2r.run()
 
 
+@orca.injectable()
+def osm_layers() -> Dict[str, str]:
+    """the network layers to export to the corresponding schema in a FGDB"""
+    layers = {'railways': 'osm_layer',
+              'buildings': 'osm_layer',
+              'leisure_pnt': 'osm_layer',
+              'leisure_polys': 'osm_layer',
+              'natural': 'landuse',
+              'waterways_lines': 'landuse',
+              'amenity_pnt': 'osm_layer',
+              'amenity_polys': 'osm_layer',
+              'tourism_pnt': 'osm_layer',
+              'tourism_polys': 'osm_layer',
+              }
+    return layers
 
 
+@orca.step()
+def copy_osm_to_fgdb(login: Login,
+                     osm_layers: Dict[str, str]):
+    """copy osm stuff to a file-gdb"""
 
+    copy2fgdb = CopyOSM2FGDB(login=login,
+                             layers=osm_layers,
+                             gdbname='osm_layers.gdb',
+                             schema='osm_layer')
+    copy2fgdb.create_views()
+    copy2fgdb.copy_layers()
