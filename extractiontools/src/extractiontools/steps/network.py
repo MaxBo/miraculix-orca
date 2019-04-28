@@ -1,4 +1,3 @@
-from typing import List
 import orca
 from extractiontools.injectables.database import Login
 from extractiontools.build_network_car import BuildNetwork
@@ -140,6 +139,13 @@ def timetables_to_gtfs(login: Login,
 def subfolder_pbf() -> str:
     """subfolder to store pbf files"""
     return 'pbf'
+
+
+@orca.injectable()
+def network_schema() -> str:
+    """database schema for the routable network"""
+    return 'network'
+
 
 
 @orca.step()

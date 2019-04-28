@@ -169,11 +169,9 @@ class DBApp(object):
         if sys.platform.startswith('win'):
             self.folder = r'C:\temp'
             self.SHELL = False
-            self.mkdir = 'mkdir'
         else:
             self.folder = '$HOME/gis'
             self.SHELL = True
-            self.mkdir = '/bin/mkdir'
 
     def make_folder(self, folder: str):
         """
@@ -181,7 +179,7 @@ class DBApp(object):
         raise an IOError, if this fails
         """
         self.check_platform()
-        cmd = f'{self.mkdir} -p {folder}'
+        cmd = f'mkdir -p {folder}'
         logger.debug(cmd)
         ret = subprocess.call(cmd, shell=self.SHELL)
         if ret:
@@ -221,7 +219,7 @@ class DBApp(object):
 
     def set_search_path(self, connstr='conn'):
         conn = getattr(self, connstr)
-        sql = 'SET search_path TO %s, "$user", public;' % self.schema
+        sql = f'SET search_path TO {self.schema}, "$user", public;'
         cur = conn.cursor()
         cur.execute(sql)
 

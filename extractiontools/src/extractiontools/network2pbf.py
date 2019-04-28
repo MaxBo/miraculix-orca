@@ -18,7 +18,8 @@ class CopyNetwork2Pbf(DBApp):
                  login: Login,
                  as_xml: bool=False,
                  network_schema: str='network_fr',
-                 subfolder_pbf: str='pbf'):
+                 subfolder_pbf: str='pbf',
+                 srid: int=4326):
 
         """"""
         self.check_platform()
@@ -27,6 +28,7 @@ class CopyNetwork2Pbf(DBApp):
         self.schema = 'osm84'
         self.network = network_schema
         self.subfolder = subfolder_pbf
+        self.srid = srid
 
     def copy(self):
         """
@@ -192,20 +194,17 @@ USING btree(id);
         """
         check the platform
         """
+        super().check_platform()
         if sys.platform.startswith('win'):
             self.OSM_FOLDER = r'E:\Modell\osmosis'
             self.OSMOSISPATH = os.path.join(self.OSM_FOLDER, 'bin',
                                             'osmosis.bat')
             self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
-            self.folder = r'C:\temp'
-            self.SHELL = False
         else:
             self.OSM_FOLDER = '$HOME/gis/osm'
-            self.OSMOSISPATH = os.path.join(self.OSM_FOLDER, 'osmosis',
+            self.OSMOSISPATH = os.path.join('/usr',
                                             'bin', 'osmosis')
-            self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
-            self.folder = '$HOME/gis'
-            self.SHELL = True
+        self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
 
     def copy2pbf(self):
         """
@@ -226,7 +225,7 @@ USING btree(id);
             to_xml = f' --tee --write-xml file={file_path}.osm.bz2 '
         else:
             to_xml = ''
-        cmd = ('{OSMOSIS} -v'
+        cmd = ('{OSMOSIS} -v '
                '--read-pgsql '
                'postgresSchema={schema} '
                'authFile="{authfile}" '
@@ -248,7 +247,7 @@ USING btree(id);
         ret = subprocess.call(full_cmd, shell=self.SHELL)
         if ret:
             layer = 'pbf'
-            raise IOError(f'Layer {layer} could copied to pbf-file')
+            raise IOError(f'Layer {layer} could not becopied to pbf-file')
 
 if __name__ == '__main__':
 
@@ -294,5 +293,6 @@ if __name__ == '__main__':
     copy2pbf = CopyNetwork2Pbf(login,
                                as_xml=options.xml,
                                network_schema=options.network,
-                               subfolder_pbf=options.subfolder)
+                               subfolder_pbf=options.subfolder,
+                               srid=4326)
     copy2pbf.copy()
