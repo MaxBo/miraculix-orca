@@ -6,6 +6,8 @@ from extractiontools.build_network_walk_cycle import BuildNetworkWalkCycle
 from extractiontools.scrape_stops import ScrapeStops
 from extractiontools.scrape_timetable import ScrapeTimetable
 from extractiontools.hafasdb2gtfs import HafasDB2GTFS
+from extractiontools.network2pbf import CopyNetwork2Pbf
+
 
 @orca.step()
 def build_network_car(login: Login,
@@ -114,11 +116,11 @@ def tbl_kreise() -> str:
 
 @orca.step()
 def timetables_to_gtfs(login: Login,
-                      date_timetable: str,
-                      gtfs_only_one_day: bool,
-                      base_path: str,
-                      subfolder_otp: str,
-                      tbl_kreise: str):
+                       date_timetable: str,
+                       gtfs_only_one_day: bool,
+                       base_path: str,
+                       subfolder_otp: str,
+                       tbl_kreise: str):
     """
     Export Timetables as GTFS-file
     """
@@ -132,3 +134,32 @@ def timetables_to_gtfs(login: Login,
     hafas.get_target_boundary_from_dest_db()
     hafas.convert()
     hafas.export_gtfs()
+
+
+@orca.injectable()
+def subfolder_pbf() -> str:
+    """subfolder to store pbf files"""
+    return 'pbf'
+
+
+@orca.step()
+def copy_network_to_pbf(login: Login,
+                        network_schema: str,
+                        subfolder_pbf: str):
+    """copy the osm networkdata to a pbf file"""
+    copy2pbf = CopyNetwork2Pbf(login=login,
+                               network_schema=network_schema,
+                               subfolder_pbf=subfolder_pbf)
+    copy2pbf.copy()
+
+
+@orca.step()
+def copy_network_to_pbf_and_xml(login: Login,
+                                network_schema: str,
+                                subfolder_pbf: str):
+    """copy the osm networkdata to a pbf and .xml.bz file"""
+    copy2pbf = CopyNetwork2Pbf(login=login,
+                               network_schema=network_schema,
+                               subfolder_pbf=subfolder_pbf,
+                               as_xml=True)
+    copy2pbf.copy()

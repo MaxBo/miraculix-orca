@@ -3,29 +3,30 @@
 
 from argparse import ArgumentParser
 
-import logging
-logger = logging.getLogger()
-logger.level = logging.DEBUG
 import sys
 import os
 import subprocess
 import psycopg2
-from extractiontools.connection import Login, Connection, DBApp
+from extractiontools.connection import Login, Connection, DBApp, logger
 
 
 class CopyNetwork2Pbf(DBApp):
     """
     Copy osm data that belong to a network
     """
-    def __init__(self, options):
+    def __init__(self,
+                 login: Login,
+                 as_xml: bool=False,
+                 network_schema: str='network_fr',
+                 subfolder_pbf: str='pbf'):
 
         """"""
-        self.options = options
         self.check_platform()
-        self.login = Login(self.options.host,
-                           self.options.port,
-                           self.options.user,
-                           db=self.options.destination_db)
+        self.login = login
+        self.as_xml = as_xml
+        self.schema = 'osm84'
+        self.network = network_schema
+        self.subfolder = subfolder_pbf
 
     def copy(self):
         """
@@ -69,7 +70,6 @@ CREATE MATERIALIZED VIEW {schema}.ways AS
     st_transform(w.bbox, {srid}) AS bbox,
     st_transform(w.linestring, {srid}) AS linestring
    FROM osm.ways w, {network}.links_reached_without_planned l
---   FROM osm.ways w, {network}.links l
    WHERE w.id = l.wayid;
 CREATE INDEX way_id_idx ON {schema}.ways
 USING btree(id);
@@ -130,9 +130,9 @@ AND rm.member_type = 'R'
 AND rm.member_id = ar.id
 AND NOT EXISTS (SELECT 1 FROM {schema}.active_relations ar WHERE r.id = ar.id);
 
-        """.format(schema=self.options.user,
-                   network=self.options.network,
-                   srid=self.options.srid)
+        """.format(schema=self.schema,
+                   network=self.network,
+                   srid=self.srid)
         self.run_query(sql)
 
         sql = """
@@ -184,9 +184,8 @@ CREATE MATERIALIZED VIEW {schema}.users AS
 CREATE INDEX users_pkey ON {schema}.users
 USING btree(id);
 
-        """.format(schema=self.options.user,
-                   network=self.options.network,
-                   srid=self.options.srid)
+        """.format(schema=self.schema,
+                   srid=self.srid)
         self.run_query(sql)
 
     def check_platform(self):
@@ -213,35 +212,43 @@ USING btree(id);
         copy the according schema to a pbf with osmosis
         """
 
-        fn = '{db}_{network}'.format(db=self.options.destination_db,
-                                         network=self.options.network)
+        fn = f'{self.login.db}_{self.network}'
         folder = os.path.join(self.folder,
                               'projekte',
-                              self.options.destination_db,
-                              self.options.subfolder, )
+                              self.login.db,
+                              self.subfolder,
+                              )
         self.make_folder(folder)
 
         file_path = os.path.join(folder, fn)
 
-        if self.options.xml:
-            to_xml = ' --tee --write-xml file={xml_file}.osm.bz2 '.format(xml_file=file_path)
+        if self.as_xml:
+            to_xml = f' --tee --write-xml file={file_path}.osm.bz2 '
         else:
             to_xml = ''
-        cmd = '{OSMOSIS} -v --read-pgsql authFile="{authfile}" host={host}:{port} user={user} database={db} --dataset-dump {to_xml}--write-pbf omitmetadata=true file={fn}.osm.pbf'
+        cmd = ('{OSMOSIS} -v'
+               '--read-pgsql '
+               'postgresSchema={schema} '
+               'authFile="{authfile}" '
+               'host={host}:{port} user={user} database={db} '
+               '--dataset-dump {to_xml}'
+               '--write-pbf omitmetadata=true file={fn}.osm.pbf')
 
         full_cmd = cmd.format(OSMOSIS=self.OSMOSISPATH,
+                              schema=self.schema,
                               authfile=self.AUTHFILE,
-                              host=self.options.host,
-                              port=self.options.port,
-                              user=self.options.user,
-                              db=self.options.destination_db,
+                              host=self.login.host,
+                              port=self.login.port,
+                              user=self.login.user,
+                              db=self.login.db,
                               fn=file_path,
                               to_xml=to_xml,
                               )
         logger.info(full_cmd)
         ret = subprocess.call(full_cmd, shell=self.SHELL)
         if ret:
-            raise IOError('Layer {layer} could copied to Pbf'.format(layer='pbf'))
+            layer = 'pbf'
+            raise IOError(f'Layer {layer} could copied to pbf-file')
 
 if __name__ == '__main__':
 
@@ -260,7 +267,7 @@ if __name__ == '__main__':
 
     parser.add_argument("-U", '--user', action="store",
                         help="database user",
-                        dest="user", default='osm84')
+                        dest="user", default='osm')
 
     parser.add_argument('--network', action="store",
                         help="network",
@@ -280,6 +287,12 @@ if __name__ == '__main__':
                         dest="xml", default=False)
 
     options = parser.parse_args()
-
-    copy2pbf = CopyNetwork2Pbf(options)
+    login = Login(options.host,
+                  options.port,
+                  options.user,
+                  db=options.destination_db)
+    copy2pbf = CopyNetwork2Pbf(login,
+                               as_xml=options.xml,
+                               network_schema=options.network,
+                               subfolder_pbf=options.subfolder)
     copy2pbf.copy()
