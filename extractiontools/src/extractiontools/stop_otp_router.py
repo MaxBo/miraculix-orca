@@ -1,23 +1,11 @@
 import os
 import sys
+from typing import Dict
 from shutil import move
 from argparse import ArgumentParser
 from subprocess import Popen, PIPE, call
 from extractiontools.otp_config import OTP_JAR
-
-
-def kill_process_on_port(port):
-    cmd = """netstat -nlp|grep :{port} """.format(port=port) + \
-        """| awk '{ print $7 }'  | sed 's/\/java//'"""
-    p1 = Popen([cmd, ], shell=True, stdout=PIPE)
-    pid = p1.stdout.read().strip()
-    if pid:
-        if pid == '-':
-            raise IOError("""
-    There is a process running on port {port}, but it was started by another user.
-    It cannot be killed. Please try out 'sudo netstat -nlp|grep :{port}'
-    and kill the process manually with kill `pid'""".format(port=port))
-        p5 = Popen(['kill', '{}'.format(pid)])
+from extractiontools.start_otp_router import OTPServer
 
 
 def main():
@@ -34,8 +22,10 @@ def main():
 
     args = parser.parse_args()
 
-    for port in (args.port, args.secure_port):
-        kill_process_on_port(port)
+    otp_server = OTPServer(ports=dict(port=args.port,
+                                      secure_port=args.secure_port))
+    otp_server.stop()
+
 
 if __name__ == "__main__":
     main()

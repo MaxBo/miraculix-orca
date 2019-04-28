@@ -1,10 +1,104 @@
+import time
 import os
 from shutil import move
 from argparse import ArgumentParser
 from subprocess import Popen, call, PIPE
+from typing import Dict
+
 from extractiontools.otp_config import OTP_JAR, JAVA
-from extractiontools.stop_otp_router import kill_process_on_port
-import time
+
+
+class OTPServer:
+    def __init__(self,
+                 ports: Dict[str, int],
+                 base_path: str='',
+                 graph_subfolder: str='otp_graphs',
+                 routers: Dict[str, str]=None,
+                 start_analyst: bool=True,
+                 ):
+        """"""
+        self.base_path = base_path.replace('~', os.environ['HOME'])
+        self.graph_subfolder = graph_subfolder
+        self.routers = routers
+        self.ports = ports
+        self.start_analyst = start_analyst
+
+
+    @property
+    def graph_folder(self) -> str:
+        return os.path.join(os.path.dirname(self.base_path),
+                            self.graph_subfolder)
+
+    def get_otp_build_folder(self, project: str, subfolder: str) -> str:
+        """get the build folder"""
+        build_folder = os.path.join(self.base_path,
+                                    project,
+                                    subfolder,
+                                    )
+        return build_folder
+
+    def start(self):
+        """"""
+        graph_folder = self.graph_folder
+
+        process_args = [JAVA, '-Xmx2G', '-jar', OTP_JAR, '--graphs',
+                        graph_folder, ]
+
+        for router_name in self.routers:
+            process_args.extend(['--router ', router_name])
+
+        # stop router if exists
+        self.stop()
+
+        analyst = '--analyst' if self.start_analyst else None
+        port = self.ports['port']
+        secure_port = self.ports['secure_port']
+
+        process_args.extend(['--server ',
+                             '--port ', f'{port}',
+                             '--securePort ', f'{secure_port}',
+                             analyst])
+
+        # start Router
+        print(process_args)
+        p2 = Popen(process_args)
+
+        print("Server started")
+
+    def stop(self):
+        for port in self.ports.values():
+            self.kill_process_on_port(port)
+
+    @staticmethod
+    def kill_process_on_port(port):
+        cmd = (f"netstat -nlp|grep :{port}"
+               "| awk '{ print $7 }'  | sed 's/\/java//'")
+        p1 = Popen([cmd, ], shell=True, stdout=PIPE)
+        pid = p1.stdout.read().strip()
+        if pid:
+            if pid == '-':
+                raise IOError(f"""
+        There is a process running on port {port}, but it was started by another user.
+        It cannot be killed. Please try out 'sudo netstat -nlp|grep :{port}'
+        and kill the process manually with kill `pid'""")
+            p5 = Popen(['kill', f'{pid}'])
+
+    def create_router(self,
+                      build_folder: str,
+                      target_folder: str,
+                     ):
+        """create OTP router"""
+        call([JAVA, '-Xmx12G', '-jar', OTP_JAR, '--build', build_folder])
+
+        graph_file = os.path.join(build_folder, "Graph.obj")
+        if not os.path.exists(target_folder):
+            os.makedirs(target_folder)
+        dst_file = os.path.join(target_folder, "Graph.obj")
+        if os.path.exists(dst_file):
+            os.remove(dst_file)
+            print("overwriting old file...")
+        move(graph_file, dst_file)
+        print(f"Graph moved to {dst_file}")
 
 
 def main():
@@ -15,8 +109,8 @@ def main():
                         dest="base_path", default=r'~/gis')
 
     parser.add_argument("--destination-db", "-n", action="store", nargs='+',
-                        help="name of the router",
-                        dest="name", required=True)
+                        help="names of the routers",
+                        dest="names", required=True)
 
     parser.add_argument("--graph_folder", "-g", action="store",
                         help="folder with graphs",
@@ -44,13 +138,9 @@ def main():
     base_path = args.base_path.replace('~', os.environ['HOME'])
 
 
-    graph_folder = args.graph_folder or os.path.join(base_path,
-                                                     'otp_graphs')
 
-    process_args = [JAVA, '-Xmx2G', '-jar', OTP_JAR, '--graphs',
-                    graph_folder, ]
-
-    n_names = len(args.name)
+    routers = dict()
+    n_names = len(args.names)
     n_suffix = len(args.suffix)
     n_routers = max(n_names, n_suffix)
     if (n_names > 1 and n_suffix > 1 and n_names != n_suffix):
@@ -58,27 +148,19 @@ def main():
             'wrong number of suffixes ({}) given for {} names'.format(n_names,
                                                                       n_suffix))
     for i in range(n_routers):
-        name = args.name[0] if n_names == 1 else args.name[i]
+        name = args.names[0] if n_names == 1 else args.names[i]
         suffix = args.suffix[0] if n_suffix == 1 else args.suffix[i]
         router_name = '_'.join((name, suffix))
-        process_args.extend(['--router ', router_name])
+        routers[router_name] = name
 
-    # stop router if exists
-    for port in (args.port, args.secure_port):
-        kill_process_on_port(port)
+    otp_server = OTPServer(ports=dict(port=args.port,
+                                      secure_port=args.secure_port),
+                           base_path=args.base_path,
+                           graph_folder=args.graph_folder,
+                           routers=routers,
+                           start_analyst=args.anayst)
+    otp_server.start()
 
-    analyst = '--analyst' if args.analyst else None
-
-    process_args.extend(['--server ',
-          '--port ', '{}'.format(args.port),
-          '--securePort ', '{}'.format(args.secure_port),
-          analyst])
-
-    # start Router
-    print(process_args)
-    p2 = Popen(process_args)
-
-    print("Server started")
 
 if __name__ == "__main__":
     main()

@@ -1,3 +1,5 @@
+from typing import Dict
+import os
 import orca
 from extractiontools.injectables.database import Login
 from extractiontools.build_network_car import BuildNetwork
@@ -6,6 +8,7 @@ from extractiontools.scrape_stops import ScrapeStops
 from extractiontools.scrape_timetable import ScrapeTimetable
 from extractiontools.hafasdb2gtfs import HafasDB2GTFS
 from extractiontools.network2pbf import CopyNetwork2Pbf
+from extractiontools.stop_otp_router import OTPServer
 
 
 @orca.step()
@@ -61,7 +64,8 @@ def extract_stops(login: Login, source_db: str):
 
 
 @orca.step()
-def scrape_stops(login: Login,  source_db: str):
+def scrape_stops(login: Login,
+                 source_db: str):
     """
     Scrape Stops from DB
     """
@@ -136,36 +140,102 @@ def timetables_to_gtfs(login: Login,
 
 
 @orca.injectable()
-def subfolder_pbf() -> str:
-    """subfolder to store pbf files"""
-    return 'pbf'
-
-
-@orca.injectable()
-def network_schema() -> str:
-    """database schema for the routable network"""
-    return 'network'
-
-
+def otp_networks() -> Dict[str, str]:
+    """
+    networks and subfolders for otp-networks
+    returns a dictionary with the network-database schema as key
+    and the subfolder for the pbf-files as values
+    """
+    return {'network': 'otp_car',
+            'network_fr': 'otp_fr',
+            }
 
 @orca.step()
 def copy_network_to_pbf(login: Login,
-                        network_schema: str,
-                        subfolder_pbf: str):
+                        otp_networks: Dict[str, str]):
     """copy the osm networkdata to a pbf file"""
-    copy2pbf = CopyNetwork2Pbf(login=login,
-                               network_schema=network_schema,
-                               subfolder_pbf=subfolder_pbf)
-    copy2pbf.copy()
+    for network_schema, subfolder_pbf in otp_networks.items():
+        copy2pbf = CopyNetwork2Pbf(login=login,
+                                   network_schema=network_schema,
+                                   subfolder_pbf=subfolder_pbf)
+        copy2pbf.copy()
 
 
 @orca.step()
 def copy_network_to_pbf_and_xml(login: Login,
-                                network_schema: str,
-                                subfolder_pbf: str):
+                                otp_networks: Dict[str, str]):
     """copy the osm networkdata to a pbf and .xml.bz file"""
-    copy2pbf = CopyNetwork2Pbf(login=login,
-                               network_schema=network_schema,
-                               subfolder_pbf=subfolder_pbf,
-                               as_xml=True)
-    copy2pbf.copy()
+    for network_schema, subfolder_pbf in otp_networks.items():
+        copy2pbf = CopyNetwork2Pbf(login=login,
+                                   network_schema=network_schema,
+                                   subfolder_pbf=subfolder_pbf,
+                                   as_xml=True)
+        copy2pbf.copy()
+
+
+@orca.injectable()
+def otp_ports() -> Dict[str, int]:
+    """A dict with the OTP Ports"""
+    return {'port': 7789,
+            'secure_port': 7788,}
+
+
+@orca.injectable()
+def otp_graph_subfolder() -> str:
+    """subfolder with the otp graphs"""
+    return 'otp_graphs'
+
+
+@orca.injectable()
+def otp_routers(project) -> Dict[str, str]:
+    """subfolder with the otp graphs"""
+    routers = {f'{project}_car': 'otp_car',
+               f'{project}_fr': 'otp_fr',
+               }
+    return routers
+
+@orca.injectable()
+def start_otp_analyst() -> bool:
+    """start otp router with analyst"""
+    return True
+
+
+@orca.step()
+def start_otp_router(otp_ports: Dict[str, int],
+                     base_path: str,
+                     otp_graph_subfolder: str,
+                     otp_routers:Dict[str, str],
+                     start_otp_analyst: bool,
+                     ):
+    """Stop the running otp routers on the ports giben in `otp_ports`"""
+    otp_server = OTPServer(ports=otp_ports,
+                           base_path=base_path,
+                           graph_subfolder=otp_graph_subfolder,
+                           routers=otp_routers,
+                           start_analyst=start_otp_analyst)
+    otp_server.start()
+
+
+@orca.step()
+def stop_otp_router(otp_ports: Dict[str, int]):
+    """Stop the running otp routers on the ports giben in `otp_ports`"""
+    otp_server = OTPServer(ports=otp_ports)
+    otp_server.stop()
+
+
+@orca.step()
+def create_router(otp_routers: Dict[str, str],
+                  project: str,
+                  base_path: str,
+                  ):
+    """Create otp graphs for the gives routers"""
+    otp_server = OTPServer(ports=None,
+                           base_path=base_path,
+                           graph_subfolder='otp_graphs',
+                           routers=otp_routers)
+    for router_name, subfolder in otp_routers.items():
+        build_folder = otp_server.get_otp_build_folder(project, subfolder)
+        target_folder = os.path.join(otp_server.graph_folder, router_name)
+        otp_server.create_router(build_folder, target_folder)
+
+
