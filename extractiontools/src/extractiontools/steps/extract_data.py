@@ -85,7 +85,7 @@ def zensus2raster(login: Login, subfolder_tiffs: str):
     create views for zensus data on raster grid
     """
     z2r = Zensus2Raster(db=login.db, subfolder=subfolder_tiffs)
-    z2r.login1 = login
+    z2r.login = z2r.login1 = login
     z2r.run()
 
 
