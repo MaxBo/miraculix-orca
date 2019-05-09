@@ -52,6 +52,7 @@ INTO {temp}.oceans
 FROM {schema}.oceans c, {temp}.boundary tb
 WHERE
 c.geom && tb.source_geom
+AND st_intersects(c.geom, tb.source_geom)
         """
         self.run_query(sql.format(temp=self.temp, schema=self.schema,
                                   target_srid=self.target_srid),
@@ -70,6 +71,7 @@ c.geom && tb.source_geom
     FROM {schema}.{corine} c, {temp}.boundary tb
     WHERE
     c.geom && tb.source_geom
+    AND st_intersects(c.geom, tb.source_geom)
             """
         for corine in self.corine:
             self.run_query(sql.format(temp=self.temp, schema=self.schema,
@@ -113,7 +115,8 @@ SELECT
   r.filename
 FROM {schema}.{tn} r, {temp}.boundary tb
 WHERE
-r.rast && st_transform(tb.source_geom, {corine_srid});
+r.rast && st_transform(tb.source_geom, {corine_srid})
+AND st_intersects(r.rast, st_transform(tb.source_geom, {corine_srid}));
         """
         for tn in tables:
             self.run_query(sql.format(temp=self.temp,
@@ -147,7 +150,8 @@ SELECT
   r.filename
 FROM {schema}.{tn} r, {temp}.boundary tb
 WHERE
-r.rast && tb.source_geom;
+r.rast && tb.source_geom
+AND st_intersects(r.rast, tb.source_geom);
         """
         for tn in tables:
             self.run_query(sql.format(temp=self.temp, schema=self.schema,
@@ -181,10 +185,11 @@ INTO {temp}.{gmes}
 FROM {schema}.{gmes} c, {temp}.boundary tb
 WHERE
 c.geom && tb.source_geom
+AND st_intersects(c.geom, tb.source_geom)
             """
         self.run_query(sql.format(temp=self.temp, schema=self.schema,
-                                      target_srid=self.target_srid,
-                                      gmes='ua2012_boundary'),
+                                  target_srid=self.target_srid,
+                                  gmes='ua2012_boundary'),
                        conn=self.conn0, )
 
         sql = """
@@ -199,6 +204,7 @@ INTO {temp}.{gmes}
 FROM {schema}.{gmes} c, {temp}.boundary tb
 WHERE
 c.geom && tb.source_geom
+AND st_intersects(c.geom, tb.source_geom)
             """
         for gmes in self.gmes:
             self.run_query(sql.format(temp=self.temp, schema=self.schema,
@@ -217,7 +223,6 @@ c.geom && tb.source_geom
         self.add_raster_index_and_overviews(self.aster_overviews,
                                             self.schema,
                                             self.raster_table)
-        self.calc_aster_centroids()
         self.create_corine_raster_index()
 
     def create_index_corine(self):
@@ -280,17 +285,6 @@ c.geom && tb.source_geom
     ON {schema}.oceans
     USING gist(geom);
     """
-        self.run_query(sql.format(schema=self.schema), conn=self.conn1)
-
-    def calc_aster_centroids(self):
-        """
-        refresh the materialized view with the aster centroids
-        """
-        sql = """
-REFRESH MATERIALIZED VIEW {schema}.aster_centroids;
-CREATE INDEX idx_aster_centroids_geom ON {schema}.aster_centroids USING gist(geom);
-ANALYZE {schema}.aster_centroids;
-        """
         self.run_query(sql.format(schema=self.schema), conn=self.conn1)
 
     def create_corine_raster_index(self):

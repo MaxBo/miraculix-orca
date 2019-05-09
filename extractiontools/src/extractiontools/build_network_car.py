@@ -236,7 +236,8 @@ CREATE MATERIALIZED VIEW {network}.junctions AS
 SELECT
   row_number() OVER (ORDER BY a.nodeid)::integer AS id,
   a.nodeid,
-  nodes.geom
+  nodes.geom,
+  st_transform(nodes.geom, 4326) AS pnt_wgs
 FROM osm.nodes,
    ( SELECT roadnodes.nodeid, count(roadnodes.id) AS anzpunkte
      FROM ( SELECT wn.way_id AS id, wn.node_id AS nodeid
@@ -251,24 +252,57 @@ CReATE INDEX idx_junctions_id ON {network}.junctions USING btree(nodeid);
 CREATE INDEX idx_junctions_geom ON {network}.junctions USING gist(geom);
 ANALYZE {network}.junctions;
 
+-- Berechne Z-Koordinaten
+CREATE OR REPLACE VIEW {network}.junctions_z_interpolated AS
+WITH dx AS (SELECT generate_series(-1, 1) AS dx),
+dy AS (SELECT generate_series(-1, 1) AS dy),
+jr AS (
+  SELECT
+  j.nodeid,
+  j.pnt_wgs,
+  a.rast,
+  ST_WorldToRasterCoordX(a.rast, j.pnt_wgs) AS colx,
+  ST_WorldToRasterCoordY(a.rast, j.pnt_wgs) AS rowy,
+  st_height(a.rast) AS height,
+  st_width(a.rast) AS width
+FROM {network}.junctions j,
+landuse.aster a
+WHERE st_intersects(j.pnt_wgs, a.rast))
+
+SELECT
+c.nodeid,
+sum(c.val) / sum(c.weight) As z
+FROM (
+SELECT
+b.nodeid,
+exp({beta} * b.distance) AS weight,
+b.val * exp({beta} * b.distance) AS val
+FROM
+(
+SELECT
+jr.nodeid,
+st_distance(
+ST_PixelAsCentroid(
+  jr.rast, jr.colx + dx.dx, jr.rowy + dy.dy)::geography,
+  jr.pnt_wgs::geography) AS distance,
+st_value(
+    jr.rast, jr.colx + dx.dx, jr.rowy + dy.dy) AS val
+FROM jr, dx, dy
+WHERE 0 < jr.colx + dx.dx
+AND jr.colx + dx.dx <= jr.width
+AND 0 < jr.rowy + dy.dy
+AND jr.rowy + dy.dy <= jr.height) b
+WHERE b.distance < {max_dist}
+) c
+WHERE c.val IS NOT NULL
+GROUP BY c.nodeid;
+
 -- Berechne Z-Koordinaten der Junctions
 CREATE MATERIALIZED VIEW {network}.junctions_z AS
 SELECT
 a.nodeid,
 COALESCE(e.z, a.z) AS z
-FROM (
-SELECT
-  d.nodeid,
-  sum(d.val * d.weight) / sum(d.weight) AS z
-FROM (
-SELECT
-  p.nodeid,
-  c.val,
-  exp({beta} * st_distance(p.geom, c.geom)) AS weight
-FROM landuse.aster_centroids c, {network}.junctions AS p
-WHERE st_dwithin(p.geom, c.geom, {max_dist})
-) d
-GROUP BY d.nodeid ) a
+FROM {network}.junctions_z_interpolated a
 -- Falls Nodes eine Höhenangabe haben, nimm diese (nur Ziffern und .)
 LEFT JOIN
 (SELECT n.id,
