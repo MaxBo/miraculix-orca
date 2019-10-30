@@ -184,8 +184,7 @@ SELECT {cols}, st_transform(t.{geom}, {srid})::geometry({gt}, {srid}) as geom
 INTO {temp}.{tn}
 FROM {schema}.{tn} t, {temp}.boundary tb
 WHERE
-t.{geom} && tb.source_geom
-AND st_intersects(t.{geom}, tb.source_geom)
+st_intersects(t.{geom}, tb.source_geom)
         """
         self.run_query(sql.format(tn=tn, temp=self.temp, geom=geom,
                                   schema=self.schema, cols=col_str, srid=self.target_srid,

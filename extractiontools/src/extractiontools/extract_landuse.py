@@ -51,8 +51,7 @@ SELECT
 INTO {temp}.oceans
 FROM {schema}.oceans c, {temp}.boundary tb
 WHERE
-c.geom && tb.source_geom
-AND st_intersects(c.geom, tb.source_geom)
+st_intersects(c.geom, tb.source_geom)
         """
         self.run_query(sql.format(temp=self.temp, schema=self.schema,
                                   target_srid=self.target_srid),
@@ -70,8 +69,7 @@ AND st_intersects(c.geom, tb.source_geom)
     INTO {temp}.{corine}
     FROM {schema}.{corine} c, {temp}.boundary tb
     WHERE
-    c.geom && tb.source_geom
-    AND st_intersects(c.geom, tb.source_geom)
+    st_intersects(c.geom, tb.source_geom)
             """
         for corine in self.corine:
             self.run_query(sql.format(temp=self.temp, schema=self.schema,
@@ -115,8 +113,7 @@ SELECT
   r.filename
 FROM {schema}.{tn} r, {temp}.boundary tb
 WHERE
-r.rast && st_transform(tb.source_geom, {corine_srid})
-AND st_intersects(r.rast, st_transform(tb.source_geom, {corine_srid}));
+st_intersects(r.rast, st_transform(tb.source_geom, {corine_srid}));
         """
         for tn in tables:
             self.run_query(sql.format(temp=self.temp,
@@ -150,8 +147,7 @@ SELECT
   r.filename
 FROM {schema}.{tn} r, {temp}.boundary tb
 WHERE
-r.rast && tb.source_geom
-AND st_intersects(r.rast, tb.source_geom);
+st_intersects(r.rast, tb.source_geom);
         """
         for tn in tables:
             self.run_query(sql.format(temp=self.temp, schema=self.schema,
@@ -184,8 +180,7 @@ SELECT
 INTO {temp}.{gmes}
 FROM {schema}.{gmes} c, {temp}.boundary tb
 WHERE
-c.geom && tb.source_geom
-AND st_intersects(c.geom, tb.source_geom)
+st_intersects(c.geom, tb.source_geom)
             """
         self.run_query(sql.format(temp=self.temp, schema=self.schema,
                                   target_srid=self.target_srid,
@@ -203,8 +198,7 @@ SELECT
 INTO {temp}.{gmes}
 FROM {schema}.{gmes} c, {temp}.boundary tb
 WHERE
-c.geom && tb.source_geom
-AND st_intersects(c.geom, tb.source_geom)
+st_intersects(c.geom, tb.source_geom)
             """
         for gmes in self.gmes:
             self.run_query(sql.format(temp=self.temp, schema=self.schema,

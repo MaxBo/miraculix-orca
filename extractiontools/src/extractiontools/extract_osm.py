@@ -143,13 +143,12 @@ WHERE u.id = tu.user_id;
         sql = """
 SELECT
   w.id, w.version, w.user_id, w.tstamp, w.changeset_id, w.tags, w.nodes,
-  st_transform(w.bbox, {target_srid})::geometry('GEOMETRY', {target_srid}) AS bbox,
+  st_transform(Box2D(w.linestring), {target_srid})::geometry('GEOMETRY', {target_srid}) AS bbox,
   st_transform(w.linestring, {target_srid})::geometry('GEOMETRY', {target_srid}) AS linestring
 INTO {temp}.ways
 FROM {schema}.ways w, {temp}.boundary tb
 WHERE
-w.bbox && tb.source_geom
-AND st_intersects(w.linestring, tb.source_geom);
+st_intersects(w.linestring, tb.source_geom);
 ANALYZE {temp}.ways;
         """
         self.run_query(sql.format(temp=self.temp, schema=self.schema,

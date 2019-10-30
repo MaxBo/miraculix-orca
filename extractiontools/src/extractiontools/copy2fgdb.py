@@ -74,7 +74,7 @@ class Copy2FGDB(Extract):
         logger.info(full_cmd)
         ret = subprocess.call(full_cmd, shell=self.SHELL)
         if ret:
-            raise IOError('Layer {layer} could copied to FGDB'.format(layer=layer))
+            raise IOError('Layer {layer} could not be copied to FGDB'.format(layer=layer))
 
     def check_if_features(self, layer):
         """

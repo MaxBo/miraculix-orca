@@ -109,11 +109,26 @@ def osm_layers() -> Dict[str, str]:
 @orca.step()
 def copy_osm_to_fgdb(login: Login,
                      osm_layers: Dict[str, str]):
-    """copy osm stuff to a file-gdb"""
+    """
+    create osm layers and copy osm stuff to a file-gdb
+    attention: drops cascadingly the depending views
+    """
 
     copy2fgdb = CopyOSM2FGDB(login=login,
                              layers=osm_layers,
                              gdbname='osm_layers.gdb',
                              schema='osm_layer')
     copy2fgdb.create_views()
+    copy2fgdb.copy_layers()
+
+
+@orca.step()
+def copy_to_fgdb(login: Login,
+                 osm_layers: Dict[str, str]):
+    """copy osm stuff to a file-gdb"""
+
+    copy2fgdb = CopyOSM2FGDB(login=login,
+                             layers=osm_layers,
+                             gdbname='osm_layers.gdb',
+                             schema='osm_layer')
     copy2fgdb.copy_layers()
