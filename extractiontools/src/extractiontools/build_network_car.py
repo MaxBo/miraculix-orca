@@ -1136,7 +1136,7 @@ FROM {network}.links l;
         for fromrow in range(0, n_edges, chunksize):
             torow = fromrow + chunksize
             sql = """
-SELECT pgr_createTopology('{network}.edge_table',
+SELECT pgr_createtopology('{network}.edge_table',
     {tolerance},
     'geom',
     'id',
