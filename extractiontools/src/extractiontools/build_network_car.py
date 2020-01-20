@@ -1136,13 +1136,14 @@ FROM {network}.links l;
         for fromrow in range(0, n_edges, chunksize):
             torow = fromrow + chunksize
             sql = """
-SELECT pgr_createtopology('{network}.edge_table',
+SELECT pgr_createTopology('{network}.edge_table',
     {tolerance},
     'geom',
     'id',
     'source',
     'target',
-    rows_where:='id >= {fromrow} AND id < {torow}');
+    rows_where := 'id >= {fromrow} AND id < {torow}',
+    clean := false::boolean);
 COMMIT;
 """.format(tolerance=0.000001, network=self.network,
            fromrow=fromrow, torow=torow)
