@@ -486,7 +486,7 @@ CREATE OR REPLACE FUNCTION {temp}.select_master_scripts()
 $BODY$
 DECLARE
 BEGIN
-perform dblink_connect_u('conn', 'host=localhost dbname={sd} user={source_user} password={source_pw}');
+perform dblink_connect_u('conn', 'host=localhost dbname={sd} user={source_user}');
 RETURN QUERY
 SELECT *
 FROM dblink('conn',
@@ -514,7 +514,7 @@ CREATE OR REPLACE FUNCTION {temp}.select_dependencies()
 $BODY$
 DECLARE
 BEGIN
-perform dblink_connect_u('conn', 'host=localhost dbname={sd} user={source_user} password={source_pw}');
+perform dblink_connect_u('conn', 'host=localhost dbname={sd} user={source_user}');
 RETURN QUERY
 SELECT *
 FROM dblink('conn',
