@@ -1,9 +1,10 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 from argparse import ArgumentParser
 
 from extractiontools.build_network_car import BuildNetwork
+
 
 class BuildNetworkWalkCycle(BuildNetwork):
     """
@@ -142,7 +143,7 @@ else:
     if np.isnan(v):
         v=30
 return v
-$$ LANGUAGE plpythonu;
+$$ LANGUAGE plpython3u;
 
 CREATE OR REPLACE FUNCTION {network}.calc_v_fuss (slope double precision)
 RETURNS double precision
@@ -158,7 +159,7 @@ else:
     v = (100 * x**3 - 30*x**2 - 13*x + v0) * (slope <.30 and slope >-.30) +\
     (.33/slope) * (slope >=.30) + 3.5 * (slope <=-.30)
 return v
-$$ LANGUAGE plpythonu;
+$$ LANGUAGE plpython3u;
         """.format(network=self.network)
         self.run_query(sql)
 
@@ -363,7 +364,6 @@ CREATE OR REPLACE VIEW {network}.line_barriers_cycle AS
             cost = 'l.t_bicycle_hin'
             reverse_cost = 'CASE WHEN l.oneway THEN -1 ELSE l.t_bicycle_rueck END'
 
-
         sql = """
 
 TRUNCATE {network}.edge_table;
@@ -402,7 +402,6 @@ if __name__ == '__main__':
 
     parser = ArgumentParser(description="Extract Data for Model")
 
-
     parser.add_argument("-n", '--name', action="store",
                         help="Name of destination database",
                         dest="db", default='extract')
@@ -439,17 +438,16 @@ if __name__ == '__main__':
                         help="corine landuse table",
                         dest="corine", default='clc18')
 
-
     options = parser.parse_args()
 
     build_network = BuildNetworkWalkCycle(schema='osm',
-                                 network_schema='network_fr',
-                                 db=options.db,
-                                 limit=options.limit,
-                                 chunksize=options.chunksize,
-                                 links_to_find=options.links_to_find,
-                                 corine=options.corine,
-                                 routing_walk=options.routing_walk)
+                                          network_schema='network_fr',
+                                          db=options.db,
+                                          limit=options.limit,
+                                          chunksize=options.chunksize,
+                                          links_to_find=options.links_to_find,
+                                          corine=options.corine,
+                                          routing_walk=options.routing_walk)
     build_network.set_login(host=options.host,
                             port=options.port,
                             user=options.user)
