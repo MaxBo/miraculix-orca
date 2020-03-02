@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 import subprocess
 import sys
@@ -13,13 +13,14 @@ from types import MethodType
 import os
 
 import logging
-logger = logging.getLogger()
+logger = logging.getLogger('OrcaLog')
 
 
 class Login(object):
     """
     Login-Object with the Database credentials
     """
+
     def __init__(self,
                  host='localhost',
                  port=5432,
@@ -45,18 +46,19 @@ class Connection(object):
     """
     Connection object
     """
+
     def __init__(self, login=None):
         self.login = login or Login()
 
     def __enter__(self) -> NamedTupleConnection:
         login = self.login
         conn = psycopg2.connect(host=login.host,
-                              user=login.user,
-                              password=login.password,
-                              port=login.port,
-                              database=login.db,
-                              connection_factory=NamedTupleConnection,
-                              sslmode='prefer')
+                                user=login.user,
+                                password=login.password,
+                                port=login.port,
+                                database=login.db,
+                                connection_factory=NamedTupleConnection,
+                                sslmode='prefer')
         self.conn = conn
         self.conn.get_dict_cursor = self.get_dict_cursor
         self.conn.get_column_dict = self.get_column_dict
@@ -80,13 +82,14 @@ class Connection(object):
         QUOTE '"',
         HEADER);
         '''.format(data_format=data_format, quote=quote,
-                                      delimiter=delimiter)
+                   delimiter=delimiter)
         self.conn.copy_sql = '''COPY "{tn}" TO STDOUT ''' + strWith
 
     def set_vacuum_analyze_command(self):
         """
         run vacuum analze on a table with the according transaction isolation
         """
+
         def vacuum_analyze(self, table):
             old_isolation_level = self.isolation_level
             self.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
@@ -148,6 +151,7 @@ class DBApp(object):
 
     """
     role = None
+
     def __init__(self, schema='osm', conn=None):
         """
         """
@@ -335,7 +339,8 @@ SELECT AddOverviewConstraints('{schema}', '{ov_tn}', '{rast}',
                                        raster_column='rast', conn=None):
         conn = conn or self.conn1
         self.add_raster_index(schema, tablename, raster_column, conn)
-        self.add_overview_index(overviews, schema, tablename, raster_column, conn)
+        self.add_overview_index(
+            overviews, schema, tablename, raster_column, conn)
 
     def get_primary_key(self, schema, tablename, conn=None):
         """

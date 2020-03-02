@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 from argparse import ArgumentParser
 
 import numpy as np
 import logging
-logger = logging.getLogger()
+logger = logging.getLogger('OrcaLog')
 logger.level = logging.INFO
 import sys
 import os
@@ -18,6 +18,7 @@ class BBox(object):
     """
     Represents a Bounding Box
     """
+
     def __init__(self, top, bottom, left, right):
         """
         Parameters
@@ -78,7 +79,8 @@ class Extract(DBApp):
         password : str, optional
         """
         self.login0 = Login(host, port, user, password, db=self.source_db)
-        self.login1 = Login(host, port, user, password, db=self.destination_db)
+        self.login1 = Login(host, port, user, password,
+                            db=self.destination_db)
 
     def set_login01(self, login: Login, source_db):
         """
@@ -100,22 +102,25 @@ class Extract(DBApp):
         establishes a connection and executes some code
         """
         with Connection(login=self.login0) as conn0, \
-             Connection(login=self.login1) as conn1:
+                Connection(login=self.login1) as conn1:
             self.run_query(sql)
 
     def recreate_db(self):
         self.set_pg_path()
         exists = self.check_if_database_exists(self.destination_db)
         if exists:
+            logger.info(f'Truncate Database {self.destination_db}')
             self.truncate_db()
         else:
+            logger.info(f'Create Database {self.destination_db}')
             self.create_target_db(self.login1)
+            logger.info(f'Create Database {self.destination_db}')
         self.create_serverside_folder()
 
     def extract(self):
         self.set_pg_path()
         with Connection(login=self.login0) as conn0, \
-             Connection(login=self.login1) as conn1:
+                Connection(login=self.login1) as conn1:
             self.conn0 = conn0
             self.conn1 = conn1
             self.set_session_authorization(self.conn0)
@@ -137,7 +142,6 @@ class Extract(DBApp):
             self.conn1.commit()
 
         self.further_stuff()
-
 
     def further_stuff(self):
         """
@@ -304,11 +308,12 @@ UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
         createdb = os.path.join(self.PGPATH, 'createdb')
 
         cmd = '''"{createdb}" -U {user} -h {host} -p {port} -w -T pg_template {destination_db}'''.format(createdb=createdb, destination_db=login.db, user=login.user,
-           port=login.port, host=login.host)
+                                                                                                         port=login.port, host=login.host)
         logger.info(cmd)
         ret = subprocess.call(cmd, shell=self.SHELL)
         if ret:
-            raise IOError('Database {db} could not be recreated'.format(db=login.db))
+            raise IOError(
+                'Database {db} could not be recreated'.format(db=login.db))
 
         sql = """
 ALTER DATABASE {db} OWNER TO {role};
@@ -377,7 +382,7 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
             '--verbose',
             '--schema={schema}'.format(schema=schema),
             '{db}'.format(db=self.login0.db),
-            ])
+        ])
 
         logger.info(pg_dump_cmd)
 
@@ -392,7 +397,7 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
             '--host={host}'.format(host=self.login1.host),
             '--port={port}'.format(port=self.login1.port),
             '--username={user}'.format(user=self.login1.user),
-            #'--clean',
+            # '--clean',
             '-w',
             '--format=custom',
             '--verbose',
@@ -413,7 +418,8 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
         """
         remove the temp schema
         """
-        sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(temp=self.temp)
+        sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
+            temp=self.temp)
         self.run_query(sql, conn=self.conn0)
 
     def cluster_and_analyse(self):
@@ -805,9 +811,10 @@ if __name__ == '__main__':
     bbox = BBox(top=options.top, bottom=options.bottom,
                 left=options.left, right=options.right)
     extract = ExtractMeta(source_db=options.source_db,
-                         destination_db=options.destination_db,
-                         target_srid=options.srid)
-    extract.set_login(host=options.host, port=options.port, user=options.user)
+                          destination_db=options.destination_db,
+                          target_srid=options.srid)
+    extract.set_login(host=options.host,
+                      port=options.port, user=options.user)
     extract.get_target_boundary(bbox)
     extract.extract()
 

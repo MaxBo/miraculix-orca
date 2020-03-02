@@ -1,15 +1,14 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 from argparse import ArgumentParser
 
 import logging
-logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
-logger.level = logging.DEBUG
+logger = logging.getLogger('OrcaLog')
 
 from extractiontools.connection import Connection
 from extractiontools.copy2fgdb import Copy2FGDB
+
 
 class CopyOSM2FGDB(Copy2FGDB):
 
@@ -47,7 +46,7 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
         and the given where-clause"""
         geometrytypes = {'nodes': ('POINT', 'geom'),
                          'lines': ('LINESTRING', 'geom'),
-                         'polygons': ('MULTIPOLYGON', 'geom'),}
+                         'polygons': ('MULTIPOLYGON', 'geom'), }
         try:
             geomtype, geomcolumn = geometrytypes[geometrytype]
         except KeyError:
@@ -122,7 +121,7 @@ WHERE {where};
             keys = list(keys)
         where_clause = "t.tags ?| ARRAY{keys}".format(keys=keys)
         columns = ',\n'.join("t.tags -> '{key}' AS {key}".format(key=k)
-                            for k in keys)
+                             for k in keys)
         return columns, where_clause
 
     def create_composite_layer(self,
@@ -237,6 +236,7 @@ CREATE OR REPLACE VIEW {schema}.{view} AS
                                     self.schema,
                                     view_lines,
                                     view_polys)
+
 
 if __name__ == '__main__':
 

@@ -1,11 +1,9 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 import numpy as np
 import logging
-logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
-logger.level = logging.DEBUG
+logger = logging.getLogger('OrcaLog')
 import os
 import datetime
 from extractiontools.connection import Connection, DBApp
@@ -26,8 +24,7 @@ class Visum2GTFS(DBApp):
             pass
 
 
-if __name__=='__main__':
-
+if __name__ == '__main__':
 
     parser = ArgumentParser(description="Convert VISUM NetFile to GTFS")
 

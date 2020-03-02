@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 # Author:   --<>
 # Purpose:
 # Created: 13/03/2015
@@ -11,7 +11,7 @@ import os
 import numpy as np
 from simcommon.matrixio import XMaskedRecarray
 import logging
-logger = logging.getLogger()
+logger = logging.getLogger('OrcaLog')
 formatter = logging.Formatter('%(asctime)s %(message)s', datefmt='%H:%M:%S')
 sh = logging.StreamHandler()
 sh.setFormatter(formatter)
@@ -92,12 +92,12 @@ class Columns(OrderedDict):
     @property
     def dtype(self):
         vals = list(self.values())
-        #formats = [getattr(v, 'dtype', v)
-                   #if isinstance(getattr(v, 'dtype', v), np.dtype)
-                   #else v
-                   #for v in vals]
+        # formats = [getattr(v, 'dtype', v)
+        # if isinstance(getattr(v, 'dtype', v), np.dtype)
+        # else v
+        # for v in vals]
         dtype = {'names': list(self.keys()),
-                'formats': vals,}
+                 'formats': vals, }
         return dtype
 
     @property
@@ -144,7 +144,7 @@ class Table(object, metaclass=ABCMeta):
     """Base Class for a table"""
 
     def __init__(self, tables, sep=','):
-        self.tables= tables
+        self.tables = tables
         self.sep = sep
         self.cols = Columns()
         self.defaults = OrderedDict()
@@ -240,7 +240,7 @@ class Table(object, metaclass=ABCMeta):
             raise ValueError('No key defined')
 
         new_arr = np.rec.fromarrays((getattr(self.rows, col)
-                                  for col in colnames))
+                                     for col in colnames))
         return new_arr
 
     def get_columns_by_names_hashable(self, colnames):
@@ -257,7 +257,7 @@ class Table(object, metaclass=ABCMeta):
         """
         arr = self.get_columns_by_names(colnames)
         if isinstance(arr, np.core.records.recarray):
-            return arr.view(type='S%s' %arr.itemsize)
+            return arr.view(type='S%s' % arr.itemsize)
         return arr
 
     @property
@@ -315,9 +315,10 @@ class Table(object, metaclass=ABCMeta):
         self.set_data(recarr)
 
     def get_rows_by_key(self, col_key, colname_value, data,
-                         missing_value=-1):
+                        missing_value=-1):
         col_values = getattr(self, colname_value)
         d = dict(list(zip(col_key, col_values)))
+
         def get_values(key):
             name = d.get(key, missing_value)
             return name
@@ -342,8 +343,6 @@ class Table(object, metaclass=ABCMeta):
         found = np.array([x is not None for x in val])
         return val, found
 
-
-
     def get_rows_by_pkey(self, colname_value, data, missing_value=-1):
         col_key = self.pkey_hashed
         return self.get_rows_by_key(col_key, colname_value,
@@ -352,6 +351,7 @@ class Table(object, metaclass=ABCMeta):
 
 def main():
     pass
+
 
 if __name__ == '__main__':
     main()

@@ -1,11 +1,9 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 import numpy as np
 import logging
-logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
-logger.level = logging.DEBUG
+logger = logging.getLogger('OrcaLog')
 import os
 import datetime
 from extractiontools.connection import Connection, DBApp
@@ -26,7 +24,7 @@ class Hafas2GTFS(DBApp):
             self.conn = conn
             self.set_search_path()
 
-            ### GTFS
+            # GTFS
             self.fill_gtfs_stops()
             self.identify_kreis()
             self.line_type()
@@ -35,8 +33,7 @@ class Hafas2GTFS(DBApp):
             self.make_shapes()
             self.make_stop_times()
 
-            #self.mark_abfahrten_around_kreis()
-
+            # self.mark_abfahrten_around_kreis()
 
             self.conn.commit()
             pass
@@ -394,13 +391,11 @@ WHERE departure_time IS NULL;
                     logger.info(sql)
                     cur.copy_expert(sql, f)
 
-
             sql = '''RESET CLIENT_ENCODING;'''
             cur.execute(sql)
 
 
-if __name__=='__main__':
-
+if __name__ == '__main__':
 
     parser = ArgumentParser(description="Convert Hafas-Data to GTFS")
 

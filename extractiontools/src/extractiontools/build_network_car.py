@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 from argparse import ArgumentParser
 
 import logging
-logger = logging.getLogger()
+logger = logging.getLogger('OrcaLog')
 logger.level = logging.INFO
 
 from extractiontools.connection import Connection, DBApp, Login
@@ -20,10 +20,10 @@ class BuildNetwork(DBApp):
                  schema='osm',
                  network_schema='network',
                  db='extract',
-                 limit: int=None,
-                 chunksize:int=1000,
-                 links_to_find:float=0.25,
-                 corine:str='clc18',
+                 limit: int = None,
+                 chunksize: int = 1000,
+                 links_to_find: float = 0.25,
+                 corine: str = 'clc18',
                  routing_walk=False,
                  ):
         self.schema = schema
@@ -42,6 +42,7 @@ class BuildNetwork(DBApp):
         """
         Build the network
         """
+        logger.info(f'Build Network in schema {self.network}')
         with Connection(login=self.login) as conn:
             # preparation
             self.conn = conn
@@ -50,6 +51,7 @@ class BuildNetwork(DBApp):
             self.create_views()
 
             # select roads and junctions
+            logger.info(f'Create Views')
             self.create_roads()
             self.create_junctions()
             self.conn.commit()
@@ -120,6 +122,7 @@ SELECT st_srid(geom) AS srid FROM meta.boundary LIMIT 1;
         """
         Create Views defining the relevant waytypes
         """
+        logger.info(f'Create Views')
         sql = """
 DROP SCHEMA IF EXISTS {network} CASCADE;
 CREATE SCHEMA {network};
@@ -153,6 +156,7 @@ ANALYZE {network}.streets;
         """
         Create the view for the roads
         """
+        logger.info(f'Create Roads')
 
         sql = """
 
@@ -219,6 +223,7 @@ OR (opr.id IS NOT NULL OR cf.id IS NOT NULL));
         """
         create junctions
         """
+        logger.info(f'Create Junctions')
         sql = """
 CREATE INDEX idx_roads_id ON {network}.roads USING btree(id);
 ANALYZE {network}.roads;
@@ -425,6 +430,7 @@ REFRESH MATERIALIZED VIEW {network}.link_from_to_node;
         """
         iterate over the chunks and create links
         """
+        logger.info(f'Create Links')
         sql = """
 DROP TABLE IF EXISTS {network}.links;
 CREATE TABLE {network}.links
@@ -457,6 +463,7 @@ WITH (
         """
         fill the links
         """
+        logger.debug(f'Fill Links')
         network = self.network
         limit = self.limit or 'NULL'
         sql = f"""
@@ -472,6 +479,7 @@ DELETE FROM {network}.links WHERE st_NumPoints(geom) = 0;
         """
         Create functions to create link_points and links
         """
+        logger.debug(f'Create Functions to create link_points and links')
         cur = self.conn.cursor()
         sql = '''
 
@@ -656,7 +664,10 @@ COMMIT;
 
     def update_linktypes(self):
         """
+        Update the Linktypes
         """
+        logger.debug(
+            'Update the Linktypes by spatial intersection with urban area')
         corine = self.corine[0]
         sql = """
 UPDATE {network}.links l
@@ -706,6 +717,8 @@ AND w.tags @> lt.tag2;
     def update_speed(self):
         """
         """
+        logger.debug('Set Maxspeed and Average Speed')
+
         sql = """
 -- erzeuge speed_zulaessig
 ALTER TABLE {network}.links
@@ -755,8 +768,9 @@ AND ld.v_kfz < l.maxspeed and lt.road_category >'A';
 
     def update_oneway(self):
         """
-
+        Update oneway streets
         """
+        logger.debug('Update Oneway Streets')
         sql = """
 UPDATE {network}.links l
 SET oneway = TRUE
@@ -794,8 +808,10 @@ AND w.id = l.wayid
 
     def update_time(self):
         """
-
+        Update Travel Times
         """
+        logger.debug('Update travel times for links')
+
         sql = """
 UPDATE {network}.links l
 SET
@@ -835,10 +851,10 @@ WHERE l.wayid = g.wayid AND l.segment = g.segment;
         """.format(network=self.network)
         self.run_query(sql)
 
-
     def update_lanes(self):
         """
         """
+        logger.debug('Update number of lanes')
         sql = """
 UPDATE {network}.links l
 SET lanes = 1
@@ -870,6 +886,7 @@ WHERE linkname IS NULL AND linkref IS NOT NULL;
     def create_slope(self):
         """
         """
+        logger.debug('calculate slope of links')
         sql = """
 UPDATE {network}.links l
 SET slope = CASE
@@ -887,6 +904,7 @@ AND bridge_tunnel = '';
         self.run_query(sql)
 
     def create_chunks(self):
+        logger.debug('Create chunks')
         sql = """
 -- erzeuge Tabelle mit jeder 1.000sten wayid, um die links in Häppchen (chunks) zu erzeugen
 
@@ -909,6 +927,7 @@ COMMIT;
         """
         Create Barriers
         """
+        logger.debug('Create Barriers')
         sql = """
 CREATE OR REPLACE VIEW {network}.barriers_car AS
  SELECT b.id,
@@ -961,6 +980,7 @@ CREATE OR REPLACE VIEW {network}.line_barriers_car AS
     def create_index(self):
         """
         """
+        logger.info('Create Indices')
         sql = """
 ALTER TABLE {network}.links ADD PRIMARY KEY (wayid, segment);
 CREATE INDEX idx_links_oneway ON {network}.links USING btree (oneway) WHERE oneway = TRUE;
@@ -978,6 +998,7 @@ CLUSTER {network}.links USING idx_links_geom;
         """
         Create the views for the accessible links
         """
+        logger.info('Create View with accessible links')
         sql = """
 CREATE OR REPLACE VIEW {network}.links_reached_without_planned AS
 SELECT l.*, lt.road_category
@@ -1014,6 +1035,7 @@ AND l.linktype=lt.id;
     def create_views_roadtypes(self):
         """
         """
+        logger.info('Create Views with different roadtypes')
         sql = """
 -- erstelle View für die einzelnen Streckentypen
 CREATE OR REPLACE VIEW {network}.autobahn AS
@@ -1071,6 +1093,7 @@ FROM
         """
         Create a pg_routing network from the links-table
         """
+        logger.info('Create routable network to check network connectivity')
         sql = """
 CREATE TABLE {network}.edge_table (
 id INTEGER PRIMARY KEY,
@@ -1093,6 +1116,7 @@ CREATE INDEX edge_table_target_idx ON {network}.edge_table USING btree("target")
         """
         close edges with construction or planned
         """
+        logger.info('Update edge table with constructions')
         sql = """
 UPDATE {network}.edge_table e
 SET cost = -1, reverse_cost = -1
@@ -1107,6 +1131,7 @@ e.fromnode=l.fromnode AND e.tonode=l.tonode AND
         """
         Updates the edge_table
         """
+        logger.info('Update Edge Table')
         sql = """
 
 TRUNCATE {network}.edge_table;
@@ -1127,6 +1152,8 @@ FROM {network}.links l;
         """
         create and analyze the topology
         """
+        logger.info('Create Topology')
+
         chunksize = 50000
         cursor = self.conn.cursor()
         sql = 'SELECT max(e.id) FROM {network}.edge_table e;'
@@ -1146,8 +1173,9 @@ SELECT pgr_createTopology('{network}.edge_table',
     clean := false::boolean);
 COMMIT;
 """.format(tolerance=0.000001, network=self.network,
-           fromrow=fromrow, torow=torow)
-            logger.info('create topology for edges {} to {}'.format(fromrow, torow))
+                fromrow=fromrow, torow=torow)
+            logger.info(
+                'create topology for edges {} to {}'.format(fromrow, torow))
             self.run_query(sql)
 
         sql = """
@@ -1160,6 +1188,9 @@ SELECT pgr_analyzeGraph('{network}.edge_table',{tolerance},
     def create_edge_reached(self):
         """
         """
+        logger.info(
+            'Create Materialized Views with edges reached from a start vertex')
+
         # init the driving distance queries
         self.update_pgr_driving_distance()
         # create queries
@@ -1225,6 +1256,8 @@ WHERE h.node = r.node;
         k : int
             the number of clusters to test
         """
+        logger.info('search from different clusters of vertices')
+
         sql = """
 WITH cluster AS
 (SELECT c.s, c.geom
@@ -1289,7 +1322,8 @@ SELECT count(*) FROM {network}.edges_reached;
             msg2 = '{f} out of {n} edges reached'
             logger.info(msg2.format(f=int(links_reached), n=self.n_links))
             if links_reached > self.n_links * self.links_to_find:
-                sql = 'ANALYZE {network}.edges_reached;'.format(network=self.network)
+                sql = 'ANALYZE {network}.edges_reached;'.format(
+                    network=self.network)
                 self.run_query(sql)
                 return
 
@@ -1326,6 +1360,9 @@ FROM pgr_drivingDistance(
         """
         copy edge_reached into new table
         """
+        logger.info(
+            'Save edges reached with planned roads to table edges_reached')
+
         sql = """
 TRUNCATE {network}.edges_reached_with_planned;
 INSERT INTO {network}.edges_reached_with_planned (id, fromnode, tonode)
@@ -1334,10 +1371,10 @@ FROM {network}.edges_reached e;
             """.format(network=self.network)
         self.run_query(sql)
 
+
 if __name__ == '__main__':
 
     parser = ArgumentParser(description="Extract Data for Model")
-
 
     parser.add_argument("-n", '--name', action="store",
                         help="Name of destination database",

@@ -1,20 +1,19 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 from argparse import ArgumentParser
 
 import logging
-logger = logging.getLogger()
-logger.addHandler(logging.StreamHandler())
-logger.level = logging.INFO
+logger = logging.getLogger('OrcaLog')
 
 from extractiontools.connection import Connection, Login
 from extractiontools.ausschnitt import Extract
 
+
 class CreatePolygons(Extract):
     """"""
-    def __init__(self, login):
 
+    def __init__(self, login):
         """"""
         self.check_platform()
         self.login1 = login

@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 import os
 import sys
 import tempfile
 import subprocess
 import logging
-logger = logging.getLogger()
+logger = logging.getLogger('OrcaLog')
 logger.level = logging.INFO
 from extractiontools.connection import Connection, DBApp, Login
 
@@ -14,17 +14,17 @@ from extractiontools.connection import Connection, DBApp, Login
 class PixelType(object):
     """pixel types for PostGIS Raster Bands"""
     pixeltypes = {
-'1BB': '1-bit boolean',
-'2BUI': '2-bit unsigned integer',
-'4BUI': '4-bit unsigned integer',
-'8BSI': '8-bit signed integer',
-'8BUI': '8-bit unsigned integer',
-'16BSI': '16-bit signed integer',
-'16BUI': '16-bit unsigned integer',
-'32BSI': '32-bit signed integer',
-'32BUI': '32-bit unsigned integer',
-'32BF': '32-bit float',
-'64BF': '64-bit float',
+        '1BB': '1-bit boolean',
+        '2BUI': '2-bit unsigned integer',
+        '4BUI': '4-bit unsigned integer',
+        '8BSI': '8-bit signed integer',
+        '8BUI': '8-bit unsigned integer',
+        '16BSI': '16-bit signed integer',
+        '16BUI': '16-bit unsigned integer',
+        '32BSI': '32-bit signed integer',
+        '32BUI': '32-bit unsigned integer',
+        '32BF': '32-bit float',
+        '64BF': '64-bit float',
     }
 
     def __init__(self, pixeltype):
@@ -54,8 +54,8 @@ class Points2Raster(DBApp):
     srid = 3035
 
     def __init__(self,
-                 db: str='extract',
-                 subfolder: str='tiffs'):
+                 db: str = 'extract',
+                 subfolder: str = 'tiffs'):
         self.db = db
         self.check_platform()
         self.destination_db = db
@@ -199,7 +199,7 @@ WHERE
             point_feature=point_feature,
             geom_col=geom_col,
             value_col=value_col,
-           )
+        )
         self.run_query(sql)
         self.add_raster_index(schema=target_schema,
                               tablename=target_raster_tablename,
@@ -233,10 +233,10 @@ COPY (
   FROM {s}.{tn})
   TO STDOUT;
     """.format(
-           s=self.schema,
-           tn=tablename,
-           rast=raster_col,
-       )
+            s=self.schema,
+            tn=tablename,
+            rast=raster_col,
+        )
 
         with tempfile.NamedTemporaryFile('wb', delete=False) as f:
             cur = self.conn.cursor()
@@ -491,7 +491,6 @@ WHERE v.cellcode=l.cellcode;
             tablename, source_table, id_column, value_column, weights)
 
         self.create_raster_for_table(tablename, pixeltype, noData)
-
 
     def create_raster_for_point(self,
                                 tablename,
