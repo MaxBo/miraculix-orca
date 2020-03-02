@@ -1,4 +1,5 @@
 import orca
+from orcadjango.decorators import group
 from extractiontools.master import BBox
 from extractiontools.ausschnitt import ExtractMeta
 from extractiontools.drop_db import DropDatabase
@@ -8,6 +9,7 @@ __parent_modules__ = ['extractiontools.injectables.database',
                       ]
 
 
+@group('CreateProject', order=1)
 @orca.step()
 def create_db(source_db: str, target_srid: str, bbox_dict: dict, login: Login):
     """
@@ -25,6 +27,7 @@ def create_db(source_db: str, target_srid: str, bbox_dict: dict, login: Login):
     extract.extract()
 
 
+@group('DeleteProject', order=1)
 @orca.step()
 def drop_db(source_db: str, login: Login):
     """

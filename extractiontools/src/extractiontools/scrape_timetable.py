@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 from argparse import ArgumentParser
 
@@ -22,7 +22,7 @@ class ScrapeTimetable(ScrapeStops):
                  db: str,
                  date: str,
                  source_db: str,
-                 recreate_tables: bool=True):
+                 recreate_tables: bool = True):
         """"""
         self.destination_db = db
         self.date: Date = Date.from_string(date)
@@ -124,8 +124,8 @@ WHERE in_area;
         self.conn1.commit()
 
     def read_fahrten(self,
-                    h_id_abfahrtstafel,
-                    h_name_abfahrtstafel):
+                     h_id_abfahrtstafel,
+                     h_name_abfahrtstafel):
         """Lies Fahrten"""
         cursor = self.get_cursor()
 
@@ -135,7 +135,7 @@ WHERE in_area;
         self.abfahrt_id = rows[0][0] or 0
         fahrten_count = 0
 
-        #Abfahrten auslesen
+        # Abfahrten auslesen
         h_id_str = str(h_id_abfahrtstafel)
 
         # grab data from station timetable for the whole day
@@ -153,7 +153,7 @@ WHERE in_area;
             f'ld=96242&country=DEU&rt=1&input={h_name_abfahrtstafel}&'
             f'bt=dep&time=24:00&maxJourneys=10000&date={self.date}&'
             f'productsFilter=1111111111&max=10000&start=yes'
-            )
+        )
         urls = [bhftafel_id_url, bhftafel_name_url]
 
         try:
@@ -169,7 +169,8 @@ WHERE in_area;
                 self.t = 0
                 r = requests.get(url)
                 tree = html.fromstring(r.content)
-                self.errCode = tree.xpath('//div[@class="hafasContent error"]/text()')
+                self.errCode = tree.xpath(
+                    '//div[@class="hafasContent error"]/text()')
 
                 while self.t < MAX_TRIES and self.errCode:
                     tree = self.wait_and_retry(url)
@@ -184,12 +185,14 @@ WHERE in_area;
                     # count number of trips
                     elements = subtree[0].findall("tr")
                     # only elements with a attribute "key"
-                    journey_rows = [e for e in elements if e.attrib.has_key('id')]
+                    journey_rows = [
+                        e for e in elements if e.attrib.has_key('id')]
                     fahrten_count = len(journey_rows)
 
                 except:
                     logger.warning(traceback.format_exc())
-                    err_code = tree.xpath('//div[@class="errormsg leftMargin"]/text()')
+                    err_code = tree.xpath(
+                        '//div[@class="errormsg leftMargin"]/text()')
                     logger.warning(f'Fehler beim Lesen der BhfTafel für '
                                    f'{h_id_str}: {h_name_abfahrtstafel}:')
                     if err_code:
@@ -224,7 +227,7 @@ WHERE in_area;
             logger.warning(f'{exc_type} {fname} {exc_tb.tb_lineno}')
             raise e
 
-    def wait_and_retry(self, bhftafel_url: str, waittime: int=15):
+    def wait_and_retry(self, bhftafel_url: str, waittime: int = 15):
         # if not successful,
         # try to get the page MAX_TRIES times
         logger.info(f'wait {waittime} secs and try again {self.t} '
@@ -233,7 +236,8 @@ WHERE in_area;
         r = requests.get(bhftafel_url)
         tree = html.fromstring(r.content)
 
-        self.errCode = tree.xpath('//div[@class="hafasContent error"]/text()')
+        self.errCode = tree.xpath(
+            '//div[@class="hafasContent error"]/text()')
         self.t += 1
         return tree
 
@@ -251,8 +255,10 @@ WHERE in_area;
         try:
             xpath_base = f'//*[@id="{journey}"]'
             try:
-                fahrt_ziel = tree.xpath(xpath_base+'/td[4]/span/a/text()')[0].replace('\n','')
-                abfahrten = tree.xpath(xpath_base+'/td[4]/text()')[2:][0].split('\n')
+                fahrt_ziel = tree.xpath(
+                    xpath_base + '/td[4]/span/a/text()')[0].replace('\n', '')
+                abfahrten = tree.xpath(
+                    xpath_base + '/td[4]/text()')[2:][0].split('\n')
             except IndexError:
                 logger.warning(traceback.format_exc())
                 logger.warning(f'Fehler beim parsen der Abfahrtstafel von {h_name_abfahrtstafel}')
@@ -260,10 +266,10 @@ WHERE in_area;
             abfahrtsuhrzeit = abfahrten[2]
             ankunftsuhrzeit = abfahrten[-2]
             fahrt_abfahrt = time.strptime(abfahrtsuhrzeit, '%H:%M')
-            xpath_fahrt_base = xpath_base+'//td[3]/a'
+            xpath_fahrt_base = xpath_base + '//td[3]/a'
             # search trip name, which can be marked as <span>
-            name_span = tree.xpath(xpath_fahrt_base+'/span/text()')
-            name_without_span = tree.xpath(xpath_fahrt_base+'/text()')
+            name_span = tree.xpath(xpath_fahrt_base + '/span/text()')
+            name_without_span = tree.xpath(xpath_fahrt_base + '/text()')
             if name_span:
                 #  in this case, the second row is the trip number
                 fahrt_name = name_span[0]
@@ -272,10 +278,12 @@ WHERE in_area;
                 fahrt_name = name_without_span[0].strip('\n')
                 fahrt_nr = None
 
-            fahrt_url = 'http://reiseauskunft.bahn.de/'+tree.xpath(xpath_base+'//td[3]/a/@href')[0]
+            fahrt_url = 'http://reiseauskunft.bahn.de/' + \
+                tree.xpath(xpath_base + '//td[3]/a/@href')[0]
 
             if fahrt_url:
-                hst_id_abfahrt = int(fahrt_url.split('station_evaId=')[1].split('&')[0])
+                hst_id_abfahrt = int(fahrt_url.split(
+                    'station_evaId=')[1].split('&')[0])
             else:
                 hst_id_abfahrt = h_id_abfahrtstafel
 
@@ -312,7 +320,7 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
                     self.last_stunde = stunde
                     print(os.linesep, stunde, end=',')
 
-                #Fahrten in Tabelle Abfahrten schreiben
+                # Fahrten in Tabelle Abfahrten schreiben
                 sql1 = """
 INSERT INTO abfahrten
 (abfahrt_id, "Fahrt_URL", "Fahrt_Name", "Fahrt_Abfahrt", "H_ID", "Fahrt_Ziel", "Fahrt_Nr")
@@ -327,7 +335,7 @@ VALUES (%s, %s, %s, %s, %s, %s, %s);"""
                                 fahrt_nr))
                 print(f'{fahrt_name}', end=',')
                 try:
-                    sleeptime = float(random.randint(1,3))/20.
+                    sleeptime = float(random.randint(1, 3)) / 20.
                     time.sleep(sleeptime)
                     r = requests.get(fahrt_url)
                     fahrtverlauf = htmlentitydecode(r.content)
@@ -347,15 +355,16 @@ VALUES (%s, %s, %s, %s, %s, %s, %s);"""
                 # wenn Uhrzeit zwischen 0 und 4 h und Ankunft vor 4 Uhr ist,
                 # wird der Vortag als "Zuglauf" ausgegeben
                 # dies muss korrigiert werden
-                verlauf_parser.Ankunft_vor_4Uhr = int(ankunftsuhrzeit[:2]) < 4
+                verlauf_parser.Ankunft_vor_4Uhr = int(
+                    ankunftsuhrzeit[:2]) < 4
                 verlauf_parser.ist_Starthaltestelle = True
 
-                #try:
-                    #html_verlauf = html.fromstring(Fahrtverlauf.content)
-                #except Exception as e:
-                    #logger.warning(traceback.format_exc())
-                    #logger.warning('HTML Verlauf Fehler')
-                    #pass
+                # try:
+                #html_verlauf = html.fromstring(Fahrtverlauf.content)
+                # except Exception as e:
+                # logger.warning(traceback.format_exc())
+                #logger.warning('HTML Verlauf Fehler')
+                # pass
 
                 verlauf_parser.feed(fahrtverlauf)
                 for h in range(len(verlauf_parser.data_stations)):
@@ -369,7 +378,6 @@ VALUES (%s, %s, %s, %s, %s, %s, %s);"""
                     else:
                         akt_h_id = None
 
-
                     sql3 = """
 INSERT INTO fahrten
 (abfahrt_id, "Fahrt_Name", fahrt_index, "H_Name", "H_Ankunft", "H_Abfahrt", "H_ID")
@@ -377,7 +385,7 @@ VALUES (%s, %s, %s,%s,%s,%s,%s);"""
                     cursor.execute(sql3,
                                    (self.abfahrt_id,
                                     fahrt_name,
-                                    h+1,
+                                    h + 1,
                                     h_name,
                                     get_timestamp2(h_ankunft),
                                     get_timestamp2(h_abfahrt),
@@ -440,6 +448,7 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
 
 class MyHTMLParser(HTMLParser):
     """create a subclass and override the handler methods"""
+
     def __init__(self):
         HTMLParser.__init__(self)
         self.recording_route = 0
@@ -470,9 +479,9 @@ class MyHTMLParser(HTMLParser):
                     self.start_recording_links = 1
                 elif attrs[0][1] == 'station':
                     self.recording_station = 1
-                elif attrs[0][1] == 'arrival nowrap':##
+                elif attrs[0][1] == 'arrival nowrap':
                     self.recording_arrival = 1
-                elif attrs[0][1] == 'departure nowrap':##
+                elif attrs[0][1] == 'departure nowrap':
                     self.recording_departure = 1
 
         elif tag == 'a':
@@ -504,7 +513,7 @@ class MyHTMLParser(HTMLParser):
             if data != '\n':
                 trainroute_str = data.split('Fahrtverlauf vom ')
                 if len(trainroute_str) > 1:
-                    date = trainroute_str[1].rstrip(')').replace('\n','')
+                    date = trainroute_str[1].rstrip(')').replace('\n', '')
                     d, m, y = date.split('.')
                     yyyy = int(y) + 2000
                     self.date = Date(yyyy, m, d)
@@ -515,7 +524,7 @@ class MyHTMLParser(HTMLParser):
             if data != '\n':
                 self.data_stations.append(data)
         elif self.recording_arrival:
-            if data in ['\n', '\n\xa0\n']: # geschütztes Leerzeichen bei Ankunft
+            if data in ['\n', '\n\xa0\n']:  # geschütztes Leerzeichen bei Ankunft
                 zeit = None
                 self.data_arrivals.append(zeit)
                 if self.first_linefeed:
@@ -523,14 +532,14 @@ class MyHTMLParser(HTMLParser):
                 else:
                     self.first_linefeed = True
             else:
-                data = data.replace('an ','').replace('ab ','')
+                data = data.replace('an ', '').replace('ab ', '')
                 try:
                     # if tag is Delay marker
                     if data.startswith('+'):
                         return
                     zeit = self.get_time(data)
                     if self.data_departures:
-                        z = len(self.data_departures)-1
+                        z = len(self.data_departures) - 1
                         while z >= 0:
                             abfahrtszeit = self.data_departures[z]
                             if abfahrtszeit:
@@ -547,7 +556,7 @@ class MyHTMLParser(HTMLParser):
                     raise
                 self.data_arrivals.append(zeit)
         elif self.recording_departure:
-            if data in ['\n', '\n\xa0\n']: # geschütztes Leerzeichen bei Abfahrt
+            if data in ['\n', '\n\xa0\n']:  # geschütztes Leerzeichen bei Abfahrt
                 zeit = None
                 self.data_departures.append(zeit)
                 if self.first_linefeed:
@@ -579,7 +588,7 @@ class MyHTMLParser(HTMLParser):
                     else:
                         # wenn keine Ankunftszeit angegeben ist, schaue,
                         # ob Zeitsprung an Abfahrt an vorheriger Haltestelle
-                        z = len(self.data_departures)-1
+                        z = len(self.data_departures) - 1
                         while z >= 0:
                             abfahrtszeit = self.data_departures[z]
                             if abfahrtszeit:
@@ -620,11 +629,10 @@ class MyHTMLParser(HTMLParser):
         return zeit
 
 
+if __name__ == '__main__':
 
-if __name__=='__main__':
-
-
-    parser = ArgumentParser(description="Scrape Stops in a given bounding box")
+    parser = ArgumentParser(
+        description="Scrape Stops in a given bounding box")
 
     parser.add_argument("-t", '--top', action="store",
                         help="top", type=float,

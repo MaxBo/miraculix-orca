@@ -1,7 +1,10 @@
+"""orca-steps for miraculix"""
+
 from typing import List, Dict
 import orca
+from orcadjango.decorators import group
 from extractiontools.injectables.database import Login
-from extractiontools.extract_osm import ExtractOSM, Extract
+from extractiontools.extract_osm import ExtractOSM
 from extractiontools.osm2polygons import CreatePolygons
 from extractiontools.extract_landuse import ExtractLanduse
 from extractiontools.extract_verwaltungsgrenzen import ExtractVerwaltungsgrenzen
@@ -17,6 +20,7 @@ __parent_modules__ = ['extractiontools.steps.create_db',
                       ]
 
 
+@group('ExtractData', order=1)
 @orca.step()
 def extract_osm(source_db: str, login: Login):
     """
@@ -29,6 +33,7 @@ def extract_osm(source_db: str, login: Login):
     extract.extract()
 
 
+@group('ExtractData', order=2)
 @orca.step()
 def create_polygons_from_osm(source_db: str, login: Login):
     """
@@ -39,6 +44,7 @@ def create_polygons_from_osm(source_db: str, login: Login):
     copy2fgdb.create_poly_and_multipolygons()
 
 
+@group('ExtractData', order=3)
 @orca.step()
 def extract_landuse(source_db: str, login: Login,
                     gmes: List[str], corine: List[str]):
@@ -54,6 +60,7 @@ def extract_landuse(source_db: str, login: Login,
     extract.extract()
 
 
+@group('ExtractData', order=10)
 @orca.step()
 def extract_verwaltungsgrenzen(source_db: str, login: Login,
                                verwaltungsgrenzen_tables: List[str]):
@@ -68,6 +75,7 @@ def extract_verwaltungsgrenzen(source_db: str, login: Login,
     extract.extract()
 
 
+@group('ExtractData', order=4)
 @orca.step()
 def extract_laea_raster(source_db: str, login: Login):
     """
@@ -79,6 +87,8 @@ def extract_laea_raster(source_db: str, login: Login):
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 
+
+@group('ExtractData', order=5)
 @orca.step()
 def zensus2raster(login: Login, subfolder_tiffs: str):
     """
@@ -89,6 +99,7 @@ def zensus2raster(login: Login, subfolder_tiffs: str):
     z2r.run()
 
 
+@group('Export')
 @orca.injectable()
 def osm_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
@@ -106,6 +117,7 @@ def osm_layers() -> Dict[str, str]:
     return layers
 
 
+@group('Export')
 @orca.step()
 def copy_osm_to_fgdb(login: Login,
                      osm_layers: Dict[str, str]):
@@ -122,6 +134,7 @@ def copy_osm_to_fgdb(login: Login,
     copy2fgdb.copy_layers()
 
 
+@group('Export')
 @orca.step()
 def copy_to_fgdb(login: Login,
                  osm_layers: Dict[str, str]):

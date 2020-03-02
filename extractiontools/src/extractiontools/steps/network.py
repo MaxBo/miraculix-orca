@@ -1,6 +1,9 @@
+"""orca-steps to create networks"""
+
 from typing import Dict
 import os
 import orca
+from orcadjango.decorators import group
 from extractiontools.injectables.database import Login
 from extractiontools.build_network_car import BuildNetwork
 from extractiontools.build_network_walk_cycle import BuildNetworkWalkCycle
@@ -12,6 +15,7 @@ from extractiontools.stop_otp_router import OTPServer
 from extractiontools.copy2fgdb import Copy2FGDB
 
 
+@group('Networks')
 @orca.step()
 def build_network_car(login: Login,
                       chunksize: int,
@@ -31,6 +35,7 @@ def build_network_car(login: Login,
     build_network.build()
 
 
+@group('Networks')
 @orca.step()
 def build_network_fr(login: Login,
                      chunksize: int,
@@ -52,6 +57,7 @@ def build_network_fr(login: Login,
     build_network.build()
 
 
+@group('Public Transport', order=1)
 @orca.step()
 def extract_stops(login: Login, source_db: str):
     """
@@ -64,6 +70,7 @@ def extract_stops(login: Login, source_db: str):
     scrape.extract()
 
 
+@group('Public Transport', order=2)
 @orca.step()
 def scrape_stops(login: Login,
                  source_db: str):
@@ -76,22 +83,25 @@ def scrape_stops(login: Login,
     scrape.scrape()
 
 
+@group('Public Transport')
 @orca.injectable()
 def date_timetable() -> str:
     """date for the timetable"""
     return '02.05.2019'
 
 
+@group('Public Transport')
 @orca.injectable()
-def recreate_tables() -> bool:
+def recreate_timetable_tables() -> bool:
     """recreate tables for timetables"""
     return False
 
 
+@group('Public Transport', order=3)
 @orca.step()
 def scrape_timetables(login: Login,
                       date_timetable: str,
-                      recreate_tables: bool,
+                      recreate_timetable_tables: bool,
                       source_db: str):
     """
     Scrape Stops from DB
@@ -99,25 +109,27 @@ def scrape_timetables(login: Login,
     scrape = ScrapeTimetable(db=login.db,
                              date=date_timetable,
                              source_db=source_db,
-                             recreate_tables=recreate_tables)
+                             recreate_tables=recreate_timetable_tables)
     scrape.set_login01(login, source_db)
     scrape.get_target_boundary_from_dest_db()
     scrape.scrape()
 
 
+@group('Public Transport')
 @orca.injectable()
 def gtfs_only_one_day() -> bool:
     """gtfs valid only on the given day?"""
     return False
 
 
+@group('Public Transport')
 @orca.injectable()
 def tbl_kreise() -> str:
     """table with the county geometries"""
     return 'verwaltungsgrenzen.krs_2018_12'
 
 
-
+@group('Public Transport', order=4)
 @orca.step()
 def timetables_to_gtfs(login: Login,
                        date_timetable: str,
@@ -140,6 +152,7 @@ def timetables_to_gtfs(login: Login,
     hafas.export_gtfs()
 
 
+@group('OTP')
 @orca.injectable()
 def otp_networks() -> Dict[str, str]:
     """
@@ -151,6 +164,8 @@ def otp_networks() -> Dict[str, str]:
             'network_fr': 'otp_fr',
             }
 
+
+@group('Export')
 @orca.step()
 def copy_network_to_pbf(login: Login,
                         otp_networks: Dict[str, str]):
@@ -162,6 +177,7 @@ def copy_network_to_pbf(login: Login,
         copy2pbf.copy()
 
 
+@group('Export')
 @orca.step()
 def copy_network_to_pbf_and_xml(login: Login,
                                 otp_networks: Dict[str, str]):
@@ -174,19 +190,22 @@ def copy_network_to_pbf_and_xml(login: Login,
         copy2pbf.copy()
 
 
+@group('OTP')
 @orca.injectable()
 def otp_ports() -> Dict[str, int]:
     """A dict with the OTP Ports"""
     return {'port': 7789,
-            'secure_port': 7788,}
+            'secure_port': 7788, }
 
 
+@group('OTP')
 @orca.injectable()
 def otp_graph_subfolder() -> str:
     """subfolder with the otp graphs"""
     return 'otp_graphs'
 
 
+@group('OTP')
 @orca.injectable()
 def otp_routers(project) -> Dict[str, str]:
     """subfolder with the otp graphs"""
@@ -195,17 +214,20 @@ def otp_routers(project) -> Dict[str, str]:
                }
     return routers
 
+
+@group('OTP')
 @orca.injectable()
 def start_otp_analyst() -> bool:
     """start otp router with analyst"""
     return True
 
 
+@group('OTP', order=2)
 @orca.step()
 def start_otp_router(otp_ports: Dict[str, int],
                      base_path: str,
                      otp_graph_subfolder: str,
-                     otp_routers:Dict[str, str],
+                     otp_routers: Dict[str, str],
                      start_otp_analyst: bool,
                      ):
     """Stop the running otp routers on the ports giben in `otp_ports`"""
@@ -217,6 +239,7 @@ def start_otp_router(otp_ports: Dict[str, int],
     otp_server.start()
 
 
+@group('OTP', order=4)
 @orca.step()
 def stop_otp_router(otp_ports: Dict[str, int]):
     """Stop the running otp routers on the ports giben in `otp_ports`"""
@@ -224,6 +247,7 @@ def stop_otp_router(otp_ports: Dict[str, int]):
     otp_server.stop()
 
 
+@group('OTP', order=1)
 @orca.step()
 def create_router(otp_routers: Dict[str, str],
                   project: str,
@@ -240,6 +264,7 @@ def create_router(otp_routers: Dict[str, str],
         otp_server.create_router(build_folder, target_folder)
 
 
+@group('Network')
 @orca.injectable()
 def network_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
@@ -251,6 +276,8 @@ def network_layers() -> Dict[str, str]:
               }
     return layers
 
+
+@group('Network')
 @orca.injectable()
 def network_fr_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
@@ -259,12 +286,15 @@ def network_fr_layers() -> Dict[str, str]:
               }
     return layers
 
+
+@group('Export')
 @orca.injectable()
 def gdbname(project) -> str:
     """the name of the File Geodatabase"""
     return f'{project}.gdb'
 
 
+@group('Export')
 @orca.step()
 def copy_network_to_fgdb(login: Login,
                          network_layers: Dict[str, str]):
@@ -276,6 +306,7 @@ def copy_network_to_fgdb(login: Login,
     copy2fgdb.copy_layers()
 
 
+@group('Export')
 @orca.step()
 def copy_network_fr_to_fgdb(login: Login,
                             network_fr_layers: Dict[str, str]):
