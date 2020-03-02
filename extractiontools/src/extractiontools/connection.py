@@ -209,7 +209,7 @@ class DBApp(object):
         cur = conn.cursor()
         for query in sqlparse.split(sql):
             if query.strip().rstrip(';'):
-                logger.info(query)
+                logger.debug(query)
                 query_without_comments = '\n'.join([
                     q for q in query.split(os.linesep)
                     if not q.strip().startswith('--')])
@@ -219,7 +219,7 @@ class DBApp(object):
                         cur.executemany(query_without_comments, values)
                     else:
                         cur.execute(query_without_comments, values)
-                    logger.info(cur.statusmessage)
+                    logger.debug(cur.statusmessage)
 
     def set_search_path(self, connstr='conn'):
         conn = getattr(self, connstr)
