@@ -207,13 +207,15 @@ WHERE in_area;
                     self.n_already_in_db = 0
                     self.last_stunde = '-1'
                     journeys = (j.attrib['id'] for j in journey_rows)
+                    fahrten_found = []
                     for journey in journeys:
                         self.parse_fahrten(journey,
                                            fahrten_count,
                                            tree,
                                            h_id_abfahrtstafel,
                                            cursor,
-                                           h_name_abfahrtstafel)
+                                           h_name_abfahrtstafel,
+                                           fahrten_found)
                     if self.n_new:
                         logger.info('')
                     logger.info(f'{self.n_new} new, '
@@ -247,7 +249,8 @@ WHERE in_area;
                       tree,
                       h_id_abfahrtstafel,
                       cursor,
-                      h_name_abfahrtstafel):
+                      h_name_abfahrtstafel,
+                      fahrten_found):
         """
         Parse Fahrt journey in the tree and query the Fahrtverlauf
         look in Fahrten, if Fahrt already exists
@@ -318,7 +321,9 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
                 stunde = abfahrtsuhrzeit[:2]
                 if stunde != self.last_stunde:
                     self.last_stunde = stunde
-                    print(os.linesep, stunde, end=',')
+                    if fahrten_found:
+                        logger.info(f'{stunde}: {",".join(fahrten_found)}')
+                        fahrten_found.clear()
 
                 # Fahrten in Tabelle Abfahrten schreiben
                 sql1 = """
@@ -333,7 +338,7 @@ VALUES (%s, %s, %s, %s, %s, %s, %s);"""
                                 h_id_abfahrtstafel,
                                 fahrt_ziel,
                                 fahrt_nr))
-                print(f'{fahrt_name}', end=',')
+                fahrten_found.append(fahrt_name)
                 try:
                     sleeptime = float(random.randint(1, 3)) / 20.
                     time.sleep(sleeptime)

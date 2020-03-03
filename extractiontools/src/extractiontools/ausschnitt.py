@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 import numpy as np
 import logging
 logger = logging.getLogger('OrcaLog')
-logger.level = logging.INFO
+logger.level = logging.DEBUG
 import sys
 import os
 import subprocess

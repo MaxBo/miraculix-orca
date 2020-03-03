@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 
 import time
@@ -41,7 +41,8 @@ class ScrapeStops(Extract):
 
         elem = elems[0]
         o = urlparse(elem.action)
-        query = (o.query)
+        query = parse_qs(o.query)
+
         try:
             id2 = query['ld'][0]
             id1 = query['i'][0]
@@ -139,8 +140,9 @@ FROM {schema}.route_types;
         lon0, lon1, lat0, lat1 = self.bbox.rounded()
         stops_found = 0
         stops_inserted = 0
-        for j in range(int(lat0*10), int(lat1*10)):
-            for i in range(int(lon0*10),int(lon1*10)):
+        for j in range(int(lat0 * 10), int(lat1 * 10)):
+            for i in range(int(lon0 * 10), int(lon1 * 10)):
+                logger.debug(f'search at {lon0}, {lon1}, {lat0}, {lat1}')
                 stops_found_in_tile = 0
                 stops_inserted_in_tile = 0
 
@@ -148,7 +150,6 @@ FROM {schema}.route_types;
 
                 lat = j * 100000
                 lon = i * 100000
-
 
                 logger.info(f'search in {i}, {j}')
 
@@ -167,14 +168,15 @@ FROM {schema}.route_types;
                     pass
 
                 try:
-                    r = requests.get(url) # agent...
+                    r = requests.get(url)  # agent...
                     tree = html.fromstring(r.content)
-                    #HTML auslesen
+                    # HTML auslesen
 
                     overview_clicktable = '//div[@class="overview clicktable"]/*'
                     elems = tree.xpath(overview_clicktable)
                     if not elems:
-                        logger.warning('connection failed, no valid response')
+                        logger.warning(
+                            'connection failed, no valid response')
 
                     for elem in elems:
                         link = elem.xpath('a')[0]
@@ -186,13 +188,14 @@ FROM {schema}.route_types;
                         for param in station_query.split('!'):
                             param_tuple = param.split('=')
                             if len(param_tuple) > 1:
-                                station_params[param_tuple[0]] = param_tuple[1]
-                        #HaltestellenID
+                                station_params[param_tuple[0]
+                                               ] = param_tuple[1]
+                        # HaltestellenID
                         h_id = station_params['id']
                         h_lat = float(station_params['Y']) / 1000000.
                         h_lon = float(station_params['X']) / 1000000.
 
-                        #Datenobjekt erzeugen und in DB schreiben
+                        # Datenobjekt erzeugen und in DB schreiben
                         # wenn schon vorhanden, dann Geometrie aktualisieren
 
                         cursor.execute(sql_insert,
@@ -229,8 +232,8 @@ FROM {schema}.route_types;
 
 if __name__ == '__main__':
 
-
-    parser = ArgumentParser(description="Scrape Stops in a given bounding box")
+    parser = ArgumentParser(
+        description="Scrape Stops in a given bounding box")
 
     parser.add_argument('--host', action="store",
                         help="host",
@@ -251,7 +254,6 @@ if __name__ == '__main__':
                         dest="copy_from_source_db")
 
     options = parser.parse_args()
-
 
     scrape = ScrapeStops(options, db=options.destination_db)
     scrape.set_login(host=options.host, port=options.port, user=options.user)

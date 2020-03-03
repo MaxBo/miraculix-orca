@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 import datetime
 import os
@@ -22,7 +22,7 @@ class HafasDB2GTFS(Extract):
                  only_one_day: bool,
                  base_path: str,
                  subfolder: str,
-                 tbl_kreise:str,
+                 tbl_kreise: str,
                  ):
         self.destination_db = db
         self.today = Date.from_string(date)
@@ -45,7 +45,7 @@ class HafasDB2GTFS(Extract):
             self.delete_invalid_fahrten()
             self.set_stop_id()
             self.write_calendar()
-            #self.workaround_sommerzeit()
+            # self.workaround_sommerzeit()
             self.test_for_negative_travel_times()
             self.set_arrival_to_day_before()
             self.set_departure_to_day_before()
@@ -54,12 +54,12 @@ class HafasDB2GTFS(Extract):
             self.set_ein_aus()
 
             self.count_multiple_abfahrten()
-            #self.show_multiple_trips()
+            # self.show_multiple_trips()
             self.save_haltestellen_id()
             self.delete_multiple_abfahrten()
 
             # Haltestellen
-            #self.update_haltestellen_d()
+            # self.update_haltestellen_d()
 
             self.reset_stop_id()
             self.conn.commit()
@@ -68,12 +68,12 @@ class HafasDB2GTFS(Extract):
             self.update_stop_id_from_database()
             self.conn.commit()
 
-            #self.cleanup_haltestellen()
+            # self.cleanup_haltestellen()
 
             self.update_stop_id_from_similar_routes()
             self.intersect_kreise(self.tbl_kreise)
 
-            ### GTFS
+            # GTFS
             self.fill_gtfs_stops()
             self.identify_kreis(self.tbl_kreise)
             self.line_type()
@@ -81,9 +81,8 @@ class HafasDB2GTFS(Extract):
             self.make_agencies()
             self.make_shapes()
             self.make_stop_times()
-            #self.mark_abfahrten_around_kreis()
+            # self.mark_abfahrten_around_kreis()
             self.conn.commit()
-
 
     def create_gtfs_tables(self):
         """Create the gtfs tables if not yet exists"""
@@ -384,7 +383,7 @@ FROM pg_proc p
 WHERE
 p.pronamespace = 'public'::regnamespace AND
 p.proname = 'array_accum' AND
-p.proisagg
+p.prokind = 'a'
 AND p.prorettype = 'anyarray'::regtype::oid
 AND p.proargtypes = ARRAY['anyelement'::regtype]::oidvector
 ;
@@ -594,7 +593,7 @@ WHERE date_part('day', "H_Ankunft") > {tomorrow}) v
 WHERE f.abfahrt_id = v.abfahrt_id
 ;
 
-""".format(tomorrow = self.today.day + 1)
+""".format(tomorrow=self.today.day + 1)
 
         cur = self.conn.cursor()
         n_updated = 1
@@ -675,7 +674,6 @@ AND "H_Abfahrt" IS NOT NULL;
         cur.execute(sql4)
         logger.info('Missing Arrival Time added : %s' % cur.statusmessage)
 
-
     def test_for_negative_travel_times(self):
         cur = self.conn.cursor()
         sql = """
@@ -720,8 +718,8 @@ WHERE "H_Abfahrt" < "H_Ankunft";
                 cur.execute(sql)
                 abfahrten = np.array(cur.fetchall())
                 logger.warning('%s' % abfahrten)
-            #raise ValueError('''There exist still negative travel times with
-            #departures before arrivals!''')
+            # raise ValueError('''There exist still negative travel times with
+            # departures before arrivals!''')
         else:
             logger.info('no negative travel times')
 
@@ -803,7 +801,7 @@ GROUP BY keep;
         msg = 'keep abfahrten: {0.keep}: {0.count}'
         for row in rows:
             pass
-            #logger.info(msg.format(row))
+            # logger.info(msg.format(row))
 
     def show_multiple_trips(self):
         cur = self.conn.cursor()
@@ -828,7 +826,6 @@ ORDER BY f."Fahrt_Name", f.abfahrt_id, f.fahrt_index;
         for row in rows:
             m = msg.format(row)
             logger.info(m)
-
 
     def save_haltestellen_id(self):
         """
@@ -942,7 +939,8 @@ AND f."H_Name" = h."H_Name";
 
         """
         cur.execute(sql)
-        logger.info('eindeutige stop_ids aus Haltestellen: %s' % cur.statusmessage)
+        logger.info('eindeutige stop_ids aus Haltestellen: %s' %
+                    cur.statusmessage)
 
     def update_stop_id_from_database(self):
         """
@@ -1021,7 +1019,6 @@ WHERE
 """
         self.run_query(sql)
 
-
     def update_stop_id_from_similar_routes(self):
         """
         """
@@ -1078,7 +1075,8 @@ AND f.fahrt_index = c.fahrt_index
 ;
         """
         cur.execute(sql)
-        logger.info('UPDATE stop_id FROM similar routes: %s' % cur.statusmessage)
+        logger.info('UPDATE stop_id FROM similar routes: %s' %
+                    cur.statusmessage)
 
         sql = """
 
@@ -1141,7 +1139,6 @@ AND f."H_Name" = h."H_Name";
 UPDATE trips SET stop_id_txt = stop_id::text;
         """
         self.run_query(sql)
-
 
     def fill_gtfs_stops(self):
         """
@@ -1544,8 +1541,9 @@ WHERE departure_time IS NULL;
             cur.execute(sql)
 
 
-if __name__=='__main__':
-    parser = ArgumentParser(description="Scrape Stops in a given bounding box")
+if __name__ == '__main__':
+    parser = ArgumentParser(
+        description="Scrape Stops in a given bounding box")
 
     parser.add_argument('--host', action="store",
                         help="host",
@@ -1573,7 +1571,6 @@ if __name__=='__main__':
 if only-one-day is selected, the gtfs-feed will be valid only on the selected date,
 otherwise its valid all days''', dest='only_one_day', default=False)
 
-
     parser.add_argument('--subfolder', action="store",
                         help="""subfolder within the project folder
                         to store the gtfs files""",
@@ -1587,7 +1584,6 @@ otherwise its valid all days''', dest='only_one_day', default=False)
                         help="table with the county geometries",
                         dest="tbl_kreise",
                         default='verwaltungsgrenzen.krs_2014_12')
-
 
     options = parser.parse_args()
 
