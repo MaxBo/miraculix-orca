@@ -1433,7 +1433,7 @@ WHERE shape_pt_lon = 0 AND shape_pt_lat = 0;
 UPDATE routes r
 SET geom = st_setsrid(st_makeline(points), 4326)
 FROM (
-SELECT shape_id, st_accum(point ORDER BY s.shape_id, s.shape_pt_sequence) AS points
+SELECT shape_id, array_agg(point ORDER BY s.shape_id, s.shape_pt_sequence) AS points
 FROM (SELECT s.shape_id, s.shape_pt_sequence, st_makepoint(s.shape_pt_lon, s.shape_pt_lat) AS point
 FROM gtfs_shapes s
 ) s
