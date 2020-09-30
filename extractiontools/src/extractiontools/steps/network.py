@@ -10,7 +10,7 @@ from extractiontools.build_network_walk_cycle import BuildNetworkWalkCycle
 from extractiontools.scrape_stops import ScrapeStops
 from extractiontools.scrape_timetable import ScrapeTimetable
 from extractiontools.hafasdb2gtfs import HafasDB2GTFS
-from extractiontools.network2pbf import CopyNetwork2Pbf
+from extractiontools.network2pbf import CopyNetwork2Pbf, CopyNetwork2PbfTagged
 from extractiontools.stop_otp_router import OTPServer
 from extractiontools.copy2fgdb import Copy2FGDB
 
@@ -187,6 +187,19 @@ def copy_network_to_pbf_and_xml(login: Login,
                                    network_schema=network_schema,
                                    subfolder_pbf=subfolder_pbf,
                                    as_xml=True)
+        copy2pbf.copy()
+
+
+@group('Export')
+@orca.step()
+def copy_tagged_network_to_pbf_and_xml(login: Login,
+                                       otp_networks: Dict[str, str]):
+    """copy the osm networkdata to a pbf and .xml.bz file"""
+    for network_schema, subfolder_pbf in otp_networks.items():
+        copy2pbf = CopyNetwork2PbfTagged(login=login,
+                                         network_schema=network_schema,
+                                         subfolder_pbf=subfolder_pbf,
+                                         as_xml=True)
         copy2pbf.copy()
 
 
