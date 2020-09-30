@@ -7,4 +7,4 @@ django>=2
 django-bootstrap4
 requests
 lxml
--e git+git://github.com/MaxBo/orcadjango.git#egg=orcadjango
+#-e git+git://github.com/MaxBo/orcadjango.git#egg=orcadjango

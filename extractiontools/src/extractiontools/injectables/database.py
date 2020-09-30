@@ -121,7 +121,6 @@ def base_path() -> str:
 def subfolder_tiffs() -> str:
     """The subfolder on the Miraculix-Server under the base_path
     where tiffs are exported to"""
-    return r'~/gis/projekte'
     return 'tiffs'
 
 
