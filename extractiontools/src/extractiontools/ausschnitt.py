@@ -153,6 +153,29 @@ class Extract(DBApp):
         additional steps, to be defined in the subclass
         """
 
+    def create_extensions(self):
+        """
+        """
+        # Rename restored temp-Schema to new name
+        sql = '''
+        CREATE EXTENSION IF NOT EXISTS dblink;
+        CREATE EXTENSION IF NOT EXISTS postgis;
+        CREATE EXTENSION IF NOT EXISTS postgis_raster;
+        CREATE EXTENSION IF NOT EXISTS hstore;
+        CREATE EXTENSION IF NOT EXISTS pgRouting;
+        CREATE EXTENSION IF NOT EXISTS kmeans;
+        CREATE EXTENSION IF NOT EXISTS plpython3u;
+        DROP AGGREGATE IF EXISTS public.hstore_sum(public.hstore);
+        CREATE AGGREGATE public.hstore_sum (
+        public.hstore)
+      (
+        SFUNC = public.hs_concat,
+        STYPE = public.hstore
+      );
+        '''
+        with Connection(login=self.login0) as conn0:
+            self.run_query(sql, conn=conn0)
+
     def rename_schema(self):
         """
         """
@@ -323,6 +346,7 @@ ALTER DATABASE {db} OWNER TO {role};
                                       role=self.role),
                            conn=conn0)
             conn0.commit()
+        self.create_extensions()
 
     def truncate_db(self):
         """Truncate the database"""
