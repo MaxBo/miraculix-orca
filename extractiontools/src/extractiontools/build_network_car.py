@@ -435,6 +435,7 @@ REFRESH MATERIALIZED VIEW {network}.link_from_to_node;
 DROP TABLE IF EXISTS {network}.links;
 CREATE TABLE {network}.links
 (
+  id SERIAL,
   fromnode bigint,
   tonode bigint,
   wayid bigint NOT NULL,
@@ -821,6 +822,7 @@ SET
     ELSE st_length(l.geom) / l.maxspeed * 3.6 / 60
     END;
 
+-- Ferries
 UPDATE {network}.links l
 SET
   t_kfz = g.duration
@@ -1099,6 +1101,7 @@ CREATE TABLE {network}.edge_table (
 id INTEGER PRIMARY KEY,
 fromnode bigint,
 tonode bigint,
+linkid bigint,
 geom geometry(LineString,{srid}),
 "source" integer,
 "target" integer,
@@ -1107,6 +1110,7 @@ reverse_cost float);
 
 CREATE INDEX edge_table_geom_idx ON {network}.edge_table USING gist(geom);
 CREATE INDEX edge_table_ft_idx ON {network}.edge_table USING btree(fromnode, tonode);
+CREATE INDEX edge_table_link_idx ON {network}.edge_table USING btree(linkid);
 CREATE INDEX edge_table_source_idx ON {network}.edge_table USING btree("source");
 CREATE INDEX edge_table_target_idx ON {network}.edge_table USING btree("target");
 """.format(srid=self.srid, network=self.network)
@@ -1135,12 +1139,13 @@ e.fromnode=l.fromnode AND e.tonode=l.tonode AND
         sql = """
 
 TRUNCATE {network}.edge_table;
-INSERT INTO {network}.edge_table (id, fromnode, tonode, geom,
+INSERT INTO {network}.edge_table (id, fromnode, tonode, linkid, geom,
 cost, reverse_cost)
 SELECT
   row_number() OVER (ORDER BY fromnode, tonode)::integer AS id,
   fromnode,
   tonode,
+  l.id,
   l.geom,
   l.t_kfz AS cost,
   CASE WHEN l.oneway THEN -1 ELSE l.t_kfz END AS reverse_cost
