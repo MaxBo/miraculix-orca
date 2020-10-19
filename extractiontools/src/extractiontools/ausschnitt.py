@@ -10,6 +10,7 @@ logger.level = logging.DEBUG
 import sys
 import os
 import subprocess
+import time
 
 from .connection import Connection, DBApp, Login
 
@@ -55,12 +56,12 @@ class Extract(DBApp):
 
     def __init__(self,
                  destination_db='extract',
-                 temp='temp',
+                 temp=None,
                  target_srid=31467,
                  **options):
         self.srid = 4326
         self.target_srid = target_srid
-        self.temp = temp
+        self.temp = temp or str(round(time.time() * 100))
         self.source_db = options.get('source_db', 'europe')
         self.destination_db = destination_db
         self.tables2cluster = []
@@ -119,28 +120,31 @@ class Extract(DBApp):
 
     def extract(self):
         self.set_pg_path()
-        with Connection(login=self.login0) as conn0, \
-                Connection(login=self.login1) as conn1:
-            self.conn0 = conn0
-            self.conn1 = conn1
-            self.set_session_authorization(self.conn0)
-            self.set_search_path('conn0')
-            self.create_temp_schema()
-            self.create_target_boundary()
-            for tn, geom in self.tables.items():
-                self.extract_table(tn, geom)
-            self.additional_stuff()
-            self.conn0.commit()
-            self.reset_authorization(self.conn0)
-            self.conn1.commit()
+        try:
+            with Connection(login=self.login0) as conn0, \
+                    Connection(login=self.login1) as conn1:
+                self.conn0 = conn0
+                self.conn1 = conn1
+                self.set_session_authorization(self.conn0)
+                self.set_search_path('conn0')
+                self.create_temp_schema()
+                self.create_target_boundary()
+                for tn, geom in self.tables.items():
+                    self.extract_table(tn, geom)
+                self.additional_stuff()
+                self.conn0.commit()
+                self.reset_authorization(self.conn0)
+                self.conn1.commit()
 
-            self.copy_temp_schema_to_target_db(schema=self.temp)
-            self.rename_schema()
-            self.final_stuff()
+                self.copy_temp_schema_to_target_db(schema=self.temp)
+                self.rename_schema()
+                self.final_stuff()
+                self.conn0.commit()
+                self.conn1.commit()
+        except Exception as e:
+            logger.info(str(e))
+        finally:
             self.cleanup()
-            self.conn0.commit()
-            self.conn1.commit()
-
         self.further_stuff()
 
     def further_stuff(self):
@@ -155,8 +159,8 @@ class Extract(DBApp):
 
     def create_extensions(self):
         """
+        extensions needed later (usually provided by the template already)
         """
-        # Rename restored temp-Schema to new name
         sql = '''
         CREATE EXTENSION IF NOT EXISTS dblink;
         CREATE EXTENSION IF NOT EXISTS postgis;
@@ -165,13 +169,11 @@ class Extract(DBApp):
         CREATE EXTENSION IF NOT EXISTS pgRouting;
         CREATE EXTENSION IF NOT EXISTS kmeans;
         CREATE EXTENSION IF NOT EXISTS plpython3u;
-        DROP AGGREGATE IF EXISTS public.hstore_sum(public.hstore);
-        CREATE AGGREGATE public.hstore_sum (
-        public.hstore)
-      (
-        SFUNC = public.hs_concat,
-        STYPE = public.hstore
-      );
+        CREATE OR REPLACE AGGREGATE public.hstore_sum (public.hstore)
+        (
+          SFUNC = public.hs_concat,
+          STYPE = public.hstore
+        );
         '''
         with Connection(login=self.login0) as conn0:
             self.run_query(sql, conn=conn0)
@@ -317,11 +319,12 @@ UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
 
     def set_pg_path(self):
         """"""
+        pg_path = os.environ.get('PGPATH')
         if sys.platform.startswith('win'):
-            self.PGPATH = r'C:\Program Files\PostgreSQL\9.3\bin'
+            self.PGPATH = pg_path or r'C:\Program Files\PostgreSQL\9.3\bin'
             self.SHELL = False
         else:
-            self.PGPATH = '/usr/bin'
+            self.PGPATH = pg_path or '/usr/bin'
             self.SHELL = True
 
     def create_target_db(self, login):
@@ -442,9 +445,10 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
         """
         remove the temp schema
         """
-        sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
-            temp=self.temp)
-        self.run_query(sql, conn=self.conn0)
+        with Connection(login=self.login0) as conn0:
+            sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
+                temp=self.temp)
+            self.run_query(sql, conn=conn0)
 
     def cluster_and_analyse(self):
         """
