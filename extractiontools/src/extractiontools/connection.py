@@ -211,7 +211,7 @@ class DBApp(object):
             if query.strip().rstrip(';'):
                 logger.info(query)
                 query_without_comments = '\n'.join([
-                    q for q in query.split(os.linesep)
+                    q for q in query.replace('\r', '').split('\n')
                     if not q.strip().startswith('--')])
                 if query_without_comments.strip():
                     #logger.info('execute {}'.format(query_without_comments))
