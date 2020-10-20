@@ -10,7 +10,9 @@ logger.level = logging.DEBUG
 import sys
 import os
 import subprocess
-import time
+from copy import deepcopy
+from psycopg2.sql import Identifier, Literal, SQL
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from .connection import Connection, DBApp, Login
 
@@ -115,8 +117,18 @@ class Extract(DBApp):
         self.create_serverside_folder()
 
     def extract(self):
-        self.rename_schema()
-        self.final_stuff()
+        with Connection(login=self.login) as conn:
+            self.conn = conn
+            self.create_foreign_schema()
+            self.create_target_boundary()
+            #for tn, geom in self.tables.items():
+                #self.extract_table(tn, geom)
+            self.additional_stuff()
+            self.conn.commit()
+            self.rename_schema()
+            self.final_stuff()
+            #self.cleanup()
+            self.conn.commit()
 
     def further_stuff(self):
         """
@@ -131,14 +143,12 @@ class Extract(DBApp):
     def create_foreign_server(self):
         sql = f"""
         -- server
-        DROP SERVER IF EXISTS {self.foreign_server};
+        DROP SERVER IF EXISTS {self.foreign_server} CASCADE;
         CREATE SERVER {self.foreign_server}
         FOREIGN DATA WRAPPER postgres_fdw
         OPTIONS (host '{self.foreign_login.host}',
         port '{self.foreign_login.port}', dbname '{self.foreign_login.db}');
         -- user
-        DROP USER MAPPING IF EXISTS FOR {self.login.user}
-        SERVER {self.foreign_server};
         CREATE USER MAPPING FOR {self.login.user}
         SERVER {self.foreign_server}
         OPTIONS (user '{self.foreign_login.user}',
@@ -148,6 +158,7 @@ class Extract(DBApp):
             f'Creating connection to database "{self.foreign_login.db}"')
         with Connection(login=self.login) as conn:
             self.run_query(sql, conn=conn)
+            conn.commit()
 
     def create_extensions(self):
         """
@@ -171,6 +182,7 @@ class Extract(DBApp):
         logger.info('Adding extensions')
         with Connection(login=self.login) as conn:
             self.run_query(sql, conn=conn)
+            conn.commit()
 
     def rename_schema(self):
         """
@@ -223,21 +235,25 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         geometrytype = cur.fetchone()[0]
         return geometrytype
 
-    def create_temp_schema(self):
+    def create_foreign_schema(self):
         """
-        Creates a temporary schema
+        links schema in database to schema on foreign server
         """
-        sql = '''
-DROP SCHEMA IF EXISTS {temp} CASCADE;
-CREATE SCHEMA {temp};
-        '''.format(temp=self.temp)
+        #sql = '''
+#DROP SCHEMA IF EXISTS {temp} CASCADE;
+#CREATE SCHEMA {temp};
+        #'''.format(temp=self.temp)
+        sql = f"""
+        DROP SCHEMA IF EXISTS {self.temp} CASCADE;
+        """
+        self.run_query(sql, conn=self.conn)
 
-        self.run_query(sql, self.conn0)
+        sql = f"""
+        IMPORT FOREIGN SCHEMA {self.schema}
+        FROM SERVER {self.foreign_server} INTO {self.temp};
+        """
 
-        sql = """
-DROP SCHEMA IF EXISTS {schema} CASCADE;
-        """.format(schema=self.schema)
-        self.run_query(sql, conn=self.conn1)
+        self.run_query(sql, self.conn)
 
     def get_target_boundary(self, bbox):
         """
@@ -296,7 +312,8 @@ FROM meta.boundary a;
         right : float
         """
         bbox = self.bbox
-        sql = '''
+
+        sql = SQL('''
 DROP TABLE IF EXISTS {temp}.boundary;
 CREATE TABLE {temp}.boundary (id INTEGER PRIMARY KEY,
                               source_geom geometry('POLYGON', {srid}),
@@ -304,12 +321,12 @@ CREATE TABLE {temp}.boundary (id INTEGER PRIMARY KEY,
 INSERT INTO {temp}.boundary (id, source_geom)
 VALUES (1, st_setsrid(st_makebox2d(st_point({LEFT}, {TOP}), st_point({RIGHT}, {BOTTOM})), {srid}));
 UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
-'''.format(temp=self.temp,
-           LEFT=bbox.left, RIGHT=bbox.right,
-           TOP=bbox.top, BOTTOM=bbox.bottom,
-           srid=self.srid,
-           target_srid=self.target_srid)
-        self.run_query(sql, self.conn0)
+''').format(temp=Identifier(self.temp),
+            LEFT=Literal(bbox.left), RIGHT=Literal(bbox.right),
+            TOP=Literal(bbox.top), BOTTOM=Literal(bbox.bottom),
+            srid=Literal(self.srid),
+            target_srid=Literal(self.target_srid))
+        self.run_query(sql, self.conn)
 
     def set_pg_path(self):
         """"""
@@ -325,24 +342,16 @@ UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
         """
         create the target database
         """
-        createdb = os.path.join(self.PGPATH, 'createdb')
+        sql = SQL("""
+        CREATE DATABASE {db};
+        ALTER DATABASE {db} OWNER TO {role};
+        """).format(db=Identifier(self.login.db), role=Literal(self.role))
 
-        cmd = '''"{createdb}" -U {user} -h {host} -p {port} -w -T pg_template {destination_db}'''.format(createdb=createdb, destination_db=login.db, user=login.user,
-                                                                                                         port=login.port, host=login.host)
-        logger.info(cmd)
-        ret = subprocess.call(cmd, shell=self.SHELL)
-        if ret:
-            raise IOError(
-                'Database {db} could not be recreated'.format(db=login.db))
-
-        sql = """
-ALTER DATABASE {db} OWNER TO {role};
-        """
-        with Connection(login=self.login0) as conn0:
-            self.run_query(sql.format(db=login.db,
-                                      role=self.role),
-                           conn=conn0)
-            conn0.commit()
+        login = deepcopy(self.login)
+        login.db = 'postgres'
+        with Connection(login=login) as conn:
+            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+            self.run_query(sql, conn=conn)
 
     def truncate_db(self):
         """Truncate the database"""
@@ -376,71 +385,13 @@ FROM (SELECT catalog_name, schema_name
             #self.run_query(sql, conn=conn)
             #conn.commit()
 
-    def copy_temp_schema_to_target_db(self, schema):
-        """
-        copy the temp_schema to the target db
-        build a pipe between the Databases to copy the temp_schema into the
-        osm_schema in the new Database
-        """
-        pg_dump = os.path.join(self.PGPATH, 'pg_dump')
-        pg_restore = os.path.join(self.PGPATH, 'pg_restore')
-
-        logger.info('copy schema {schema} from {db0} to {db1}'.format(schema=schema,
-                                                                      db0=self.login0.db,
-                                                                      db1=self.login1.db))
-
-        logger.info('login_source: %s' % self.login0)
-        logger.info('login_dest: %s' % self.login1)
-
-        pg_dump_cmd = ' '.join([
-            '"{cmd}"'.format(cmd=pg_dump),
-            '--host={host}'.format(host=self.login0.host),
-            '--port={port}'.format(port=self.login0.port),
-            '--username={user}'.format(user=self.login0.user),
-            '-w',
-            '--format=custom',
-            '--verbose',
-            '--schema={schema}'.format(schema=schema),
-            '{db}'.format(db=self.login0.db),
-        ])
-
-        logger.info(pg_dump_cmd)
-
-        dump = subprocess.Popen(pg_dump_cmd,
-                                stdout=subprocess.PIPE,
-                                shell=self.SHELL,
-                                )
-
-        pg_restore_cmd = ' '.join([
-            '"{cmd}"'.format(cmd=pg_restore),
-            '-d {db}'.format(db=self.login1.db),
-            '--host={host}'.format(host=self.login1.host),
-            '--port={port}'.format(port=self.login1.port),
-            '--username={user}'.format(user=self.login1.user),
-            # '--clean',
-            '-w',
-            '--format=custom',
-            '--verbose',
-        ])
-        logger.info(pg_restore_cmd)
-
-        try:
-
-            restore = subprocess.check_output(pg_restore_cmd,
-                                              stdin=dump.stdout,
-                                              shell=self.SHELL)
-        except subprocess.CalledProcessError as err:
-            logger.info(err)
-
-        dump.terminate()
-
     def cleanup(self):
         """
         remove the temp schema
         """
-        with Connection(login=self.login0) as conn0:
-            sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
-                temp=self.temp)
+        with Connection(login=self.login) as conn0:
+            sql = SQL('''DROP SCHEMA IF EXISTS {schema} CASCADE''').format(
+                schema=Identifier(self.temp))
             self.run_query(sql, conn=conn0)
 
     def cluster_and_analyse(self):

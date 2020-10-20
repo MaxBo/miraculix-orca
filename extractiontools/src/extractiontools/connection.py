@@ -1,13 +1,15 @@
 #!/usr/bin/env python
 # coding:utf-8
 
-import subprocess
 import sys
 import psycopg2
 from psycopg2.extras import NamedTupleConnection, DictCursor
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from psycopg2.sql import SQL, Composed, Identifier, Literal
 from collections import OrderedDict
+from typing import Union
 import sqlparse
+from copy import deepcopy
 
 from types import MethodType
 import os
@@ -56,7 +58,7 @@ class Connection(object):
                                 user=login.user,
                                 password=login.password,
                                 port=login.port,
-                                database=login.db,
+                                database=getattr(login, 'db', None),
                                 connection_factory=NamedTupleConnection,
                                 sslmode='prefer')
         self.conn = conn
@@ -183,39 +185,73 @@ class DBApp(object):
         raise an IOError, if this fails
         """
         self.check_platform()
-        os.makedirs(folder)
+        if not os.path.exists(folder):
+            os.makedirs(folder)
 
-    def run_query(self, sql, conn=None, values=None, many=False):
+    def run_query(self, sql: Union[str, Composed], conn=None,
+                  split=True):
         """
-        runs an sql query in seperate steps and
-        log the statusmessage of each query
+        runs an sql query log the statusmessage of each query
 
         Parameters
         ----------
-        sql : str
-            the queries in a string, separated by ;
+        sql : str or SQL
+            the queries in a string, separated by ; or
+            formatted composed SQL
         conn : Connection-Instance (optional)
             if not given, than the default connection self.conn is taken
-        values : tuple or list or list of tuples or array
-            if given, the values are passed to the query
-        many : bool, Default=False
-            if True, pass vars to cur.executemany instead of cur.execute
+        split : bool (optional)
+            run the sql query in seperate steps, defaults to True
         """
         conn = conn or self.conn
         cur = conn.cursor()
-        for query in sqlparse.split(sql):
-            if query.strip().rstrip(';'):
-                logger.info(query)
-                query_without_comments = '\n'.join([
-                    q for q in query.replace('\r', '').split('\n')
-                    if not q.strip().startswith('--')])
-                if query_without_comments.strip():
-                    #logger.info('execute {}'.format(query_without_comments))
-                    if many:
-                        cur.executemany(query_without_comments, values)
-                    else:
-                        cur.execute(query_without_comments, values)
-                    logger.info(cur.statusmessage)
+
+        def execute(query):
+            logger.info(query)
+            cur.execute(query)
+            logger.info(cur.statusmessage)
+
+        if split:
+            query_string = sql.as_string(conn) if isinstance(sql, Composed) else sql
+            for query in sqlparse.split(query_string):
+                if query.strip().rstrip(';'):
+                    logger.info(query)
+                    query_without_comments = '\n'.join([
+                        q for q in query.replace('\r', '').split('\n')
+                        if not q.strip().startswith('--')])
+                    if query_without_comments.strip():
+                        execute(query)
+        else:
+            execute(sql)
+
+    def run_safe_query(self, sql: Union[str, SQL],
+                       identifiers: Union[dict, list]=None,
+                       literals: [dict, list]=None, values: list=None,
+                       conn=None):
+        """
+        identifiers - representing an SQL identifier or a dot-separated sequence.
+        literals - representing an SQL value
+        values - %s placeholders
+        """
+        conn = conn or self.conn
+        cur = conn.cursor()
+        psql = SQL(sql) if isinstance(sql, str) else sql
+        args = []
+        kwargs = {}
+        def to_format(s, sclass):
+            if isinstance(s, list):
+                args.extend([sclass[a] if not isinstance(a, sclass) else a
+                             for a in s])
+            elif isinstance(s, dict):
+                kwargs.update({k: sclass[v] if not isinstance(v, sclass) else v
+                               for k, v in s.items()})
+
+        to_format(identifiers, Identifier)
+        to_format(literals, Literal)
+        psql = psql.format(*args, **kwargs)
+        logger.info(psql.as_string(conn))
+        cur.execute(psql, values)
+        logger.info(cur.statusmessage)
 
     def set_search_path(self, connstr='conn'):
         conn = getattr(self, connstr)
@@ -258,11 +294,12 @@ class DBApp(object):
         -------
         exists : bool
         """
-        with Connection(login=self.login) as conn:
+        login = deepcopy(self.login)
+        login.db = 'postgres'
+        with Connection(login=login) as conn:
             cursor = conn.cursor()
-            sql = """
-SELECT 1 AS e FROM pg_database WHERE datname = '{}';
-            """.format(db_name)
+            sql = SQL('SELECT 1 AS e FROM pg_database WHERE datname = {}'
+                      ).format(Literal(db_name))
             cursor.execute(sql)
             rows = cursor.fetchall()
         return len(rows) > 0

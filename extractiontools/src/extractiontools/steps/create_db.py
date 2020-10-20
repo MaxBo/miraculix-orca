@@ -20,6 +20,7 @@ def create_db(target_srid: str, bbox_dict: dict, project: str):
                       target_srid=target_srid)
     extract.get_target_boundary(bbox)
     extract.recreate_db()
+    #extract.extract()
 
 
 @group('DeleteProject', order=1)
