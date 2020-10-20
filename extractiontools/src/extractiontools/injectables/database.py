@@ -40,15 +40,15 @@ def project() -> str:
     return 'myproject'
 
 
-@group('Database')
-@orca.injectable()
-def login(host, port, username, password, project) -> Login:
-    """The Login-connection"""
-    return Login(host=host,
-                 port=port,
-                 user=username,
-                 password=password,
-                 db=project)
+#@group('Database')
+#@orca.injectable()
+#def login(host, port, username, password, project) -> Login:
+    #"""The Login-connection"""
+    #return Login(host=host,
+                 #port=port,
+                 #user=username,
+                 #password=password,
+                 #db=project)
 
 
 @group('Project')

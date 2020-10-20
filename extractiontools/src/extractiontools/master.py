@@ -6,7 +6,7 @@ from datetime import datetime
 import subprocess
 import sys
 
-from extractiontools.ausschnitt import BBox, ExtractMeta, logger
+from extractiontools.ausschnitt import BBox, logger
 from extractiontools.connection import Connection, DBApp, Login
 
 

@@ -55,22 +55,41 @@ class Extract(DBApp):
     role = 'group_osm'
 
     def __init__(self,
-                 destination_db='extract',
-                 temp=None,
-                 target_srid=31467,
+                 destination_db: str='extract',
+                 target_srid: int=31467,
+                 temp: str='temp',
+                 foreign_server: str='foreign_server',
+                 login: Login=None,
+                 foreign_login: Login=None,
                  **options):
         self.srid = 4326
+        self.temp = temp
+        self.foreign_server = foreign_server
         self.target_srid = target_srid
-        self.temp = temp or str(round(time.time() * 100))
         self.source_db = options.get('source_db', 'europe')
         self.destination_db = destination_db
         self.tables2cluster = []
         self.check_platform()
+        if login:
+            self.login = login
+        else:
+            self.set_login(
+                os.environ.get('DB_HOST', 'localhost'),
+                os.environ.get('DB_PORT', 5432),
+                os.environ.get('DB_USER'),
+                password=os.environ.get('DB_PASS', '')
+            )
+        self.foreign_login = foreign_login or Login(
+            host=os.environ.get('FOREIGN_HOST', 'localhost'),
+            port=os.environ.get('FOREIGN_PORT', 5432),
+            user=os.environ.get('FOREIGN_USER'),
+            password=os.environ.get('FOREIGN_PASS', ''),
+            db=os.environ.get('FOREIGN_NAME', 'europe')
+        )
 
     def set_login(self, host, port, user, password=None, **kwargs):
         """
-        set login information for source and destination database
-        to self.login0 and self.login1
+        set login information for destination database
 
         Parameters
         ----------
@@ -79,32 +98,7 @@ class Extract(DBApp):
         user : str
         password : str, optional
         """
-        self.login0 = Login(host, port, user, password, db=self.source_db)
-        self.login1 = Login(host, port, user, password,
-                            db=self.destination_db)
-
-    def set_login01(self, login: Login, source_db):
-        """
-        set login information for source and destination database
-        to self.login0 and self.login1
-
-        Parameters
-        ----------
-        login : Login
-        source_db : str
-        """
-        self.login0 = Login(login.host, login.port,
-                            login.user, login.password,
-                            db=source_db)
-        self.login1 = login
-
-    def execute_query(self, sql):
-        """
-        establishes a connection and executes some code
-        """
-        with Connection(login=self.login0) as conn0, \
-                Connection(login=self.login1) as conn1:
-            self.run_query(sql)
+        self.login = Login(host, port, user, password, db=self.destination_db)
 
     def recreate_db(self):
         self.set_pg_path()
@@ -114,38 +108,15 @@ class Extract(DBApp):
             self.truncate_db()
         else:
             logger.info(f'Create Database {self.destination_db}')
-            self.create_target_db(self.login1)
+            self.create_target_db(self.login)
             logger.info(f'Create Database {self.destination_db}')
+        self.create_extensions()
+        self.create_foreign_server()
         self.create_serverside_folder()
 
     def extract(self):
-        self.set_pg_path()
-        try:
-            with Connection(login=self.login0) as conn0, \
-                    Connection(login=self.login1) as conn1:
-                self.conn0 = conn0
-                self.conn1 = conn1
-                self.set_session_authorization(self.conn0)
-                self.set_search_path('conn0')
-                self.create_temp_schema()
-                self.create_target_boundary()
-                for tn, geom in self.tables.items():
-                    self.extract_table(tn, geom)
-                self.additional_stuff()
-                self.conn0.commit()
-                self.reset_authorization(self.conn0)
-                self.conn1.commit()
-
-                self.copy_temp_schema_to_target_db(schema=self.temp)
-                self.rename_schema()
-                self.final_stuff()
-                self.conn0.commit()
-                self.conn1.commit()
-        except Exception as e:
-            logger.info(str(e))
-        finally:
-            self.cleanup()
-        self.further_stuff()
+        self.rename_schema()
+        self.final_stuff()
 
     def further_stuff(self):
         """
@@ -156,6 +127,27 @@ class Extract(DBApp):
         """
         additional steps, to be defined in the subclass
         """
+
+    def create_foreign_server(self):
+        sql = f"""
+        -- server
+        DROP SERVER IF EXISTS {self.foreign_server};
+        CREATE SERVER {self.foreign_server}
+        FOREIGN DATA WRAPPER postgres_fdw
+        OPTIONS (host '{self.foreign_login.host}',
+        port '{self.foreign_login.port}', dbname '{self.foreign_login.db}');
+        -- user
+        DROP USER MAPPING IF EXISTS FOR {self.login.user}
+        SERVER {self.foreign_server};
+        CREATE USER MAPPING FOR {self.login.user}
+        SERVER {self.foreign_server}
+        OPTIONS (user '{self.foreign_login.user}',
+        password '{self.foreign_login.password}');
+        """
+        logger.info(
+            f'Creating connection to database "{self.foreign_login.db}"')
+        with Connection(login=self.login) as conn:
+            self.run_query(sql, conn=conn)
 
     def create_extensions(self):
         """
@@ -169,14 +161,16 @@ class Extract(DBApp):
         CREATE EXTENSION IF NOT EXISTS pgRouting;
         CREATE EXTENSION IF NOT EXISTS kmeans;
         CREATE EXTENSION IF NOT EXISTS plpython3u;
+        CREATE EXTENSION IF NOT EXISTS postgres_fdw;
         CREATE OR REPLACE AGGREGATE public.hstore_sum (public.hstore)
         (
           SFUNC = public.hs_concat,
           STYPE = public.hstore
         );
         '''
-        with Connection(login=self.login0) as conn0:
-            self.run_query(sql, conn=conn0)
+        logger.info('Adding extensions')
+        with Connection(login=self.login) as conn:
+            self.run_query(sql, conn=conn)
 
     def rename_schema(self):
         """
@@ -349,16 +343,15 @@ ALTER DATABASE {db} OWNER TO {role};
                                       role=self.role),
                            conn=conn0)
             conn0.commit()
-        self.create_extensions()
 
     def truncate_db(self):
         """Truncate the database"""
-        sql = """
-SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
-        """.format(db=self.destination_db)
-        with Connection(login=self.login0) as conn:
-            self.run_query(sql, conn=conn)
-            conn.commit()
+        #sql = """
+#SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
+        #""".format(db=self.destination_db)
+        #with Connection(login=self.login) as conn:
+            #self.run_query(sql, conn=conn)
+            #conn.commit()
 
         sql = """
 SELECT 'drop schema if exists "' || schema_name || '" cascade;' AS sql
@@ -368,7 +361,7 @@ FROM (SELECT catalog_name, schema_name
       schema_name not IN ('information_schema', 'public',
                           'topology', 'repack')) s;
         """
-        with Connection(login=self.login1) as conn:
+        with Connection(login=self.login) as conn:
             cursor2 = conn.cursor()
             cursor = conn.cursor()
             cursor.execute(sql)
@@ -376,12 +369,12 @@ FROM (SELECT catalog_name, schema_name
                 cursor2.execute(row.sql)
             conn.commit()
 
-        sql = """
-update pg_database set datallowconn = 'True' where datname = '{db}';
-        """.format(db=self.destination_db)
-        with Connection(login=self.login0) as conn:
-            self.run_query(sql, conn=conn)
-            conn.commit()
+        #sql = """
+#update pg_database set datallowconn = 'True' where datname = '{db}';
+        #""".format(db=self.destination_db)
+        #with Connection(login=self.login0) as conn:
+            #self.run_query(sql, conn=conn)
+            #conn.commit()
 
     def copy_temp_schema_to_target_db(self, schema):
         """
@@ -485,310 +478,6 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
         self.check_platform()
         folder = os.path.join(self.folder, 'projekte', self.destination_db)
         self.make_folder(folder)
-
-
-class ExtractMeta(Extract):
-    """
-    Create the target DB and Extract the Meta Tables
-    """
-    schema = 'meta'
-
-    def get_credentials(self):
-        """get credentials for db_link user"""
-        sql = """
-SELECT key, value FROM meta_master.credentials;
-        """
-        cursor = self.conn0.cursor()
-        cursor.execute(sql)
-        rows = cursor.fetchall()
-        credentials = dict(row for row in rows)
-        return credentials
-
-    def additional_stuff(self):
-        """
-        additional steps, to be defined in the subclass
-        """
-        cursor = self.conn0.cursor()
-
-        credentials = self.get_credentials()
-
-        # create dblink tables
-        sql = """
-CREATE OR REPLACE FUNCTION {temp}.select_master_scripts()
-  RETURNS TABLE (id integer, scriptcode text, scriptname text,
-         description text, parameter text, category text) AS
-$BODY$
-DECLARE
-BEGIN
-perform dblink_connect_u('conn', 'host=localhost dbname={sd} user={source_user}');
-RETURN QUERY
-SELECT *
-FROM dblink('conn',
-'SELECT id, scriptcode, scriptname, description, parameter, category
-FROM meta_master.scripts'
-  ) AS m(id integer,
-         scriptcode text,
-         scriptname text,
-         description text,
-         parameter text,
-         category text);
-perform dblink_disconnect('conn');
-END;
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-
-CREATE OR REPLACE VIEW {temp}.master_scripts AS
-SELECT *
-FROM {temp}.select_master_scripts();
-
-CREATE OR REPLACE FUNCTION {temp}.select_dependencies()
-  RETURNS TABLE (scriptcode text,
-         needs_script text) AS
-$BODY$
-DECLARE
-BEGIN
-perform dblink_connect_u('conn', 'host=localhost dbname={sd} user={source_user}');
-RETURN QUERY
-SELECT *
-FROM dblink('conn',
-'SELECT scriptcode, needs_script
-   FROM meta_master.dependencies'
-  ) AS m(scriptcode text,
-         needs_script text);
-perform dblink_disconnect('conn');
-END;
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-
-CREATE OR REPLACE VIEW {temp}.master_dependencies AS
-SELECT *
-FROM {temp}.select_dependencies();
-
-CREATE TABLE {temp}.local_dependencies
-(
-  scriptcode text NOT NULL,
-  needs_script text NOT NULL,
-  CONSTRAINT local_dependencies_pkey PRIMARY KEY (scriptcode, needs_script)
-);
-
-CREATE OR REPLACE VIEW {temp}.dependencies AS
- SELECT master_dependencies.scriptcode,
-    master_dependencies.needs_script
-   FROM {temp}.master_dependencies
-UNION
- SELECT local_dependencies.scriptcode,
-    local_dependencies.needs_script
-   FROM {temp}.local_dependencies;
-        """
-        cursor.execute(sql.format(temp=self.temp, sd=self.source_db,
-                                  source_user=credentials['user'],
-                                  source_pw=credentials['password']))
-
-        sql = """
-CREATE OR REPLACE FUNCTION {temp}.select_dependent_scripts()
-  RETURNS trigger AS
-$BODY$
-DECLARE
-BEGIN
-  IF NEW.todo
-  THEN
-  UPDATE meta.scripts s
-  SET todo = TRUE
-  FROM meta.dependencies d
-  WHERE d.needs_script = s.scriptcode
-  AND d.scriptcode = NEW.scriptcode
-  AND s.success IS NOT True;
-  END IF;
-  RETURN NEW;
-
-END;
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-        """
-        cursor.execute(sql.format(temp=self.temp))
-
-        sql = """
-CREATE OR REPLACE FUNCTION {temp}.unselect_dependent_scripts()
-  RETURNS trigger AS
-$BODY$
-DECLARE
-BEGIN
-  IF NOT NEW.todo AND NEW.success IS NOT True
-  THEN
-  UPDATE meta.scripts s
-  SET todo = False
-  FROM meta.dependencies d
-  WHERE d.scriptcode = s.scriptcode
-  AND d.needs_script = NEW.scriptcode;
-  END IF;
-  RETURN NEW;
-
-END;
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-        """
-        cursor.execute(sql.format(temp=self.temp))
-
-        sql = """
-CREATE OR REPLACE FUNCTION {temp}.check_script_id()
-  RETURNS trigger AS
-$BODY$
-DECLARE mid integer;
-BEGIN
-  SELECT m.id INTO mid FROM meta.master_scripts m WHERE m.scriptcode = NEW.scriptcode;
-  IF NOT mid IS NULL THEN
-      NEW.id := mid;
-  END IF;
-  RETURN NEW;
-END;
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-        """
-        cursor.execute(sql.format(temp=self.temp))
-
-        sql = '''
-CREATE TABLE {temp}.scripts
-( id integer,
-  scriptcode text,
-  started boolean NOT NULL DEFAULT false,
-  success boolean DEFAULT NULL,
-  starttime timestamp with time zone,
-  endtime timestamp with time zone,
-  todo boolean NOT NULL DEFAULT false,
-  CONSTRAINT scripts_pkey PRIMARY KEY (id),
-  CONSTRAINT scripts_scriptcode_key UNIQUE (scriptcode)
-);
-
-CREATE TRIGGER scripts_select_trigger
-  AFTER INSERT OR UPDATE OF todo
-  ON {temp}.scripts
-  FOR EACH ROW
-  EXECUTE PROCEDURE {temp}.select_dependent_scripts();
-
-CREATE TRIGGER scripts_unselect_trigger
-  AFTER UPDATE OF todo
-  ON {temp}.scripts
-  FOR EACH ROW
-  EXECUTE PROCEDURE {temp}.unselect_dependent_scripts();
-
-CREATE TRIGGER scripts_update_trigger
-  BEFORE UPDATE
-  ON {temp}.scripts
-  FOR EACH ROW
-  EXECUTE PROCEDURE {temp}.check_script_id();
-'''.format(schema=self.schema, temp=self.temp)
-        self.run_query(sql, conn=self.conn0)
-        self.conn0.commit()
-
-        sql = '''
-CREATE OR REPLACE FUNCTION {temp}.check_scriptcode()
-  RETURNS trigger AS
-$BODY$
-DECLARE
-BEGIN
-  IF EXISTS(SELECT 1 FROM meta.master_scripts m WHERE m.scriptcode = NEW.scriptcode)
-  THEN
-    RAISE EXCEPTION 'scriptcode % already in meta.master_scripts', NEW.scriptcode;
-  END IF;
-  RETURN NEW;
-END;
-$BODY$
-LANGUAGE 'plpgsql'
-VOLATILE
-CALLED ON NULL INPUT
-SECURITY INVOKER
-COST 100;
-    '''
-        cursor.execute(sql.format(temp=self.temp))
-
-        sql = '''
-CREATE SEQUENCE {temp}.local_scripts_id_seq
-  INCREMENT 1 MINVALUE 1000
-  MAXVALUE 2147483647 START 1000
-  CACHE 1;
-ALTER SEQUENCE {temp}.local_scripts_id_seq RESTART WITH 1000;
-
-CREATE TABLE {temp}.local_scripts
-(
-  id integer NOT NULL DEFAULT nextval(('meta.local_scripts_id_seq'::text)::regclass),
-  scriptcode text,
-  scriptname text,
-  description text,
-  parameter text,
-  category text,
-  CONSTRAINT local_scripts_pkey PRIMARY KEY (id),
-  CONSTRAINT local_scripts_scriptcode_key UNIQUE (scriptcode)
-)
-WITH (
-  OIDS=FALSE
-);
-
-CREATE TRIGGER check_scriptcode_tr
-  BEFORE INSERT OR UPDATE OF scriptcode
-  ON {temp}.local_scripts FOR EACH ROW
-  EXECUTE PROCEDURE {temp}.check_scriptcode();
-
-CREATE OR REPLACE VIEW {temp}.all_scripts(
-    id,
-    scriptcode,
-    scriptname,
-    description,
-    parameter,
-    category,
-    source)
-AS
-  SELECT master_scripts.id,
-         master_scripts.scriptcode,
-         master_scripts.scriptname,
-         master_scripts.description,
-         master_scripts.parameter,
-         master_scripts.category,
-         'm'::text AS source
-  FROM {temp}.master_scripts
-  UNION ALL
-  SELECT local_scripts.id::integer,
-         local_scripts.scriptcode,
-         local_scripts.scriptname,
-         local_scripts.description,
-         local_scripts.parameter,
-         local_scripts.category,
-         'l'::text AS source
-  FROM {temp}.local_scripts;
-
-CREATE OR REPLACE VIEW {temp}.script_view AS
-SELECT
-    m.id,
-    m.scriptcode,
-    m.scriptname,
-    m.description,
-    m.parameter,
-    m.category,
-    s.started,
-    s.success,
-    s.starttime,
-    s.endtime,
-    s.todo
-FROM
-    {temp}.all_scripts m
-    LEFT JOIN {temp}.scripts s ON m.scriptcode = s.scriptcode
-ORDER BY m.id
-;
-        '''.format(temp=self.temp)
-        self.run_query(sql, conn=self.conn0)
-        self.conn0.commit()
-
-    def final_stuff(self):
-        """Final things to do"""
-        sql = '''
-INSERT INTO {schema}.scripts (id, scriptcode)
-SELECT id, scriptcode FROM {schema}.all_scripts;
-    '''.format(schema=self.schema)
-        self.run_query(sql, conn=self.conn1)
 
 
 if __name__ == '__main__':

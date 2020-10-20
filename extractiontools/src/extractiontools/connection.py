@@ -183,11 +183,7 @@ class DBApp(object):
         raise an IOError, if this fails
         """
         self.check_platform()
-        cmd = f'mkdir -p {folder}'
-        logger.debug(cmd)
-        ret = subprocess.call(cmd, shell=self.SHELL)
-        if ret:
-            raise IOError(f'folder {folder} could not be created')
+        os.makedirs(folder)
 
     def run_query(self, sql, conn=None, values=None, many=False):
         """
@@ -262,7 +258,7 @@ class DBApp(object):
         -------
         exists : bool
         """
-        with Connection(login=self.login0) as conn:
+        with Connection(login=self.login) as conn:
             cursor = conn.cursor()
             sql = """
 SELECT 1 AS e FROM pg_database WHERE datname = '{}';
