@@ -220,10 +220,10 @@ def otp_graph_subfolder() -> str:
 
 @group('OTP')
 @orca.injectable()
-def otp_routers(project) -> Dict[str, str]:
+def otp_routers(database) -> Dict[str, str]:
     """subfolder with the otp graphs"""
-    routers = {f'{project}_car': 'otp_car',
-               f'{project}_fr': 'otp_fr',
+    routers = {f'{database}_car': 'otp_car',
+               f'{database}_fr': 'otp_fr',
                }
     return routers
 
@@ -302,9 +302,9 @@ def network_fr_layers() -> Dict[str, str]:
 
 @group('Export')
 @orca.injectable()
-def gdbname(project) -> str:
+def gdbname(database) -> str:
     """the name of the File Geodatabase"""
-    return f'{project}.gdb'
+    return f'{database}.gdb'
 
 
 @group('Export')

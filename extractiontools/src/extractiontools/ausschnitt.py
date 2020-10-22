@@ -121,11 +121,10 @@ class Extract(DBApp):
             self.conn = conn
             self.create_foreign_schema()
             self.create_target_boundary()
-            #for tn, geom in self.tables.items():
-                #self.extract_table(tn, geom)
+            for tn, geom in self.tables.items():
+                self.extract_table(tn, geom)
             self.additional_stuff()
             self.conn.commit()
-            self.rename_schema()
             self.final_stuff()
             #self.cleanup()
             self.conn.commit()
@@ -158,7 +157,6 @@ class Extract(DBApp):
             f'Creating connection to database "{self.foreign_login.db}"')
         with Connection(login=self.login) as conn:
             self.run_query(sql, conn=conn)
-            conn.commit()
 
     def create_extensions(self):
         """
@@ -182,7 +180,6 @@ class Extract(DBApp):
         logger.info('Adding extensions')
         with Connection(login=self.login) as conn:
             self.run_query(sql, conn=conn)
-            conn.commit()
 
     def rename_schema(self):
         """
@@ -210,27 +207,26 @@ ALTER SCHEMA {temp} RENAME TO {schema}
         extracts a single table
         """
         geometrytype = self.get_geometrytype(tn, geom)
-        cols = self.conn0.get_column_dict(tn, self.schema)
+        cols = self.conn.get_column_dict(tn, self.temp)
         cols_without_geom = ('t."{}"'.format(c) for c in cols if c != geom)
         col_str = ', '.join(cols_without_geom)
 
-        sql = """
-SELECT {cols}, st_transform(t.{geom}, {srid})::geometry({gt}, {srid}) as geom
-INTO {temp}.{tn}
-FROM {schema}.{tn} t, {temp}.boundary tb
+        sql = SQL(f"""
+SELECT {col_str}, st_transform(t.{geom}, {srid})::geometry({geometrytype}, {self.target_srid}) as geom
+INTO {self.schema}.{tn}
+FROM {self.temp}.{tn} t, meta.boundary tb
 WHERE
+tb.id = {area_name}
+AND
 st_intersects(t.{geom}, tb.source_geom)
-        """
-        self.run_query(sql.format(tn=tn, temp=self.temp, geom=geom,
-                                  schema=self.schema, cols=col_str, srid=self.target_srid,
-                                  gt=geometrytype),
-                       conn=self.conn0)
+        """).format(area_name=Literal('BBox'))
+        self.run_query(sql, conn=self.conn)
 
     def get_geometrytype(self, tn, geom):
         sql = """
 SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
-        """.format(geom=geom, sn=self.schema, tn=tn)
-        cur = self.conn0.cursor()
+        """.format(geom=geom, sn=self.temp, tn=tn)
+        cur = self.conn.cursor()
         cur.execute(sql)
         geometrytype = cur.fetchone()[0]
         return geometrytype
@@ -264,8 +260,8 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         """
         get the target boundary from the destination database
         """
-        with Connection(login=self.login1) as conn1:
-            cur = conn1.cursor()
+        with Connection(login=self.login) as conn:
+            cur = conn.cursor()
             sql = """
 SELECT
     st_ymax(a.source_geom) AS top,
@@ -278,8 +274,6 @@ FROM meta.boundary a;
             row = cur.fetchone()
             self.bbox = BBox(row.top, row.bottom, row.left, row.right)
 
-        self.target_srid = self.get_target_srid_from_dest_db()
-
     def get_target_srid_from_dest_db(self):
         """
         get the target boundary from the destination database
@@ -288,8 +282,8 @@ FROM meta.boundary a;
         -------
         srid : int
         """
-        with Connection(login=self.login1) as conn1:
-            cur = conn1.cursor()
+        with Connection(login=self.login) as conn:
+            cur = conn.cursor()
             sql = """
 SELECT
     st_srid(a.geom) AS srid
@@ -314,19 +308,21 @@ FROM meta.boundary a;
         bbox = self.bbox
 
         sql = SQL('''
-DROP TABLE IF EXISTS {temp}.boundary;
-CREATE TABLE {temp}.boundary (id INTEGER PRIMARY KEY,
-                              source_geom geometry('POLYGON', {srid}),
-                              geom geometry('POLYGON', {target_srid}));
-INSERT INTO {temp}.boundary (id, source_geom)
-VALUES (1, st_setsrid(st_makebox2d(st_point({LEFT}, {TOP}), st_point({RIGHT}, {BOTTOM})), {srid}));
-UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
+CREATE SCHEMA IF NOT EXISTS meta;
+DROP TABLE IF EXISTS meta.boundary;
+CREATE TABLE meta.boundary (id TEXT PRIMARY KEY,
+                            source_geom geometry('POLYGON', {srid}),
+                            geom geometry('POLYGON', {target_srid}));
+INSERT INTO meta.boundary (id, source_geom)
+VALUES ('BBox', st_setsrid(st_makebox2d(st_point({LEFT}, {TOP}), st_point({RIGHT}, {BOTTOM})), {srid}));
+UPDATE meta.boundary SET geom = st_transform(source_geom, {target_srid});
 ''').format(temp=Identifier(self.temp),
             LEFT=Literal(bbox.left), RIGHT=Literal(bbox.right),
             TOP=Literal(bbox.top), BOTTOM=Literal(bbox.bottom),
             srid=Literal(self.srid),
             target_srid=Literal(self.target_srid))
-        self.run_query(sql, self.conn)
+        with Connection(login=self.login) as conn:
+            self.run_query(sql, conn=conn)
 
     def set_pg_path(self):
         """"""
@@ -389,15 +385,15 @@ FROM (SELECT catalog_name, schema_name
         """
         remove the temp schema
         """
-        with Connection(login=self.login) as conn0:
-            sql = SQL('''DROP SCHEMA IF EXISTS {schema} CASCADE''').format(
-                schema=Identifier(self.temp))
-            self.run_query(sql, conn=conn0)
+        with Connection(login=self.login) as conn:
+            sql = f'DROP SCHEMA IF EXISTS {self.temp} CASCADE;'
+            self.run_query(sql, conn=conn)
 
     def cluster_and_analyse(self):
         """
         """
-        login = self.login1
+        raise NotImplementedError('replace with SQL!')
+        login = self.login
 
         cmd = '''"{clusterdb}" -U {user} -h {host} -p {port} -w --verbose {tbls} -d {destination_db}'''
         if self.tables2cluster:

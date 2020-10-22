@@ -69,6 +69,7 @@ class Connection(object):
         return conn
 
     def __exit__(self, t, value, traceback):
+        self.conn.commit()
         self.conn.close()
 
     def set_copy_command_format(self):

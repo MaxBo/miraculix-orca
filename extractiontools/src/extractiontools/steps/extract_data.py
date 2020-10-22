@@ -20,82 +20,72 @@ __parent_modules__ = ['extractiontools.steps.create_db',
                       ]
 
 
-@group('ExtractData', order=1)
+@group('(2) Extract Data', order=1)
 @orca.step()
-def extract_osm(source_db: str, login: Login):
+def extract_osm(database: str):
     """
     extract osm data for the bbox
     """
-    extract = ExtractOSM(source_db=source_db,
-                         destination_db=login.db)
-    extract.set_login01(login, source_db)
+    extract = ExtractOSM(destination_db=database)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 
 
-@group('ExtractData', order=2)
+@group('(2) Extract Data', order=2)
 @orca.step()
-def create_polygons_from_osm(source_db: str, login: Login):
+def create_polygons_from_osm(database: str):
     """
     extract osm data for the bbox
     """
-    copy2fgdb = CreatePolygons(login)
+    copy2fgdb = CreatePolygons(destination_db=database)
     copy2fgdb.get_target_boundary_from_dest_db()
     copy2fgdb.create_poly_and_multipolygons()
 
 
-@group('ExtractData', order=3)
+@group('(2) Extract Data', order=3)
 @orca.step()
-def extract_landuse(source_db: str, login: Login,
-                    gmes: List[str], corine: List[str]):
+def extract_landuse(database: str, gmes: List[str], corine: List[str],
+                    target_srid: str):
     """
     extract landuse data for the bbox
     """
-    extract = ExtractLanduse(source_db=source_db,
-                             destination_db=login.db,
-                             gmes=gmes,
-                             corine=corine)
-    extract.set_login01(login, source_db)
+    extract = ExtractLanduse(destination_db=database, gmes=gmes,
+                             corine=corine, target_srid=target_srid)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 
 
-@group('ExtractData', order=10)
+@group('(2) Extract Data', order=10)
 @orca.step()
-def extract_verwaltungsgrenzen(source_db: str, login: Login,
+def extract_verwaltungsgrenzen(database: str,
                                verwaltungsgrenzen_tables: List[str]):
     """
     extract administrative boundaries for the bbox
     """
-    extract = ExtractVerwaltungsgrenzen(source_db=source_db,
-                                        destination_db=login.db)
+    extract = ExtractVerwaltungsgrenzen(destination_db=database)
     extract.tables = {f: 'geom' for f in verwaltungsgrenzen_tables}
-    extract.set_login01(login, source_db)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 
 
-@group('ExtractData', order=4)
+@group('(2) Extract Data', order=4)
 @orca.step()
-def extract_laea_raster(source_db: str, login: Login):
+def extract_laea_raster(database: str):
     """
     extract laea raster for the bbox
     """
-    extract = ExtractLAEA(source_db=source_db,
-                          destination_db=login.db)
-    extract.set_login01(login, source_db)
+    extract = ExtractLAEA(destination_db=database)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 
 
-@group('ExtractData', order=5)
+@group('(2) Extract Data', order=5)
 @orca.step()
-def zensus2raster(login: Login, subfolder_tiffs: str):
+def zensus2raster(database: str, subfolder_tiffs: str):
     """
     create views for zensus data on raster grid
     """
-    z2r = Zensus2Raster(db=login.db, subfolder=subfolder_tiffs)
-    z2r.login = z2r.login1 = login
+    z2r = Zensus2Raster(db=database, subfolder=subfolder_tiffs)
     z2r.run()
 
 
@@ -119,14 +109,14 @@ def osm_layers() -> Dict[str, str]:
 
 @group('Export')
 @orca.step()
-def copy_osm_to_fgdb(login: Login,
+def copy_osm_to_fgdb(database: str,
                      osm_layers: Dict[str, str]):
     """
     create osm layers and copy osm stuff to a file-gdb
     attention: drops cascadingly the depending views
     """
 
-    copy2fgdb = CopyOSM2FGDB(login=login,
+    copy2fgdb = CopyOSM2FGDB(destination_db=database,
                              layers=osm_layers,
                              gdbname='osm_layers.gdb',
                              schema='osm_layer')
@@ -136,11 +126,11 @@ def copy_osm_to_fgdb(login: Login,
 
 @group('Export')
 @orca.step()
-def copy_to_fgdb(login: Login,
+def copy_to_fgdb(database: str,
                  osm_layers: Dict[str, str]):
     """copy osm stuff to a file-gdb"""
 
-    copy2fgdb = CopyOSM2FGDB(login=login,
+    copy2fgdb = CopyOSM2FGDB(destination_db=database,
                              layers=osm_layers,
                              gdbname='osm_layers.gdb',
                              schema='osm_layer')

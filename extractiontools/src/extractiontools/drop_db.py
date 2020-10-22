@@ -15,7 +15,7 @@ class DropDatabase(Extract):
             msg = 'database {} does not exist'
             logger.info(msg.format(self.destination_db))
             return
-        with Connection(login=self.login0) as conn:
+        with Connection(login=self.login) as conn:
             cursor = conn.cursor()
             sql = """
 SELECT can_be_deleted FROM meta_master.projekte WHERE projektname_kurz = '{}';

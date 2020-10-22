@@ -5,38 +5,38 @@ from orcadjango.decorators import group
 from extractiontools.connection import Login
 
 
-@group('Database')
+#@group('Database')
+#@orca.injectable()
+#def username() -> str:
+    #"""The database username"""
+    #return 'osm'
+
+
+#@group('Database')
+#@orca.injectable()
+#def host() -> str:
+    #"""The database host"""
+    #return 'localhost'
+
+
+#@group('Database')
+#@orca.injectable()
+#def port() -> int:
+    #"""The database port"""
+    #return 5432
+
+
+#@group('Database')
+#@orca.injectable()
+#def password() -> str:
+    #"""The database password"""
+    #return ''
+
+
+@group('(1) Project')
 @orca.injectable()
-def username() -> str:
-    """The database username"""
-    return 'osm'
-
-
-@group('Database')
-@orca.injectable()
-def host() -> str:
-    """The database host"""
-    return 'localhost'
-
-
-@group('Database')
-@orca.injectable()
-def port() -> int:
-    """The database port"""
-    return 5432
-
-
-@group('Database')
-@orca.injectable()
-def password() -> str:
-    """The database password"""
-    return ''
-
-
-@group('Project')
-@orca.injectable()
-def project() -> str:
-    """The name of the project and the database"""
+def database() -> str:
+    """The name of the project database"""
     return 'myproject'
 
 
@@ -51,7 +51,7 @@ def project() -> str:
                  #db=project)
 
 
-@group('Project')
+@group('(1) Project')
 @orca.injectable()
 def bbox_dict() -> Dict[str, float]:
     """The Bounding-Box of the Project"""
@@ -61,21 +61,21 @@ def bbox_dict() -> Dict[str, float]:
             'top': 54.6}
 
 
-@group('Database')
-@orca.injectable()
-def source_db() -> str:
-    """The name of the base-database"""
-    return 'europe'
+#@group('Database')
+#@orca.injectable()
+#def source_db() -> str:
+    #"""The name of the base-database"""
+    #return 'europe'
 
 
-@group('Project')
+@group('(1) Project')
 @orca.injectable()
 def source_srid() -> int:
     """The EPSG-Code of the geodata in the base database"""
     return 4326
 
 
-@group('Project')
+@group('(1) Project')
 @orca.injectable()
 def target_srid() -> int:
     """The EPSG-Code of the geodata zo be created"""
