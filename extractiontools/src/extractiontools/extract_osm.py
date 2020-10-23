@@ -10,7 +10,6 @@ class ExtractOSM(Extract):
     """
     Extract the osm data
     """
-    tables = {}
     schema = 'osm'
     role = 'group_osm'
 

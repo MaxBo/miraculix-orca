@@ -58,12 +58,13 @@ def extract_landuse(database: str, gmes: List[str], corine: List[str],
 @group('(2) Extract Data', order=10)
 @orca.step()
 def extract_verwaltungsgrenzen(database: str,
-                               verwaltungsgrenzen_tables: List[str]):
+                               verwaltungsgrenzen_tables: List[str],
+                               target_srid: str):
     """
     extract administrative boundaries for the bbox
     """
-    extract = ExtractVerwaltungsgrenzen(destination_db=database)
-    extract.tables = {f: 'geom' for f in verwaltungsgrenzen_tables}
+    tables = {f: 'geom' for f in verwaltungsgrenzen_tables}
+    extract = ExtractVerwaltungsgrenzen(destination_db=database, tables=tables)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 

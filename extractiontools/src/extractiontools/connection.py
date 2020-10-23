@@ -214,6 +214,7 @@ class DBApp(object):
             query_string = sql.as_string(conn) if isinstance(sql, Composed) else sql
             for query in sqlparse.split(query_string):
                 if query.strip().rstrip(';'):
+                    print(query)
                     logger.info(query)
                     query_without_comments = '\n'.join([
                         q for q in query.replace('\r', '').split('\n')

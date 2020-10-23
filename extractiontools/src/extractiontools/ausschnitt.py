@@ -65,6 +65,7 @@ class Extract(DBApp):
                  foreign_server: str='foreign_server',
                  login: Login=None,
                  foreign_login: Login=None,
+                 tables: dict={},
                  **options):
         self.srid = 4326
         self.temp = temp
@@ -72,6 +73,7 @@ class Extract(DBApp):
         self.target_srid = target_srid
         self.source_db = options.get('source_db', 'europe')
         self.destination_db = destination_db
+        self.tables = tables
         self.tables2cluster = []
         self.check_platform()
         if login:
