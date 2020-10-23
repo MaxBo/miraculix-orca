@@ -70,7 +70,7 @@ def extract_verwaltungsgrenzen(database: str,
 
 @group('(2) Extract Data', order=4)
 @orca.step()
-def extract_laea_raster(database: str):
+def extract_laea_raster(database: str, target_srid: str):
     """
     extract laea raster for the bbox
     """
@@ -85,7 +85,7 @@ def zensus2raster(database: str, subfolder_tiffs: str):
     """
     create views for zensus data on raster grid
     """
-    z2r = Zensus2Raster(db=database, subfolder=subfolder_tiffs)
+    z2r = Zensus2Raster(destination_db=database, subfolder=subfolder_tiffs)
     z2r.run()
 
 

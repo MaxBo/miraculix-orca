@@ -118,7 +118,7 @@ st_intersects(r.rast, st_transform(tb.source_geom, {corine_srid}));
                                       target_srid=self.target_srid,
                                       tn=tn,
                                       corine_srid=corine_raster_srid),
-                           conn=self.conn0)
+                           conn=self.conn)
 
 
     def extract_aster(self):
@@ -161,7 +161,8 @@ CREATE MATERIALIZED VIEW {schema}.aster_centroids AS
            FROM {temp}.aster AS aster) b
 WITH NO DATA;
         """
-        self.run_query(sql.format(schema=self.temp,
+        self.run_query(sql.format(temp=self.temp,
+                                  schema=self.schema,
                                   target_srid=self.target_srid),
                        conn=self.conn)
 
@@ -182,8 +183,8 @@ st_intersects(c.geom, tb.source_geom)
         self.run_query(sql.format(temp=Identifier(self.temp),
                                   schema=Identifier(self.schema),
                                   target_srid=Literal(self.target_srid),
-                                  gmes=Literal('ua2012_boundary')),
-                       conn=self.conn, )
+                                  gmes=Identifier('ua2012_boundary')),
+                       conn=self.conn)
 
         sql = """
 SELECT

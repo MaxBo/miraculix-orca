@@ -55,6 +55,8 @@ class Extract(DBApp):
     """
     tables = {}
     role = 'group_osm'
+    foreign_schema = None
+    schema = None
 
     def __init__(self,
                  destination_db: str='extract',
@@ -121,12 +123,13 @@ class Extract(DBApp):
             self.conn = conn
             self.create_foreign_schema()
             self.create_target_boundary()
+            self.conn.commit()
             for tn, geom in self.tables.items():
                 self.extract_table(tn, geom)
             self.additional_stuff()
             self.conn.commit()
             self.final_stuff()
-            #self.cleanup()
+            self.cleanup()
             self.conn.commit()
 
     def further_stuff(self):
@@ -145,8 +148,13 @@ class Extract(DBApp):
         DROP SERVER IF EXISTS {self.foreign_server} CASCADE;
         CREATE SERVER {self.foreign_server}
         FOREIGN DATA WRAPPER postgres_fdw
-        OPTIONS (host '{self.foreign_login.host}',
-        port '{self.foreign_login.port}', dbname '{self.foreign_login.db}');
+        OPTIONS (
+            host '{self.foreign_login.host}',
+            port '{self.foreign_login.port}', dbname '{self.foreign_login.db}',
+            fetch_size '100000',
+            extensions 'postgis, hstore, postgis_raster',
+            updatable 'false'
+        );
         -- user
         CREATE USER MAPPING FOR {self.login.user}
         SERVER {self.foreign_server}
@@ -180,16 +188,6 @@ class Extract(DBApp):
         logger.info('Adding extensions')
         with Connection(login=self.login) as conn:
             self.run_query(sql, conn=conn)
-
-    def rename_schema(self):
-        """
-        """
-        # Rename restored temp-Schema to new name
-        sql = '''
-ALTER SCHEMA {temp} RENAME TO {schema}
-        '''.format(temp=self.temp,
-                   schema=self.schema)
-        self.run_query(sql, self.conn1)
 
     def final_stuff(self):
         """
@@ -231,22 +229,26 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         geometrytype = cur.fetchone()[0]
         return geometrytype
 
-    def create_foreign_schema(self):
+    def create_foreign_schema(self, foreign_schema=None, target_schema=None):
         """
         links schema in database to schema on foreign server
         """
-        #sql = '''
-#DROP SCHEMA IF EXISTS {temp} CASCADE;
-#CREATE SCHEMA {temp};
-        #'''.format(temp=self.temp)
+        foreign_schema = foreign_schema or self.foreign_schema or self.schema
+        target_schema = target_schema or self.temp
+        sql = f'''
+        DROP SCHEMA IF EXISTS {self.schema} CASCADE;
+        CREATE SCHEMA {self.schema};
+        '''
+        self.run_query(sql, conn=self.conn)
         sql = f"""
-        DROP SCHEMA IF EXISTS {self.temp} CASCADE;
+        DROP SCHEMA IF EXISTS {target_schema} CASCADE;
+        CREATE SCHEMA {target_schema};
         """
         self.run_query(sql, conn=self.conn)
 
         sql = f"""
-        IMPORT FOREIGN SCHEMA {self.schema}
-        FROM SERVER {self.foreign_server} INTO {self.temp};
+        IMPORT FOREIGN SCHEMA {foreign_schema}
+        FROM SERVER {self.foreign_server} INTO {target_schema};
         """
 
         self.run_query(sql, self.conn)
@@ -381,12 +383,13 @@ FROM (SELECT catalog_name, schema_name
             #self.run_query(sql, conn=conn)
             #conn.commit()
 
-    def cleanup(self):
+    def cleanup(self, schema=None):
         """
         remove the temp schema
         """
+        schema = schema or self.temp
         with Connection(login=self.login) as conn:
-            sql = f'DROP SCHEMA IF EXISTS {self.temp} CASCADE;'
+            sql = f'DROP SCHEMA IF EXISTS {schema} CASCADE;'
             self.run_query(sql, conn=conn)
 
     def cluster_and_analyse(self):

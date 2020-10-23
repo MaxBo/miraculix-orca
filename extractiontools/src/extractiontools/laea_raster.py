@@ -15,6 +15,7 @@ class ExtractLAEA(Extract):
     """
     Create the target DB and Extract the Meta Tables
     """
+    foreign_schema = 'zensus'
     schema = 'laea'
 
     def final_stuff(self):
@@ -44,7 +45,7 @@ class ExtractLAEA(Extract):
 
     CREATE INDEX ew_hectar_geom_idx ON {schema}.ew_hectar USING gist(geom);
         """.format(schema=self.schema)
-        self.run_query(sql, conn=self.conn1)
+        self.run_query(sql, conn=self.conn)
 
     def add_laea_raster_constraint(self, pixelsize):
         tn = 'laea_raster_{pixelsize}'.format(pixelsize=pixelsize)
@@ -73,11 +74,12 @@ CREATE TABLE {schema}.zensus_ew_hectar
 
 INSERT INTO {schema}.zensus_ew_hectar(id, einwohner)
 SELECT z.id, z.einwohner
-FROM zensus.ew_zensus2011_gitter z,
+FROM {temp}.ew_zensus2011_gitter z,
 {schema}.laea_vector_100 v
 WHERE v.cellcode = z.id;
-        """.format(schema=self.temp)
-        self.run_query(sql, conn=self.conn0)
+        """.format(schema=self.schema, temp=self.temp)
+        self.run_query(sql, conn=self.conn)
+
 
     def get_zensusdata_km2(self):
         """Extract Censusdata on km2 level for area"""
@@ -116,11 +118,11 @@ SELECT z.id,
   z.leerstandsquote,
   z.wohnfl_bew_d,
   z.wohnfl_wohnung
-FROM zensus.zensus2011_gitter1000m_spitze z,
+FROM {temp}.zensus2011_gitter1000m_spitze z,
 {schema}.laea_vector_1000 v
 WHERE v.cellcode = z.id;
-        """.format(schema=self.temp)
-        self.run_query(sql, conn=self.conn0)
+        """.format(schema=self.schema, temp=self.temp)
+        self.run_query(sql, conn=self.conn)
 
     def get_geostat_data_km2(self):
         """Extract Geostat data on km2 level for area"""
@@ -135,11 +137,11 @@ INSERT INTO {schema}.geostat_km2(
   einwohner)
 SELECT z.grid_id AS id,
   z.tot_p AS einwohner
-FROM zensus.geostat_2011_pop_1km2 z,
+FROM {temp}.geostat_2011_pop_1km2 z,
 {schema}.laea_vector_1000 v
 WHERE v.cellcode = z.grid_id;
-        """.format(schema=self.temp)
-        self.run_query(sql, conn=self.conn0)
+        """.format(schema=self.schema, temp=self.temp)
+        self.run_query(sql, conn=self.conn)
 
     def create_raster(self, pixelsize):
         """
@@ -157,7 +159,7 @@ WHERE v.cellcode = z.grid_id;
 
         sql = """
 
-DROP TABLE IF EXISTS {schema}.laea_raster_{pixelsize};
+DROP TABLE IF EXISTS {schema}.laea_raster_{pixelsize} CASCADE;
 CREATE TABLE {schema}.laea_raster_{pixelsize}
 (rid serial primary key, rast raster);
 
@@ -167,7 +169,7 @@ WITH b AS (SELECT
   ceil((st_xmax(a.geom) - floor(st_xmin(a.geom) / {pixelsize}) * {pixelsize}) / {pixelsize})::integer AS width,
   ceil((ceil(st_ymax(a.geom) / {pixelsize}) * {pixelsize} - st_ymin(a.geom)) / {pixelsize})::integer AS hight
 FROM
-(SELECT st_transform(geom, 3035) AS geom from {schema}.boundary) a)
+(SELECT st_transform(geom, 3035) AS geom from meta.boundary) a)
 
 INSERT INTO {schema}.laea_raster_{pixelsize} (rast)
 SELECT
@@ -188,13 +190,13 @@ FROM b;
 """.format(pixelsize=pixelsize,
            tilesize=self.get_tilesize(pixelsize),
            default=1,
-           schema=self.temp)
+           schema=self.schema)
 
-        self.run_query(sql, conn=self.conn0)
+        self.run_query(sql, conn=self.conn)
 
         sql = """
 
-DROP TABLE IF EXISTS {schema}.laea_vector_{pixelsize};
+DROP TABLE IF EXISTS {schema}.laea_vector_{pixelsize} CASCADE;
 CREATE TABLE {schema}.laea_vector_{pixelsize} (
   cellcode text primary key,
   geom Geometry(Polygon, {srid}),
@@ -227,10 +229,10 @@ ANALYZE {schema}.laea_vector_{pixelsize};
         """.format(pixelsize=pixelsize,
                    str_pixelsize=self.str_pixelsize(pixelsize),
                    srid=self.target_srid,
-                   schema=self.temp,
+                   schema=self.schema
                    )
 
-        self.run_query(sql, conn=self.conn0)
+        self.run_query(sql, conn=self.conn)
 
     def get_tilesize(self, pixelsize):
         """
@@ -290,9 +292,9 @@ SELECT
   cellcode,
   geom
 FROM {schema}.laea_vector_{pixelsize};
-""".format(schema=self.temp,
+""".format(schema=self.schema,
            pixelsize=pixelsize)
-        self.run_query(sql, conn=self.conn0)
+        self.run_query(sql, conn=self.conn)
 
 
 if __name__ == '__main__':
