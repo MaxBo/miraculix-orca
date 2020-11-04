@@ -30,7 +30,7 @@ class ExtractLanduse(Extract):
     def additional_stuff(self):
         """
         """
-        #self.extract_oceans()
+        self.extract_oceans()
         self.extract_corine_vector()
         self.extract_aster()
         self.extract_all_corine_raster()

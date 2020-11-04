@@ -123,6 +123,7 @@ class Extract(DBApp):
     def extract(self):
         with Connection(login=self.login) as conn:
             self.conn = conn
+            #self.create_foreign_server()
             self.create_foreign_schema()
             self.create_target_boundary()
             self.conn.commit()
@@ -131,8 +132,8 @@ class Extract(DBApp):
             self.additional_stuff()
             self.conn.commit()
             self.final_stuff()
-            self.cleanup()
             self.conn.commit()
+            self.cleanup()
 
     def further_stuff(self):
         """
