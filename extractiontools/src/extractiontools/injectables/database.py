@@ -5,50 +5,18 @@ from orcadjango.decorators import group
 from extractiontools.connection import Login
 
 
-#@group('Database')
-#@orca.injectable()
-#def username() -> str:
-    #"""The database username"""
-    #return 'osm'
-
-
-#@group('Database')
-#@orca.injectable()
-#def host() -> str:
-    #"""The database host"""
-    #return 'localhost'
-
-
-#@group('Database')
-#@orca.injectable()
-#def port() -> int:
-    #"""The database port"""
-    #return 5432
-
-
-#@group('Database')
-#@orca.injectable()
-#def password() -> str:
-    #"""The database password"""
-    #return ''
-
-
 @group('(1) Project')
 @orca.injectable()
-def database() -> str:
+def project() -> str:
     """The name of the project database"""
     return 'myproject'
 
 
-#@group('Database')
-#@orca.injectable()
-#def login(host, port, username, password, project) -> Login:
-    #"""The Login-connection"""
-    #return Login(host=host,
-                 #port=port,
-                 #user=username,
-                 #password=password,
-                 #db=project)
+@group('(1) Project')
+@orca.injectable()
+def database(project) -> str:
+    """The name of the project database"""
+    return project
 
 
 @group('(1) Project')
@@ -59,13 +27,6 @@ def bbox_dict() -> Dict[str, float]:
             'right': 9.1,
             'bottom': 54.5,
             'top': 54.6}
-
-
-#@group('Database')
-#@orca.injectable()
-#def source_db() -> str:
-    #"""The name of the base-database"""
-    #return 'europe'
 
 
 @group('(1) Project')

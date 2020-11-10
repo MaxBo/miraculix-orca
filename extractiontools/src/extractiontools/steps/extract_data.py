@@ -22,11 +22,11 @@ __parent_modules__ = ['extractiontools.steps.create_db',
 
 @group('(2) Extract Data', order=1)
 @orca.step()
-def extract_osm(database: str):
+def extract_osm(database: str, target_srid: str):
     """
     extract osm data for the bbox
     """
-    extract = ExtractOSM(destination_db=database)
+    extract = ExtractOSM(destination_db=database, target_srid=target_srid)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 

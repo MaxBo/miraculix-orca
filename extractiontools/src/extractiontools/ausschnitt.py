@@ -13,6 +13,7 @@ import subprocess
 from copy import deepcopy
 from psycopg2.sql import Identifier, Literal, SQL
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+import time
 
 from .connection import Connection, DBApp, Login
 
@@ -187,6 +188,25 @@ class Extract(DBApp):
           SFUNC = public.hs_concat,
           STYPE = public.hstore
         );
+        CREATE OR REPLACE FUNCTION clone_schema(source_schema text, dest_schema text) RETURNS void AS
+        $BODY$
+        DECLARE
+          objeto text;
+          buffer text;
+        BEGIN
+            EXECUTE 'CREATE SCHEMA ' || dest_schema ;
+
+            FOR objeto IN
+                SELECT table_name::text FROM information_schema.tables WHERE table_schema = source_schema
+            LOOP
+                buffer := dest_schema || '.' || objeto;
+                EXECUTE 'CREATE TABLE ' || buffer || ' (LIKE ' || source_schema || '.' || objeto || ' INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING DEFAULTS)';
+                EXECUTE 'INSERT INTO ' || buffer || '(SELECT * FROM ' || source_schema || '.' || objeto || ')';
+            END LOOP;
+
+        END;
+        $BODY$
+        LANGUAGE plpgsql VOLATILE;
         '''
         logger.info('Adding extensions')
         with Connection(login=self.login) as conn:
@@ -431,6 +451,14 @@ FROM (SELECT catalog_name, schema_name
         self.check_platform()
         folder = os.path.join(self.folder, 'projekte', self.destination_db)
         self.make_folder(folder)
+
+    def copy_schema_to_target_db(self, schema):
+        temp_schema = round(time.time());
+        self.create_foreign_schema(foreign_schema=schema,
+                                   target_schema=temp_schema)
+        sql = f"SELECT clone_schema('{temp_schema}','{schema}');"
+        with Connection(login=self.login) as conn:
+            self.run_query(sql, conn=conn)
 
 
 if __name__ == '__main__':
