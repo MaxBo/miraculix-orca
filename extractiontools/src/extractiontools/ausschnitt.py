@@ -55,17 +55,30 @@ class Extract(DBApp):
     role = 'group_osm'
 
     def __init__(self,
-                 destination_db='extract',
-                 temp=None,
-                 target_srid=31467,
+                 destination_db: str='extract',
+                 target_srid: int=31467,
+                 temp: str=None,
+                 foreign_server: str='foreign_server',
+                 login: Login=None,
+                 tables: dict={},
                  **options):
         self.srid = 4326
-        self.target_srid = target_srid
         self.temp = temp or str(round(time.time() * 100))
+        self.foreign_server = foreign_server
+        self.target_srid = target_srid
         self.source_db = options.get('source_db', 'europe')
         self.destination_db = destination_db
+        self.tables = tables
         self.tables2cluster = []
         self.check_platform()
+        self.set_login(
+            os.environ.get('DB_HOST', 'localhost'),
+            os.environ.get('DB_PORT', 5432),
+            os.environ.get('DB_USER'),
+            password=os.environ.get('DB_PASS', '')
+        )
+        if login:
+            self.login1 = login
 
     def set_login(self, host, port, user, password=None, **kwargs):
         """
@@ -82,21 +95,6 @@ class Extract(DBApp):
         self.login0 = Login(host, port, user, password, db=self.source_db)
         self.login1 = Login(host, port, user, password,
                             db=self.destination_db)
-
-    def set_login01(self, login: Login, source_db):
-        """
-        set login information for source and destination database
-        to self.login0 and self.login1
-
-        Parameters
-        ----------
-        login : Login
-        source_db : str
-        """
-        self.login0 = Login(login.host, login.port,
-                            login.user, login.password,
-                            db=source_db)
-        self.login1 = login
 
     def execute_query(self, sql):
         """

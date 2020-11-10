@@ -3,8 +3,9 @@
 from typing import Dict
 import os
 import orca
+import copy
 from orcadjango.decorators import group
-from extractiontools.injectables.database import Login
+from extractiontools.connection import Login
 from extractiontools.build_network_car import BuildNetwork
 from extractiontools.build_network_walk_cycle import BuildNetworkWalkCycle
 from extractiontools.scrape_stops import ScrapeStops
@@ -14,10 +15,16 @@ from extractiontools.network2pbf import CopyNetwork2Pbf, CopyNetwork2PbfTagged
 from extractiontools.stop_otp_router import OTPServer
 from extractiontools.copy2fgdb import Copy2FGDB
 
+default_login = Login(
+    host=os.environ.get('DB_HOST', 'localhost'),
+    port=os.environ.get('DB_PORT', 5432),
+    user=os.environ.get('DB_USER'),
+    password=os.environ.get('DB_PASS', '')
+)
 
 @group('Networks')
 @orca.step()
-def build_network_car(login: Login,
+def build_network_car(database: str,
                       chunksize: int,
                       limit4links: int,
                       links_to_find: float,
@@ -25,19 +32,18 @@ def build_network_car(login: Login,
     """
     build a car network
     """
-    build_network = BuildNetwork(db=login.db,
+    build_network = BuildNetwork(db=database,
                                  network_schema='network',
                                  limit=limit4links,
                                  chunksize=chunksize,
                                  links_to_find=links_to_find,
                                  corine=corine)
-    build_network.login = login
     build_network.build()
 
 
 @group('Networks')
 @orca.step()
-def build_network_fr(login: Login,
+def build_network_fr(database: str,
                      chunksize: int,
                      limit4links: int,
                      links_to_find: float,
@@ -46,39 +52,34 @@ def build_network_fr(login: Login,
     """
     build a walk and cycle network
     """
-    build_network = BuildNetworkWalkCycle(db=login.db,
+    build_network = BuildNetworkWalkCycle(db=database,
                                           network_schema='network_fr',
                                           limit=limit4links,
                                           chunksize=chunksize,
                                           links_to_find=links_to_find,
                                           corine=corine,
                                           routing_walk=routing_walk)
-    build_network.login = login
     build_network.build()
 
 
 @group('Public Transport', order=1)
 @orca.step()
-def extract_stops(login: Login, source_db: str):
+def extract_stops(database: str):
     """
     extract Stops from master-DB
     """
-    scrape = ScrapeStops(source_db=source_db,
-                         db=login.db)
-    scrape.set_login01(login, source_db)
+    scrape = ScrapeStops(db=database)
     scrape.get_target_boundary_from_dest_db()
     scrape.extract()
 
 
 @group('Public Transport', order=2)
 @orca.step()
-def scrape_stops(login: Login,
-                 source_db: str):
+def scrape_stops(database: str):
     """
     Scrape Stops from DB
     """
-    scrape = ScrapeStops(db=login.db)
-    scrape.set_login01(login, source_db)
+    scrape = ScrapeStops(db=database)
     scrape.get_target_boundary_from_dest_db()
     scrape.scrape()
 
@@ -99,18 +100,15 @@ def recreate_timetable_tables() -> bool:
 
 @group('Public Transport', order=3)
 @orca.step()
-def scrape_timetables(login: Login,
+def scrape_timetables(database: str,
                       date_timetable: str,
-                      recreate_timetable_tables: bool,
-                      source_db: str):
+                      recreate_timetable_tables: bool):
     """
     Scrape Stops from DB
     """
-    scrape = ScrapeTimetable(db=login.db,
+    scrape = ScrapeTimetable(db=database,
                              date=date_timetable,
-                             source_db=source_db,
                              recreate_tables=recreate_timetable_tables)
-    scrape.set_login01(login, source_db)
     scrape.get_target_boundary_from_dest_db()
     scrape.scrape()
 
@@ -131,7 +129,7 @@ def tbl_kreise() -> str:
 
 @group('Public Transport', order=4)
 @orca.step()
-def timetables_to_gtfs(login: Login,
+def timetables_to_gtfs(database: str,
                        date_timetable: str,
                        gtfs_only_one_day: bool,
                        base_path: str,
@@ -140,13 +138,12 @@ def timetables_to_gtfs(login: Login,
     """
     Export Timetables as GTFS-file
     """
-    hafas = HafasDB2GTFS(db=login.db,
+    hafas = HafasDB2GTFS(db=database,
                          date=date_timetable,
                          only_one_day=gtfs_only_one_day,
                          base_path=base_path,
                          subfolder=subfolder_otp,
                          tbl_kreise=tbl_kreise)
-    hafas.login1 = login
     hafas.get_target_boundary_from_dest_db()
     hafas.convert()
     hafas.export_gtfs()
@@ -167,9 +164,11 @@ def otp_networks() -> Dict[str, str]:
 
 @group('Export')
 @orca.step()
-def copy_network_to_pbf(login: Login,
+def copy_network_to_pbf(database: str,
                         otp_networks: Dict[str, str]):
     """copy the osm networkdata to a pbf file"""
+    login = copy(default_login)
+    login.db = database
     for network_schema, subfolder_pbf in otp_networks.items():
         copy2pbf = CopyNetwork2Pbf(login=login,
                                    network_schema=network_schema,
@@ -179,9 +178,11 @@ def copy_network_to_pbf(login: Login,
 
 @group('Export')
 @orca.step()
-def copy_network_to_pbf_and_xml(login: Login,
+def copy_network_to_pbf_and_xml(database: str,
                                 otp_networks: Dict[str, str]):
     """copy the osm networkdata to a pbf and .xml.bz file"""
+    login = copy(default_login)
+    login.db = database
     for network_schema, subfolder_pbf in otp_networks.items():
         copy2pbf = CopyNetwork2Pbf(login=login,
                                    network_schema=network_schema,
@@ -192,9 +193,11 @@ def copy_network_to_pbf_and_xml(login: Login,
 
 @group('Export')
 @orca.step()
-def copy_tagged_network_to_pbf_and_xml(login: Login,
+def copy_tagged_network_to_pbf_and_xml(database: str,
                                        otp_networks: Dict[str, str]):
     """copy the osm networkdata to a pbf and .xml.bz file"""
+    login = copy(default_login)
+    login.db = database
     for network_schema, subfolder_pbf in otp_networks.items():
         copy2pbf = CopyNetwork2PbfTagged(login=login,
                                          network_schema=network_schema,
@@ -309,9 +312,11 @@ def gdbname(project) -> str:
 
 @group('Export')
 @orca.step()
-def copy_network_to_fgdb(login: Login,
+def copy_network_to_fgdb(database: str,
                          network_layers: Dict[str, str]):
     """copy network to a file-gdb"""
+    login = copy(default_login)
+    login.db = database
     copy2fgdb = Copy2FGDB(login=login,
                           layers=network_layers,
                           gdbname='network_car.gdb',
@@ -321,9 +326,11 @@ def copy_network_to_fgdb(login: Login,
 
 @group('Export')
 @orca.step()
-def copy_network_fr_to_fgdb(login: Login,
+def copy_network_fr_to_fgdb(database: str,
                             network_fr_layers: Dict[str, str]):
     """copy network to a file-gdb"""
+    login = copy(default_login)
+    login.db = database
     copy2fgdb = Copy2FGDB(login=login, layers=network_fr_layers,
                           gdbname='network_fr.gdb',
                           schema='network_fr')
