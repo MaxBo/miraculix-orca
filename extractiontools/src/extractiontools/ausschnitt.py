@@ -179,8 +179,8 @@ class Extract(DBApp):
         CREATE EXTENSION IF NOT EXISTS postgis_raster;
         CREATE EXTENSION IF NOT EXISTS hstore;
         CREATE EXTENSION IF NOT EXISTS pgRouting;
-        CREATE EXTENSION IF NOT EXISTS kmeans;
         CREATE EXTENSION IF NOT EXISTS plpython3u;
+        CREATE EXTENSION IF NOT EXISTS kmeans;
         CREATE OR REPLACE AGGREGATE public.hstore_sum (public.hstore)
         (
           SFUNC = public.hs_concat,
@@ -341,29 +341,6 @@ UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
         else:
             self.PGPATH = pg_path or '/usr/bin'
             self.SHELL = True
-
-    def create_extensions(self):
-        """
-        extensions needed later (usually provided by the template already)
-        """
-        sql = '''
-        CREATE EXTENSION IF NOT EXISTS dblink;
-        CREATE EXTENSION IF NOT EXISTS postgis;
-        CREATE EXTENSION IF NOT EXISTS postgis_raster;
-        CREATE EXTENSION IF NOT EXISTS hstore;
-        CREATE EXTENSION IF NOT EXISTS pgRouting;
-        CREATE EXTENSION IF NOT EXISTS kmeans;
-        CREATE EXTENSION IF NOT EXISTS plpython3u;
-        CREATE EXTENSION IF NOT EXISTS postgres_fdw;
-        CREATE OR REPLACE AGGREGATE public.hstore_sum (public.hstore)
-        (
-          SFUNC = public.hs_concat,
-          STYPE = public.hstore
-        );
-        '''
-        self.logger.info('Adding extensions')
-        with Connection(login=self.login) as conn:
-            self.run_query(sql, conn=conn)
 
     def create_target_db(self, login):
         """
