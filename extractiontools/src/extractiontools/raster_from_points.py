@@ -55,7 +55,8 @@ class Points2Raster(DBApp):
 
     def __init__(self,
                  db: str = 'extract',
-                 subfolder: str = 'tiffs'):
+                 subfolder: str = 'tiffs', **kwargs):
+        super().__init__(**kwargs)
         self.db = db
         self.check_platform()
         self.destination_db = db

@@ -6,8 +6,7 @@ from argparse import ArgumentParser
 import sys
 import os
 import subprocess
-import psycopg2
-from extractiontools.connection import Login, Connection, DBApp, logger
+from extractiontools.connection import Login, Connection, DBApp
 
 
 class CopyNetwork2Pbf(DBApp):
@@ -20,8 +19,10 @@ class CopyNetwork2Pbf(DBApp):
                  as_xml: bool = False,
                  network_schema: str = 'network_fr',
                  subfolder_pbf: str = 'pbf',
-                 srid: int = 4326):
+                 srid: int = 4326,
+                 **kwargs):
         """"""
+        super().__init__(**kwargs)
         self.check_platform()
         self.login = login
         self.as_xml = as_xml
@@ -243,7 +244,7 @@ USING btree(id);
                               fn=file_path,
                               to_xml=to_xml,
                               )
-        logger.info(full_cmd)
+        self.logger.info(full_cmd)
         ret = subprocess.call(full_cmd, shell=self.SHELL)
         if ret:
             layer = 'pbf'

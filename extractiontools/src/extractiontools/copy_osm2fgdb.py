@@ -14,7 +14,7 @@ class CopyOSM2FGDB(Copy2FGDB):
 
     def create_views(self):
         """Create the osm views that should be exported"""
-        with Connection(login=self.login1) as conn:
+        with Connection(login=self.login) as conn:
             self.conn = conn
             self.create_dest_schema()
             self.create_railways()

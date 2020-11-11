@@ -22,11 +22,12 @@ __parent_modules__ = [
 
 @group('(2) Extract Data', order=1)
 @orca.step()
-def extract_osm(database: str, target_srid: str):
+def extract_osm(source_db: str, database: str, target_srid: str):
     """
     extract osm data for the bbox
     """
-    extract = ExtractOSM(destination_db=database, target_srid=target_srid)
+    extract = ExtractOSM(source_db=source_db, destination_db=database,
+                         target_srid=target_srid, logger=orca.logger)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 
@@ -37,45 +38,49 @@ def create_polygons_from_osm(database: str):
     """
     extract osm data for the bbox
     """
-    copy2fgdb = CreatePolygons(destination_db=database)
+    copy2fgdb = CreatePolygons(destination_db=database, logger=orca.logger)
     copy2fgdb.get_target_boundary_from_dest_db()
     copy2fgdb.create_poly_and_multipolygons()
 
 
 @group('(2) Extract Data', order=3)
 @orca.step()
-def extract_landuse(database: str, gmes: List[str], corine: List[str],
-                    target_srid: str):
+def extract_landuse(source_db: str, database: str, gmes: List[str],
+                    corine: List[str], target_srid: str):
     """
     extract landuse data for the bbox
     """
-    extract = ExtractLanduse(destination_db=database, gmes=gmes,
-                             corine=corine, target_srid=target_srid)
+    extract = ExtractLanduse(source_db=source_db, destination_db=database,
+                             gmes=gmes, corine=corine, target_srid=target_srid,
+                             logger=orca.logger)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 
 
 @group('(2) Extract Data', order=10)
 @orca.step()
-def extract_verwaltungsgrenzen(database: str,
+def extract_verwaltungsgrenzen(source_db: str, database: str,
                                verwaltungsgrenzen_tables: List[str],
                                target_srid: str):
     """
     extract administrative boundaries for the bbox
     """
     tables = {f: 'geom' for f in verwaltungsgrenzen_tables}
-    extract = ExtractVerwaltungsgrenzen(destination_db=database, tables=tables)
+    extract = ExtractVerwaltungsgrenzen(source_db=source_db,
+                                        destination_db=database, tables=tables,
+                                        logger=orca.logger)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 
 
 @group('(2) Extract Data', order=4)
 @orca.step()
-def extract_laea_raster(database: str, target_srid: str):
+def extract_laea_raster(source_db: str, database: str, target_srid: str):
     """
     extract laea raster for the bbox
     """
-    extract = ExtractLAEA(destination_db=database)
+    extract = ExtractLAEA(source_db=source_db, destination_db=database,
+                          logger=orca.logger)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 
@@ -86,7 +91,8 @@ def zensus2raster(database: str, subfolder_tiffs: str):
     """
     create views for zensus data on raster grid
     """
-    z2r = Zensus2Raster(destination_db=database, subfolder=subfolder_tiffs)
+    z2r = Zensus2Raster(destination_db=database, subfolder=subfolder_tiffs,
+                        logger=orca.logger)
     z2r.run()
 
 
@@ -120,7 +126,8 @@ def copy_osm_to_fgdb(database: str,
     copy2fgdb = CopyOSM2FGDB(destination_db=database,
                              layers=osm_layers,
                              gdbname='osm_layers.gdb',
-                             schema='osm_layer')
+                             schema='osm_layer',
+                             logger=orca.logger)
     copy2fgdb.create_views()
     copy2fgdb.copy_layers()
 
@@ -134,5 +141,6 @@ def copy_to_fgdb(database: str,
     copy2fgdb = CopyOSM2FGDB(destination_db=database,
                              layers=osm_layers,
                              gdbname='osm_layers.gdb',
-                             schema='osm_layer')
+                             schema='osm_layer',
+                             logger=orca.logger)
     copy2fgdb.copy_layers()

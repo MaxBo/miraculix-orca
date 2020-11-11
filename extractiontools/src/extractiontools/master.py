@@ -6,7 +6,7 @@ from datetime import datetime
 import subprocess
 import sys
 
-from extractiontools.ausschnitt import BBox, ExtractMeta, logger
+from extractiontools.ausschnitt import BBox, ExtractMeta
 from extractiontools.connection import Connection, DBApp, Login
 
 
@@ -71,7 +71,7 @@ class ScriptRunner(DBApp):
                               target_srid=options.srid,
                               source_db =options.source_db)
         extract.set_login(host=options.host, port=options.port, user=options.user)
-        extract.get_target_boundary(bbox)
+        extract.set_target_boundary(bbox)
         extract.recreate_db()
         extract.extract()
 

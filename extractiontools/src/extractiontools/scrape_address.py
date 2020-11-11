@@ -30,7 +30,7 @@ class ScrapeAdresses(Extract):
 
     def scrape(self):
         """"""
-        with Connection(login=self.login1) as conn1:
+        with Connection(login=self.login) as conn1:
             self.conn1 = conn1
             self.conn = conn1
             self.read_adresses()

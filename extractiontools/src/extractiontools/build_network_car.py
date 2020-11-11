@@ -25,7 +25,9 @@ class BuildNetwork(DBApp):
                  links_to_find: float = 0.25,
                  corine: str = 'clc18',
                  routing_walk=False,
+                 **kwargs
                  ):
+        super().__init__(**kwargs)
         self.schema = schema
         self.network = network_schema
         self.db = db

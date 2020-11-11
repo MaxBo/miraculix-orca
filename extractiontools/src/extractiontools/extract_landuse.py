@@ -3,7 +3,7 @@
 
 from argparse import ArgumentParser
 
-from extractiontools.ausschnitt import Extract, BBox, logger
+from extractiontools.ausschnitt import Extract
 
 
 class ExtractLanduse(Extract):
@@ -16,18 +16,16 @@ class ExtractLanduse(Extract):
     aster_overviews = [8, 32]
     corine_overviews = [8, 32]
 
-
     def __init__(self,
                  source_db,
                  destination_db,
                  gmes,
                  corine,
-                 temp='temp',
-                 target_srid=31467):
+                 target_srid=31467,
+                 **kwargs):
         super().__init__(destination_db=destination_db,
-                         temp=temp,
                          target_srid=target_srid,
-                         source_db=source_db)
+                         source_db=source_db, **kwargs)
         self.gmes = gmes
         self.corine = corine
 

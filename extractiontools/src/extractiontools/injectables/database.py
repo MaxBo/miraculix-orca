@@ -28,6 +28,13 @@ def target_srid() -> int:
     return 25832
 
 
+@group('Database')
+@orca.injectable()
+def source_db() -> str:
+    """The name of the base-database"""
+    return 'europe'
+
+
 @group('Tables')
 @orca.injectable()
 def verwaltungsgrenzen_tables() -> List[str]:

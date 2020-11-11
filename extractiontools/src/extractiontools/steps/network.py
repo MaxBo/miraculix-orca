@@ -37,7 +37,8 @@ def build_network_car(database: str,
                                  limit=limit4links,
                                  chunksize=chunksize,
                                  links_to_find=links_to_find,
-                                 corine=corine)
+                                 corine=corine,
+                                 logger=orca.logger)
     build_network.build()
 
 
@@ -58,7 +59,8 @@ def build_network_fr(database: str,
                                           chunksize=chunksize,
                                           links_to_find=links_to_find,
                                           corine=corine,
-                                          routing_walk=routing_walk)
+                                          routing_walk=routing_walk,
+                                          logger=orca.logger)
     build_network.build()
 
 
@@ -68,7 +70,7 @@ def extract_stops(database: str):
     """
     extract Stops from master-DB
     """
-    scrape = ScrapeStops(db=database)
+    scrape = ScrapeStops(db=database, logger=orca.logger)
     scrape.get_target_boundary_from_dest_db()
     scrape.extract()
 
@@ -79,7 +81,7 @@ def scrape_stops(database: str):
     """
     Scrape Stops from DB
     """
-    scrape = ScrapeStops(db=database)
+    scrape = ScrapeStops(db=database, logger=orca.logger)
     scrape.get_target_boundary_from_dest_db()
     scrape.scrape()
 
@@ -143,7 +145,8 @@ def timetables_to_gtfs(database: str,
                          only_one_day=gtfs_only_one_day,
                          base_path=base_path,
                          subfolder=subfolder_otp,
-                         tbl_kreise=tbl_kreise)
+                         tbl_kreise=tbl_kreise,
+                         logger=orca.logger)
     hafas.get_target_boundary_from_dest_db()
     hafas.convert()
     hafas.export_gtfs()
@@ -172,7 +175,8 @@ def copy_network_to_pbf(database: str,
     for network_schema, subfolder_pbf in otp_networks.items():
         copy2pbf = CopyNetwork2Pbf(login=login,
                                    network_schema=network_schema,
-                                   subfolder_pbf=subfolder_pbf)
+                                   subfolder_pbf=subfolder_pbf,
+                                   logger=orca.logger)
         copy2pbf.copy()
 
 
@@ -187,7 +191,8 @@ def copy_network_to_pbf_and_xml(database: str,
         copy2pbf = CopyNetwork2Pbf(login=login,
                                    network_schema=network_schema,
                                    subfolder_pbf=subfolder_pbf,
-                                   as_xml=True)
+                                   as_xml=True,
+                                   logger=orca.logger)
         copy2pbf.copy()
 
 
@@ -202,7 +207,7 @@ def copy_tagged_network_to_pbf_and_xml(database: str,
         copy2pbf = CopyNetwork2PbfTagged(login=login,
                                          network_schema=network_schema,
                                          subfolder_pbf=subfolder_pbf,
-                                         as_xml=True)
+                                         as_xml=True, logger=orca.logger)
         copy2pbf.copy()
 
 
@@ -223,10 +228,10 @@ def otp_graph_subfolder() -> str:
 
 @group('OTP')
 @orca.injectable()
-def otp_routers(project) -> Dict[str, str]:
+def otp_routers(database) -> Dict[str, str]:
     """subfolder with the otp graphs"""
-    routers = {f'{project}_car': 'otp_car',
-               f'{project}_fr': 'otp_fr',
+    routers = {f'{database}_car': 'otp_car',
+               f'{database}_fr': 'otp_fr',
                }
     return routers
 
@@ -266,7 +271,7 @@ def stop_otp_router(otp_ports: Dict[str, int]):
 @group('OTP', order=1)
 @orca.step()
 def create_router(otp_routers: Dict[str, str],
-                  project: str,
+                  database: str,
                   base_path: str,
                   ):
     """Create otp graphs for the gives routers"""
@@ -275,7 +280,7 @@ def create_router(otp_routers: Dict[str, str],
                            graph_subfolder='otp_graphs',
                            routers=otp_routers)
     for router_name, subfolder in otp_routers.items():
-        build_folder = otp_server.get_otp_build_folder(project, subfolder)
+        build_folder = otp_server.get_otp_build_folder(database, subfolder)
         target_folder = os.path.join(otp_server.graph_folder, router_name)
         otp_server.create_router(build_folder, target_folder)
 
@@ -305,9 +310,9 @@ def network_fr_layers() -> Dict[str, str]:
 
 @group('Export')
 @orca.injectable()
-def gdbname(project) -> str:
+def gdbname(database) -> str:
     """the name of the File Geodatabase"""
-    return f'{project}.gdb'
+    return f'{database}.gdb'
 
 
 @group('Export')
@@ -320,7 +325,7 @@ def copy_network_to_fgdb(database: str,
     copy2fgdb = Copy2FGDB(login=login,
                           layers=network_layers,
                           gdbname='network_car.gdb',
-                          schema='network')
+                          schema='network', logger=orca.logger)
     copy2fgdb.copy_layers()
 
 
@@ -333,5 +338,5 @@ def copy_network_fr_to_fgdb(database: str,
     login.db = database
     copy2fgdb = Copy2FGDB(login=login, layers=network_fr_layers,
                           gdbname='network_fr.gdb',
-                          schema='network_fr')
+                          schema='network_fr', logger=orca.logger)
     copy2fgdb.copy_layers()

@@ -3,7 +3,7 @@
 
 from argparse import ArgumentParser
 
-from extractiontools.ausschnitt import Extract, BBox, logger
+from extractiontools.ausschnitt import Extract, BBox
 
 
 class ExtractOSM(Extract):

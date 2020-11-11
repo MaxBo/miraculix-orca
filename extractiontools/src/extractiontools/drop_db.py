@@ -2,8 +2,9 @@
 #coding:utf-8
 
 from argparse import ArgumentParser
+from copy import deepcopy
 
-from extractiontools.ausschnitt import logger, Extract
+from extractiontools.ausschnitt import Extract
 from extractiontools.connection import Connection
 
 class DropDatabase(Extract):
@@ -13,30 +14,15 @@ class DropDatabase(Extract):
         exists = self.check_if_database_exists(self.destination_db)
         if not exists:
             msg = 'database {} does not exist'
-            logger.info(msg.format(self.destination_db))
+            self.logger.info(msg.format(self.destination_db))
             return
-        with Connection(login=self.login0) as conn:
-            cursor = conn.cursor()
-            sql = """
-SELECT can_be_deleted FROM meta_master.projekte WHERE projektname_kurz = '{}';
-            """.format(self.destination_db)
-            cursor.execute(sql)
-            row = cursor.fetchone()
-            if row is None:
-                msg = 'database {} not in project table'
-                logger.info(msg.format(self.destination_db))
-                return
-            if not row.can_be_deleted:
-                msg = 'database {} is protected and cannot be deleted'
-                logger.info(msg.format(self.destination_db))
-                return
+        login = deepcopy(self.login)
+        login.db = 'postgres'
+        with Connection(login=login) as conn:
             self.drop_database(dbname=self.destination_db, conn=conn)
-            sql = """
-UPDATE meta_master.projekte SET deleted = True WHERE projektname_kurz = '{}';"""
-            cursor.execute(sql.format(self.destination_db))
             conn.commit()
             msg = 'database {} successfully deleted'
-            logger.info(msg.format(self.destination_db))
+            self.logger.info(msg.format(self.destination_db))
 
 
 if __name__ == '__main__':

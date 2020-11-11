@@ -3,20 +3,17 @@
 
 from argparse import ArgumentParser
 
-import logging
-logger = logging.getLogger('OrcaLog')
-
-from extractiontools.connection import Connection, Login
-from extractiontools.ausschnitt import Extract
+from extractiontools.connection import Connection, Login, DBApp
 
 
-class CreatePolygons(Extract):
+class CreatePolygons(DBApp):
     """"""
 
-    def __init__(self, login):
+    def __init__(self, login, **kwargs):
         """"""
+        super().__init__(**kwargs)
         self.check_platform()
-        self.login1 = login
+        self.login = login
 
     def create_poly_and_multipolygons(self, schema='osm'):
         """
@@ -384,7 +381,7 @@ FROM
 WHERE NOT EXISTS
   (SELECT 1 FROM osm.ways_in_poly wp WHERE wp.id = w.id);
         """
-        with Connection(login=self.login1) as conn:
+        with Connection(login=self.login) as conn:
             self.conn = conn
             self.run_query(sql_create_simple_polygons.format(
                 srid=self.target_srid))

@@ -12,7 +12,7 @@ from html.parser import HTMLParser
 import requests
 from lxml import html
 from extractiontools.utils.htmlentity import htmlentitydecode
-from extractiontools.scrape_stops import ScrapeStops, Connection, logger
+from extractiontools.scrape_stops import ScrapeStops, Connection
 from extractiontools.utils.get_date import Date, get_timestamp2
 
 
@@ -31,7 +31,7 @@ class ScrapeTimetable(ScrapeStops):
 
     def scrape(self):
         """scrape timetables"""
-        with Connection(login=self.login1) as conn1:
+        with Connection(login=self.login) as conn1:
             self.conn1 = conn1
             self.create_timetable_tables()
             if self.recreate_tables:
@@ -115,7 +115,7 @@ WHERE in_area;
             h_id = row[0]
             h_name = row[1]
             i += 1
-            logger.info(f'{i}/{n_total}: {h_id}: {h_name}')
+            self.logger.info(f'{i}/{n_total}: {h_id}: {h_name}')
             self.read_fahrten(
                 h_id_abfahrtstafel=h_id,
                 h_name_abfahrtstafel=h_name)
@@ -177,9 +177,9 @@ WHERE in_area;
                 try:
                     subtree = tree.xpath('//*[@id="sqResult"]/table')
                     if not subtree:
-                        logger.warning(f'Fehler beim Lesen der BhfTafel für '
+                        self.logger.warning(f'Fehler beim Lesen der BhfTafel für '
                                        f'{h_id_str}: {h_name_abfahrtstafel}:')
-                        logger.warning(url)
+                        self.logger.warning(url)
                         # try next URL
                         continue
                     # count number of trips
@@ -190,18 +190,18 @@ WHERE in_area;
                     fahrten_count = len(journey_rows)
 
                 except:
-                    logger.warning(traceback.format_exc())
+                    self.logger.warning(traceback.format_exc())
                     err_code = tree.xpath(
                         '//div[@class="errormsg leftMargin"]/text()')
-                    logger.warning(f'Fehler beim Lesen der BhfTafel für '
+                    self.logger.warning(f'Fehler beim Lesen der BhfTafel für '
                                    f'{h_id_str}: {h_name_abfahrtstafel}:')
                     if err_code:
-                        logger.warning(err_code[0])
+                        self.logger.warning(err_code[0])
                     # try next URL
                     continue
                 # found a Bahnhofstafel
                 if fahrten_count:
-                    logger.info(f'{fahrten_count} abfahrten in '
+                    self.logger.info(f'{fahrten_count} abfahrten in '
                                 f'{h_id_str}: {h_name_abfahrtstafel}')
                     self.n_new = 0
                     self.n_already_in_db = 0
@@ -217,22 +217,22 @@ WHERE in_area;
                                            h_name_abfahrtstafel,
                                            fahrten_found)
                     if self.n_new:
-                        logger.info('')
-                    logger.info(f'{self.n_new} new, '
+                        self.logger.info('')
+                    self.logger.info(f'{self.n_new} new, '
                                 f'{self.n_already_in_db} already in db')
                     # return and don't try next URL
                     return
         except Exception as e:
-            logger.warning(traceback.format_exc())
+            self.logger.warning(traceback.format_exc())
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            logger.warning(f'{exc_type} {fname} {exc_tb.tb_lineno}')
+            self.logger.warning(f'{exc_type} {fname} {exc_tb.tb_lineno}')
             raise e
 
     def wait_and_retry(self, bhftafel_url: str, waittime: int = 15):
         # if not successful,
         # try to get the page MAX_TRIES times
-        logger.info(f'wait {waittime} secs and try again {self.t} '
+        self.logger.info(f'wait {waittime} secs and try again {self.t} '
                     f'for url {bhftafel_url}')
         time.sleep(waittime)
         r = requests.get(bhftafel_url)
@@ -263,8 +263,8 @@ WHERE in_area;
                 abfahrten = tree.xpath(
                     xpath_base + '/td[4]/text()')[2:][0].split('\n')
             except IndexError:
-                logger.warning(traceback.format_exc())
-                logger.warning(f'Fehler beim parsen der Abfahrtstafel von {h_name_abfahrtstafel}')
+                self.logger.warning(traceback.format_exc())
+                self.logger.warning(f'Fehler beim parsen der Abfahrtstafel von {h_name_abfahrtstafel}')
             abfahrtshaltestelle = abfahrten[1].strip()
             abfahrtsuhrzeit = abfahrten[2]
             ankunftsuhrzeit = abfahrten[-2]
@@ -291,12 +291,12 @@ WHERE in_area;
                 hst_id_abfahrt = h_id_abfahrtstafel
 
         except:
-            logger.warning(traceback.format_exc())
+            self.logger.warning(traceback.format_exc())
             # if there is an error, wait
-            logger.warning('fehler beim Auslesen der BHF-Tafel')
+            self.logger.warning('fehler beim Auslesen der BHF-Tafel')
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            logger.warning(exc_type, fname, exc_tb.tb_lineno)
+            self.logger.warning(exc_type, fname, exc_tb.tb_lineno)
             time.sleep(10)
             return
 
@@ -322,7 +322,7 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
                 if stunde != self.last_stunde:
                     self.last_stunde = stunde
                     if fahrten_found:
-                        logger.info(f'{stunde}: {",".join(fahrten_found)}')
+                        self.logger.info(f'{stunde}: {",".join(fahrten_found)}')
                         fahrten_found.clear()
 
                 # Fahrten in Tabelle Abfahrten schreiben
@@ -346,16 +346,16 @@ VALUES (%s, %s, %s, %s, %s, %s, %s);"""
                     fahrtverlauf = htmlentitydecode(r.content)
 
                 except:
-                    logger.warning(traceback.format_exc())
-                    logger.warning('Fehler in Abfrage des Fahrtverlaufs')
+                    self.logger.warning(traceback.format_exc())
+                    self.logger.warning('Fehler in Abfrage des Fahrtverlaufs')
                     pass
 
                 try:
                     verlauf_parser = MyHTMLParser()
                     verlauf_parser.query_date = self.date
                 except:
-                    logger.warning(traceback.format_exc())
-                    logger.warning('Fehler bei VerlaufParser')
+                    self.logger.warning(traceback.format_exc())
+                    self.logger.warning('Fehler bei VerlaufParser')
                     pass
                 # wenn Uhrzeit zwischen 0 und 4 h und Ankunft vor 4 Uhr ist,
                 # wird der Vortag als "Zuglauf" ausgegeben
@@ -367,8 +367,8 @@ VALUES (%s, %s, %s, %s, %s, %s, %s);"""
                 # try:
                 #html_verlauf = html.fromstring(Fahrtverlauf.content)
                 # except Exception as e:
-                # logger.warning(traceback.format_exc())
-                #logger.warning('HTML Verlauf Fehler')
+                # self.logger.warning(traceback.format_exc())
+                #self.logger.warning('HTML Verlauf Fehler')
                 # pass
 
                 verlauf_parser.feed(fahrtverlauf)
@@ -415,10 +415,10 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
                                 self.date.get_timestamp(fahrt_abfahrt),
                                 fahrt_ziel))
         except Exception as e:
-            logger.warning(traceback.format_exc())
+            self.logger.warning(traceback.format_exc())
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            logger.warning('{} {} {}'.format(
+            self.logger.warning('{} {} {}'.format(
                 exc_type, fname, exc_tb.tb_lineno))
             raise e
 
@@ -446,9 +446,9 @@ AND f."H_Abfahrt" = %s AND a."Fahrt_Ziel" = %s """
         query = sql.format(srid=self.target_srid,
                            sd=self.source_db,
                            s=self.schema)
-        logger.info(query)
+        self.logger.info(query)
         cur.execute(query)
-        logger.info(f'{cur.statusmessage}')
+        self.logger.info(f'{cur.statusmessage}')
 
 
 class MyHTMLParser(HTMLParser):
@@ -555,8 +555,8 @@ class MyHTMLParser(HTMLParser):
                                 break
                             z -= 1
                 except Exception as F:
-                    logger.warning(traceback.format_exc())
-                    logger.warning(F)
+                    self.logger.warning(traceback.format_exc())
+                    self.logger.warning(F)
                     zeit = None
                     raise
                 self.data_arrivals.append(zeit)
@@ -604,7 +604,7 @@ class MyHTMLParser(HTMLParser):
                                 break
                             z -= 1
                 except:
-                    logger.warning(traceback.format_exc())
+                    self.logger.warning(traceback.format_exc())
                     zeit = None
                 self.data_departures.append(zeit)
 
@@ -627,8 +627,8 @@ class MyHTMLParser(HTMLParser):
             zeit = time.strptime(f'{data.strip()} {self.date}',
                                  '%H:%M %d.%m.%y')
         except ValueError as e:
-            logger.warning(traceback.format_exc())
-            logger.warning(
+            self.logger.warning(traceback.format_exc())
+            self.logger.warning(
                 f'"{data}" could not be processed by time.strptime')
             raise e
         return zeit

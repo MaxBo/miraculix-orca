@@ -7,7 +7,8 @@ from typing import Dict
 import sys
 import os
 import subprocess
-from extractiontools.connection import Login, Connection, logger
+import orca
+from extractiontools.connection import Login, Connection
 from extractiontools.ausschnitt import Extract
 
 
@@ -17,11 +18,13 @@ class Copy2FGDB(Extract):
                  layers: Dict[str, str],
                  gdbname: str,
                  schema: str=None,
+                 logger=None
                  ):
 
         """"""
+        self.logger = logger or orca.logger
         self.check_platform()
-        self.login1 = self.login = login
+        self.login = self.foreign_login = login
         self.destination_db = login.db
         self.target_srid = self.get_target_srid_from_dest_db()
         self.layers = layers
@@ -64,10 +67,10 @@ class Copy2FGDB(Extract):
                               layer=layer,
                               srid_option=srid_option,
                               path=path,
-                              host=self.login.host,
-                              port=self.login.port,
-                              user=self.login.user,
-                              db=self.login.db,
+                              host=self.foreign_login.host,
+                              port=self.foreign_login.port,
+                              user=self.foreign_login.user,
+                              db=self.foreign_login.db,
                               schema=schema,
                               dest_schema=dest_schema,
                               )
@@ -83,7 +86,7 @@ class Copy2FGDB(Extract):
         ----------
         layer : str
         """
-        with Connection(self.login1) as conn:
+        with Connection(self.login) as conn:
             cur = conn.cursor()
             sql = '''
 SELECT * FROM {schema}.{layer} LIMIT 1;
