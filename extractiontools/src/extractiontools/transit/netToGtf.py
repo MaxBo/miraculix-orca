@@ -101,7 +101,7 @@ class NetToGtf():
             config file [net_route_types_mapper]. If none information given a default value
             (3/Bus) will be set.
         '''
-        if self.debug: print u'processing route_types'
+        if self.debug: print( u'processing route_types')
 
         self.route_types_map = {}
         columns = table_header_line.split(':')[1].split(';')
@@ -116,7 +116,7 @@ class NetToGtf():
             entry = line.split(';')
             self.route_types_map[entry[code_column]] = self.net_route_types_map.get(entry[name_column], '3')
 
-        if self.debug: print u'route_types_map: %s' % self.route_types_map
+        if self.debug: print( u'route_types_map: %s' % self.route_types_map)
         return line
 
 
@@ -372,7 +372,7 @@ class NetToGtf():
         return line
 
     def _process_raw_stop_times(self, table_header_line): # reads from $FAHRZEITPROFILELEMENT
-        if self.debug: print 'processing raw stop times'
+        if self.debug: print( 'processing raw stop times')
         self.fzp_stop_id_mapper = {}
         dict_fzp_id = fzpe_dict = None
 
@@ -399,7 +399,7 @@ class NetToGtf():
             rst_id = '_'.join([entry[route_id_column], entry[lrname_column], entry[direction_column]])
             fzp_id = '_'.join([entry[route_id_column], entry[lrname_column], entry[direction_column], entry[fzprofilname_column]])
 
-            if self.debug: print rst_id, fzp_id
+            if self.debug: print( rst_id, fzp_id)
 
 
             if not fzp_id == dict_fzp_id:
@@ -419,11 +419,11 @@ class NetToGtf():
                 else:
                     self.raw_stop_times[fzp_id] = [ ( entry[stop_sequence_column], stop_id, entry[arrival_time_column], entry[departure_time_column] ) ]
 
-        if self.debug: print self.raw_stop_times
+        if self.debug: print(self.raw_stop_times)
         return line
 
     def _write_stop_times_and_trips(self, table_header_line): # reads from $FAHRPLANFAHRT
-        if self.debug: print 'writing stop_times.txt and trips.txt'
+        if self.debug: print( 'writing stop_times.txt and trips.txt')
 
         st_file = open('stop_times.txt', 'w')
         st_writer = UnicodeWriter(st_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
@@ -453,7 +453,7 @@ class NetToGtf():
             rst_id = '_'.join([entry[route_id_column], entry[lrname_column], entry[direction_column]])
             fzp_id = '_'.join([entry[route_id_column], entry[lrname_column], entry[direction_column], entry[fzprofilname_column]])
             fzp = self.raw_stop_times[fzp_id]
-            if self.debug: print 'writing trip: %s' % lr_id
+            if self.debug: print( 'writing trip: %s' % lr_id)
 
             t_writer.writerow(( entry[route_id_column],
                                 '1',
@@ -483,7 +483,7 @@ class NetToGtf():
 
 
     def _write_tranfers(self, table_header_line): # reads from $UEBERGANGSGEHZEITHSTBER
-        if self.debug: print 'writing tranfers'
+        if self.debug: print( 'writing tranfers')
         try:
 
             with open('transfers.txt', 'w') as f:
@@ -552,11 +552,11 @@ class NetToGtf():
             else: # let's not expect more then LF and CRLF
                 raise InvalidInputException()
 
-            if self.debug: print u'line ending: %s' % list(self.eol) # in a list - so it won't cause a linebreak
+            if self.debug: print( u'line ending: %s' % list(self.eol)) # in a list - so it won't cause a linebreak
 
             # TODO add more tests
         except:
-            if self.debug: print u'ERROR: compatibility test failed!'
+            if self.debug: print( u'ERROR: compatibility test failed!')
             raise InvalidInputException()
 
 
@@ -572,7 +572,7 @@ class NetToGtf():
                     if current_line.startswith('$'):
                         table_name = current_line.split(':')[0]
                         if table_name in self.table_to_func_mapper:
-                            print table_name
+                            print( table_name)
                             current_line = self.table_to_func_mapper[table_name](current_line)
                         else:
                             current_line = self.get_line()
@@ -581,7 +581,7 @@ class NetToGtf():
 
             except StopIteration:
                 self._write_shapes()
-                if self.debug: print 'file completely read'
+                if self.debug: print( 'file completely read')
 
         #except:
          #   if self.debug: print 'error in write_gtf'
@@ -624,11 +624,11 @@ def main():
 
         ntg.write_gtf()
     except InvalidInputException:
-        print u"Error: looks like the input file is not valid!\n"
+        print( u"Error: looks like the input file is not valid!\n")
         parser.print_help()
         exit(-1)
     #except:
-        print u"something went wrong\n"
+        print( u"something went wrong\n")
         parser.print_help()
         exit(-1)
 

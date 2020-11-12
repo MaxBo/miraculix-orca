@@ -30,7 +30,7 @@ def convert(schema='mv'):
     with zipfile.ZipFile(r'D:\temp\feed.zip', 'w') as zf:
         for file in files:
             fn= r'D:\temp\%s.txt' %file
-            print fn
+            print(fn)
             with open(fn, 'w') as f:
                 gtfs_name = 'gtfs_'+file
                 sql = 'SELECT * FROM {0}.{1} LIMIT 0'.format(schema, gtfs_name)

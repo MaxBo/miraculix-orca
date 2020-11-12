@@ -57,9 +57,9 @@ def main():
     dst_file = os.path.join(target_folder, "Graph.obj")
     if os.path.exists(dst_file):
         os.remove(dst_file)
-        print "overwriting old file..."
+        print("overwriting old file...")
     move(graph_file, dst_file)
-    print "Graph moved to " + dst_file
+    print("Graph moved to " + dst_file)
 
 if __name__ == "__main__":
     main()

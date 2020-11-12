@@ -60,7 +60,7 @@ def main():
 
 
 def classify_ew_dichte():
-    print 'hallo'
+    print('hallo')
     folder = r'E:\GGR\Berlin Dichte\30 Gis\31 gisserver_backup\tiffs'
     path = os.path.join(folder, 'ew_ha_raster.tiff')
 
@@ -86,7 +86,7 @@ def classify_ew_dichte():
     ra = XRecArray.fromarrays((bins[1:], verteilung_berlin, verteilung_umland),
                               names=('dichte', 'berlin', 'umland'))
     for row in ra:
-        print row.dichte, ',', row.berlin, ',', row.umland
+        print( row.dichte, ',', row.berlin, ',', row.umland)
 
 
 if __name__ == '__main__':

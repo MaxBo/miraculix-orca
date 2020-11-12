@@ -217,7 +217,7 @@ class GTFS(object):
 
             except StopIteration:
                 self._write_shapes()
-                if self.debug: print 'file completely read'
+                if self.debug: print( 'file completely read')
 
             #except:
             #   if self.debug: print 'error in write_gtf'
@@ -356,7 +356,7 @@ def main():
     v = KNOTEN('$KNOTEN:NR;STEUERUNGSTYP;XKOORD;YKOORD;ZWERT1;HST-KAT;OSM_NODE_ID')
     v.add_row(line)
     row = v.get_row(408)
-    print row
+    print(row)
 
 if __name__ == '__main__':
     main()

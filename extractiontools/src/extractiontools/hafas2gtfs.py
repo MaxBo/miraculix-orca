@@ -49,7 +49,7 @@ class Hafas2GTFS(DBApp):
         sql = 'show search_path ;'
         cur.execute(sql)
         rows = cur.fetchall()
-        print rows
+        print(rows)
 
     def fill_gtfs_stops(self):
         """
