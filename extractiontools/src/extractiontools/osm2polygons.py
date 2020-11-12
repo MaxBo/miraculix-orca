@@ -3,17 +3,17 @@
 
 from argparse import ArgumentParser
 
-from extractiontools.connection import Connection, Login, DBApp
+from extractiontools.connection import Connection, Login
+from extractiontools.ausschnitt import Extract
 
 
-class CreatePolygons(DBApp):
+class CreatePolygons(Extract):
     """"""
 
-    def __init__(self, login, **kwargs):
+    def __init__(self, destination_db, **kwargs):
         """"""
-        super().__init__(**kwargs)
+        super().__init__(destination_db=destination_db, **kwargs)
         self.check_platform()
-        self.login = login
 
     def create_poly_and_multipolygons(self, schema='osm'):
         """

@@ -7,14 +7,13 @@ from typing import Dict
 import sys
 import os
 import subprocess
-import orca
 from extractiontools.connection import Login, Connection
 from extractiontools.ausschnitt import Extract
 
 
 class Copy2FGDB(Extract):
     def __init__(self,
-                 login: Login,
+                 destination_db,
                  layers: Dict[str, str],
                  gdbname: str,
                  schema: str=None,
@@ -22,11 +21,7 @@ class Copy2FGDB(Extract):
                  ):
 
         """"""
-        self.logger = logger or orca.logger
-        self.check_platform()
-        self.login = self.foreign_login = login
-        self.destination_db = login.db
-        self.target_srid = self.get_target_srid_from_dest_db()
+        super().__init__(destination_db, logger=logger)
         self.layers = layers
         self.gdbname = gdbname
         self.schema = schema
@@ -74,7 +69,7 @@ class Copy2FGDB(Extract):
                               schema=schema,
                               dest_schema=dest_schema,
                               )
-        logger.info(full_cmd)
+        self.logger.info(full_cmd)
         ret = subprocess.call(full_cmd, shell=self.SHELL)
         if ret:
             raise IOError('Layer {layer} could not be copied to FGDB'.format(layer=layer))

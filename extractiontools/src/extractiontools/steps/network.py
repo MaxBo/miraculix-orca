@@ -70,7 +70,7 @@ def extract_stops(database: str):
     """
     extract Stops from master-DB
     """
-    scrape = ScrapeStops(db=database, logger=orca.logger)
+    scrape = ScrapeStops(database, logger=orca.logger)
     scrape.get_target_boundary_from_dest_db()
     scrape.extract()
 
@@ -81,7 +81,7 @@ def scrape_stops(database: str):
     """
     Scrape Stops from DB
     """
-    scrape = ScrapeStops(db=database, logger=orca.logger)
+    scrape = ScrapeStops(destination_db=database, logger=orca.logger)
     scrape.get_target_boundary_from_dest_db()
     scrape.scrape()
 
@@ -108,7 +108,7 @@ def scrape_timetables(database: str,
     """
     Scrape Stops from DB
     """
-    scrape = ScrapeTimetable(db=database,
+    scrape = ScrapeTimetable(destination_db=database,
                              date=date_timetable,
                              recreate_tables=recreate_timetable_tables)
     scrape.get_target_boundary_from_dest_db()
@@ -170,10 +170,8 @@ def otp_networks() -> Dict[str, str]:
 def copy_network_to_pbf(database: str,
                         otp_networks: Dict[str, str]):
     """copy the osm networkdata to a pbf file"""
-    login = copy(default_login)
-    login.db = database
     for network_schema, subfolder_pbf in otp_networks.items():
-        copy2pbf = CopyNetwork2Pbf(login=login,
+        copy2pbf = CopyNetwork2Pbf(database,
                                    network_schema=network_schema,
                                    subfolder_pbf=subfolder_pbf,
                                    logger=orca.logger)
@@ -185,10 +183,8 @@ def copy_network_to_pbf(database: str,
 def copy_network_to_pbf_and_xml(database: str,
                                 otp_networks: Dict[str, str]):
     """copy the osm networkdata to a pbf and .xml.bz file"""
-    login = copy(default_login)
-    login.db = database
     for network_schema, subfolder_pbf in otp_networks.items():
-        copy2pbf = CopyNetwork2Pbf(login=login,
+        copy2pbf = CopyNetwork2Pbf(database,
                                    network_schema=network_schema,
                                    subfolder_pbf=subfolder_pbf,
                                    as_xml=True,
@@ -201,10 +197,8 @@ def copy_network_to_pbf_and_xml(database: str,
 def copy_tagged_network_to_pbf_and_xml(database: str,
                                        otp_networks: Dict[str, str]):
     """copy the osm networkdata to a pbf and .xml.bz file"""
-    login = copy(default_login)
-    login.db = database
     for network_schema, subfolder_pbf in otp_networks.items():
-        copy2pbf = CopyNetwork2PbfTagged(login=login,
+        copy2pbf = CopyNetwork2PbfTagged(database,
                                          network_schema=network_schema,
                                          subfolder_pbf=subfolder_pbf,
                                          as_xml=True, logger=orca.logger)
@@ -320,9 +314,7 @@ def gdbname(database) -> str:
 def copy_network_to_fgdb(database: str,
                          network_layers: Dict[str, str]):
     """copy network to a file-gdb"""
-    login = copy(default_login)
-    login.db = database
-    copy2fgdb = Copy2FGDB(login=login,
+    copy2fgdb = Copy2FGDB(database,
                           layers=network_layers,
                           gdbname='network_car.gdb',
                           schema='network', logger=orca.logger)
@@ -334,9 +326,7 @@ def copy_network_to_fgdb(database: str,
 def copy_network_fr_to_fgdb(database: str,
                             network_fr_layers: Dict[str, str]):
     """copy network to a file-gdb"""
-    login = copy(default_login)
-    login.db = database
-    copy2fgdb = Copy2FGDB(login=login, layers=network_fr_layers,
+    copy2fgdb = Copy2FGDB(database, layers=network_fr_layers,
                           gdbname='network_fr.gdb',
                           schema='network_fr', logger=orca.logger)
     copy2fgdb.copy_layers()

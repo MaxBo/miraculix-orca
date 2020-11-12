@@ -11,7 +11,8 @@ from extractiontools.connection import Connection, DBApp
 
 class Hafas2GTFS(DBApp):
     def __init__(self, schema='schleswig_flensburg',
-                 day=25, month=11, year=2014):
+                 day=25, month=11, year=2014, **kwargs):
+        super().__init__(**kwargs)
         self.schema = schema
         self.today = datetime.datetime(year, month, day)
 
@@ -388,7 +389,7 @@ WHERE departure_time IS NULL;
                 fn = os.path.join(path, '{tn}.txt'.format(tn=table))
                 with open(fn, 'w') as f:
                     sql = self.conn.copy_sql.format(tn=tn, fn=fn)
-                    logger.info(sql)
+                    self.logger.info(sql)
                     cur.copy_expert(sql, f)
 
             sql = '''RESET CLIENT_ENCODING;'''

@@ -91,7 +91,7 @@ def zensus2raster(database: str, subfolder_tiffs: str):
     """
     create views for zensus data on raster grid
     """
-    z2r = Zensus2Raster(destination_db=database, subfolder=subfolder_tiffs,
+    z2r = Zensus2Raster(db=database, subfolder=subfolder_tiffs,
                         logger=orca.logger)
     z2r.run()
 

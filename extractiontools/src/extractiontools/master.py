@@ -30,7 +30,8 @@ class ScriptRunner(DBApp):
     """
     Master Class to run the different scripts
     """
-    def __init__(self, options):
+    def __init__(self, options, **kwargs):
+        super().__init__(**kwargs)
         self.options = options
         self.set_pg_path()
 
@@ -175,7 +176,7 @@ script {name} finished at {time} with returncode {ret}'''
                     params = ''
                 command = cmd.format(scriptname=row.scriptname,
                                      params=params)
-                logger.info(msg_start.format(name=row.scriptname,
+                self.logger.info(msg_start.format(name=row.scriptname,
                                              params=row.parameter,
                                              time=starttime,
                                              command=command))
@@ -199,7 +200,7 @@ script {name} finished at {time} with returncode {ret}'''
 
                 self.conn.commit()
 
-                logger.info(msg_end.format(name=row.scriptname,
+                self.logger.info(msg_end.format(name=row.scriptname,
                                            time=endtime,
                                            ret=ret))
 

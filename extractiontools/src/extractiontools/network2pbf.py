@@ -15,18 +15,16 @@ class CopyNetwork2Pbf(DBApp):
     """
 
     def __init__(self,
-                 login: Login,
+                 database: str,
                  as_xml: bool = False,
                  network_schema: str = 'network_fr',
                  subfolder_pbf: str = 'pbf',
                  srid: int = 4326,
                  **kwargs):
         """"""
-        super().__init__(**kwargs)
-        self.check_platform()
-        self.login = login
+        super().__init__(schema='osm84', **kwargs)
+        self.set_login(database=database)
         self.as_xml = as_xml
-        self.schema = 'osm84'
         self.network = network_schema
         self.subfolder = subfolder_pbf
         self.srid = srid

@@ -11,7 +11,7 @@ from psycopg2.sql import Identifier, Literal, SQL
 from psycopg2 import errors
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from copy import deepcopy
-from orca import logger as orcalogger
+import logging
 
 from .connection import Connection, DBApp, Login
 
@@ -56,17 +56,16 @@ class Extract(DBApp):
     role = 'group_osm'
 
     def __init__(self,
-                 destination_db: str='extract',
+                 destination_db,
                  target_srid: int=None,
                  temp: str=None,
                  foreign_server: str='foreign_server',
-                 login: Login=None,
                  foreign_login: Login=None,
                  tables: dict={},
                  logger=None,
                  **options):
         self.srid = 4326
-        self.logger = logger or orcalogger
+        self.logger = logger or logging.getLogger(__name__)
         self.temp = temp or f'temp{round(time.time() * 100)}'
         self.foreign_server = foreign_server
         self.source_db = options.get('source_db', 'europe')
@@ -74,15 +73,7 @@ class Extract(DBApp):
         self.tables = tables
         self.tables2cluster = []
         self.check_platform()
-        if login:
-            self.login = login
-        else:
-            self.set_login(
-                os.environ.get('DB_HOST', 'localhost'),
-                os.environ.get('DB_PORT', 5432),
-                os.environ.get('DB_USER'),
-                password=os.environ.get('DB_PASS', '')
-            )
+        self.set_login(database=self.destination_db)
         self.foreign_login = foreign_login or Login(
             host=os.environ.get('FOREIGN_HOST', 'localhost'),
             port=os.environ.get('FOREIGN_PORT', 5432),
@@ -92,20 +83,6 @@ class Extract(DBApp):
         )
         self.target_srid = (target_srid or self.get_target_srid_from_dest_db()
                             or 25832)
-
-    def set_login(self, host, port, user, password=None, **kwargs):
-        """
-        set login information for source and destination database
-        to self.login0 and self.login1
-
-        Parameters
-        ----------
-        host : str
-        port : int
-        user : str
-        password : str, optional
-        """
-        self.login = Login(host, port, user, password, db=self.destination_db)
 
     def execute_query(self, sql):
         """

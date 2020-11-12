@@ -14,8 +14,7 @@ from typing import Union
 
 from types import MethodType
 import os
-
-from orca import logger as orcalogger
+import logging
 
 
 class Login(object):
@@ -159,16 +158,20 @@ class DBApp(object):
         """
         """
         self.schema = schema
-        self.logger = logger or orcalogger
+        self.logger = logger or logging.getLogger(__name__)
         self.conn = conn
         self.conn1 = conn
         self.conn2 = conn
 
-    def set_db_user(self, login):
-        """
-        set login user
-        """
-        self.login = login
+    def set_login(self, host: str=None, port: int=None, user: str=None,
+                  password: str=None, database: str=None):
+        self.login = Login(
+            host or os.environ.get('DB_HOST', 'localhost'),
+            port or os.environ.get('DB_PORT', 5432),
+            user or os.environ.get('DB_USER', 'postgres'),
+            password or os.environ.get('DB_PASS', ''),
+            database
+        )
 
     def check_platform(self):
         """

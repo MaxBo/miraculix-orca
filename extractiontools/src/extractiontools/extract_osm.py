@@ -3,7 +3,7 @@
 
 from argparse import ArgumentParser
 
-from extractiontools.ausschnitt import Extract, BBox
+from extractiontools.ausschnitt import Extract
 
 
 class ExtractOSM(Extract):
@@ -68,11 +68,11 @@ AND NOT EXISTS (SELECT 1 FROM {temp}.relations tr2 WHERE tr2.id = r.id);
         cur = self.conn0.cursor()
         n_inserted = 1
         while n_inserted:
-            logger.info(sql)
+            self.logger.info(sql)
             cur.execute(sql)
             msg = cur.statusmessage
             n_inserted = int(msg.split(' ')[1])
-            logger.info('INSERT relation of relations: %s' % cur.statusmessage)
+            self.logger.info('INSERT relation of relations: %s' % cur.statusmessage)
 
         sql = """
 -- INSERT Relation members
