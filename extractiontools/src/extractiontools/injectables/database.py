@@ -7,8 +7,8 @@ from orcadjango.decorators import group
 @group('Project')
 @orca.injectable()
 def database() -> str:
-    """The name of the project and the database"""
-    return 'myproject'
+    """The name of the database"""
+    return ''
 
 
 @group('Project')
@@ -24,7 +24,7 @@ def bbox_dict() -> Dict[str, float]:
 @group('Project')
 @orca.injectable()
 def target_srid() -> int:
-    """The EPSG-Code of the geodata zo be created"""
+    """The EPSG-Code of the geodata to be created"""
     return 25832
 
 
