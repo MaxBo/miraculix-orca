@@ -1,5 +1,5 @@
 from typing import List, Dict
-import ogr
+from osgeo.gdal import ogr
 
 import orca
 from orcadjango.decorators import group
