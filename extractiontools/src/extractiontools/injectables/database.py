@@ -1,17 +1,18 @@
 from typing import List, Dict
+import ogr
 
 import orca
 from orcadjango.decorators import group
 
 
-@group('Project')
+@group('(1) Project')
 @orca.injectable()
 def database() -> str:
     """The name of the database"""
     return ''
 
 
-@group('Project')
+@group('(1) Project')
 @orca.injectable()
 def bbox_dict() -> Dict[str, float]:
     """The Bounding-Box of the Project"""
@@ -21,7 +22,22 @@ def bbox_dict() -> Dict[str, float]:
             'top': 54.6}
 
 
-@group('Project')
+@group('(1) Project')
+@orca.injectable()
+def project_area() -> ogr.Geometry:
+    """The area of the project NOT USED YET, FOR TESTING PURPOSES ONLY"""
+    ring = ogr.Geometry(ogr.wkbLinearRing)
+    ring.AddPoint(9.0, 54.6)
+    ring.AddPoint(9.1, 54.6)
+    ring.AddPoint(9.1, 54.5)
+    ring.AddPoint(9.0, 54.5)
+    ring.AddPoint(9.0, 54.6)
+    geom = ogr.Geometry(ogr.wkbPolygon)
+    geom.AddGeometry(ring)
+    return geom
+
+
+@group('(1) Project')
 @orca.injectable()
 def target_srid() -> int:
     """The EPSG-Code of the geodata to be created"""
