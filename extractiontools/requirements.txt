@@ -6,4 +6,5 @@ django>=2
 django-bootstrap4
 requests
 lxml
-gdal
+ogr
+osr
