@@ -383,8 +383,8 @@ FROM (SELECT catalog_name, schema_name
         self.logger.info('copy schema {schema} from {db0} to {db1}'.format(
             schema=schema, db0=self.foreign_login.db, db1=self.login.db))
 
-        self.logger.info('login_source: %s' % self.foreign_login)
-        self.logger.info('login_dest: %s' % self.login)
+        #self.logger.info('login_source: %s' % self.foreign_login)
+        #self.logger.info('login_dest: %s' % self.login)
 
         pg_dump_cmd = ' '.join([
             '"{cmd}"'.format(cmd=pg_dump),
