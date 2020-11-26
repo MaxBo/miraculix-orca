@@ -1,9 +1,29 @@
 from typing import List, Dict
 import ogr
 import orca
+import os
+import re
 
+from extractiontools.connection import Login, Connection
 from orcadjango.decorators import meta
 
+def get_foreign_tables(database, schema):
+    login = Login(
+        host=os.environ.get('FOREIGN_HOST', 'localhost'),
+        port=os.environ.get('FOREIGN_PORT', 5432),
+        user=os.environ.get('FOREIGN_USER'),
+        password=os.environ.get('FOREIGN_PASS', ''),
+        db=database
+    )
+    sql = f"""
+    SELECT * FROM information_schema.tables
+    WHERE table_schema = '{schema}'
+    """
+    with Connection(login=login) as conn:
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+    return sorted([row.table_name for row in rows])
 
 @meta(group='(1) Project')
 @orca.injectable()
@@ -51,9 +71,15 @@ def source_db() -> str:
     return 'europe'
 
 
-@meta(group='Tables', hidden=True)
+@meta(hidden=True)
 @orca.injectable()
-def verwaltungsgrenzen_tables_choices() -> List[str]:
+def verwaltungsgrenzen_tables_choices(source_db) -> List[str]:
+    return get_foreign_tables(source_db, 'verwaltungsgrenzen')
+
+
+@meta(group='Tables', choices=verwaltungsgrenzen_tables_choices)
+@orca.injectable()
+def verwaltungsgrenzen_tables() -> List[str]:
     """A list of tables in the schema `verwaltungsgrenzen` to copy"""
     tables = ['gem_2018_12',
               'vwg_2018_12',
@@ -64,20 +90,30 @@ def verwaltungsgrenzen_tables_choices() -> List[str]:
     return tables
 
 
-@meta(group='Tables', choices=verwaltungsgrenzen_tables_choices)
+@meta(hidden=True)
 @orca.injectable()
-def verwaltungsgrenzen_tables() -> List[str]:
-    return []
+def gmes_choices(source_db) -> List[str]:
+    tables = get_foreign_tables(source_db, 'landuse')
+    regex = 'ua[0-9]{4}$'
+    return [t for t in tables if re.match(regex, t)]
 
 
-@meta(group='Tables')
+@meta(group='Tables', choices=gmes_choices)
 @orca.injectable()
 def gmes() -> List[str]:
     """The Urban Atlas tables from the schema `landuse` to copy"""
     return ['ua2012']
 
 
-@meta(group='Tables')
+@meta(hidden=True)
+@orca.injectable()
+def corine_choices(source_db) -> List[str]:
+    tables = get_foreign_tables(source_db, 'landuse')
+    regex = 'clc[0-9]{2}$'
+    return [t for t in tables if re.match(regex, t)]
+
+
+@meta(group='Tables', choices=corine_choices)
 @orca.injectable()
 def corine() -> List[str]:
     """The Corine Landcover tables from the schema `landuse` to copy"""

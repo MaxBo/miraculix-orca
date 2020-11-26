@@ -62,13 +62,14 @@ class Extract(DBApp):
                  foreign_server: str='foreign_server',
                  foreign_login: Login=None,
                  tables: dict={},
+                 source_db: str=None,
                  logger=None,
                  **options):
         self.srid = 4326
         self.logger = logger or logging.getLogger(__name__)
         self.temp = temp or f'temp{round(time.time() * 100)}'
         self.foreign_server = foreign_server
-        self.source_db = options.get('source_db', 'europe')
+        self.source_db = source_db or os.environ.get('FOREIGN_NAME', 'europe')
         self.destination_db = destination_db
         self.tables = tables
         self.tables2cluster = []
@@ -79,7 +80,7 @@ class Extract(DBApp):
             port=os.environ.get('FOREIGN_PORT', 5432),
             user=os.environ.get('FOREIGN_USER'),
             password=os.environ.get('FOREIGN_PASS', ''),
-            db=os.environ.get('FOREIGN_NAME', 'europe')
+            db=self.source_db
         )
         self.target_srid = (target_srid or self.get_target_srid_from_dest_db()
                             or 25832)
