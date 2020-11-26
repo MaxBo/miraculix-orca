@@ -2,7 +2,7 @@
 
 from typing import List, Dict
 import orca
-from orcadjango.decorators import group
+from orcadjango.decorators import meta
 from extractiontools.extract_osm import ExtractOSM
 from extractiontools.osm2polygons import CreatePolygons
 from extractiontools.extract_landuse import ExtractLanduse
@@ -20,7 +20,7 @@ __parent_modules__ = [
 ]
 
 
-@group('(2) Extract Data', order=1)
+@meta(group='(2) Extract Data', order=1, required='create_db')
 @orca.step()
 def extract_osm(source_db: str, database: str, target_srid: str):
     """
@@ -32,7 +32,7 @@ def extract_osm(source_db: str, database: str, target_srid: str):
     extract.extract()
 
 
-@group('(2) Extract Data', order=2)
+@meta(group='(2) Extract Data', order=2, required=extract_osm)
 @orca.step()
 def create_polygons_from_osm(database: str):
     """
@@ -43,7 +43,7 @@ def create_polygons_from_osm(database: str):
     copy2fgdb.create_poly_and_multipolygons()
 
 
-@group('(2) Extract Data', order=3)
+@meta(group='(2) Extract Data', order=3, required='create_db')
 @orca.step()
 def extract_landuse(source_db: str, database: str, gmes: List[str],
                     corine: List[str], target_srid: str):
@@ -57,7 +57,7 @@ def extract_landuse(source_db: str, database: str, gmes: List[str],
     extract.extract()
 
 
-@group('(2) Extract Data', order=10)
+@meta(group='(2) Extract Data', order=10, required='create_db')
 @orca.step()
 def extract_verwaltungsgrenzen(source_db: str, database: str,
                                verwaltungsgrenzen_tables: List[str],
@@ -73,7 +73,7 @@ def extract_verwaltungsgrenzen(source_db: str, database: str,
     extract.extract()
 
 
-@group('(2) Extract Data', order=4)
+@meta(group='(2) Extract Data', order=4, required='create_db')
 @orca.step()
 def extract_laea_raster(source_db: str, database: str, target_srid: str):
     """
@@ -85,7 +85,7 @@ def extract_laea_raster(source_db: str, database: str, target_srid: str):
     extract.extract()
 
 
-@group('(2) Extract Data', order=5)
+@meta(group='(2) Extract Data', order=5)
 @orca.step()
 def zensus2raster(database: str, subfolder_tiffs: str):
     """
@@ -96,7 +96,7 @@ def zensus2raster(database: str, subfolder_tiffs: str):
     z2r.run()
 
 
-@group('Export')
+@meta(group='Export')
 @orca.injectable()
 def osm_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
@@ -114,10 +114,10 @@ def osm_layers() -> Dict[str, str]:
     return layers
 
 
-@group('Export')
+@meta(group='Export')
 @orca.step()
 def copy_osm_to_fgdb(database: str,
-                     osm_layers: Dict[str, str]):
+                     osm_layers: Dict[str, str], required=extract_osm):
     """
     create osm layers and copy osm stuff to a file-gdb
     attention: drops cascadingly the depending views
@@ -132,10 +132,10 @@ def copy_osm_to_fgdb(database: str,
     copy2fgdb.copy_layers()
 
 
-@group('Export')
+@meta(group='Export')
 @orca.step()
 def copy_to_fgdb(database: str,
-                 osm_layers: Dict[str, str]):
+                 osm_layers: Dict[str, str], required=extract_osm):
     """copy osm stuff to a file-gdb"""
 
     copy2fgdb = CopyOSM2FGDB(destination_db=database,

@@ -1,5 +1,5 @@
 import orca
-from orcadjango.decorators import group
+from orcadjango.decorators import meta
 from extractiontools.master import BBox
 from extractiontools.ausschnitt import Extract
 from extractiontools.drop_db import DropDatabase
@@ -9,7 +9,7 @@ __parent_modules__ = [
 ]
 
 
-@group('(1) Project', order=1)
+@meta(group='(1) Project', order=1)
 @orca.step()
 def create_db(target_srid: str, bbox_dict: dict, database: str):
     """
@@ -26,7 +26,7 @@ def create_db(target_srid: str, bbox_dict: dict, database: str):
     #extract.extract()
 
 
-@group('(1) Project', order=1)
+@meta(group='(1) Project', order=1)
 @orca.step()
 def drop_db(database: str):
     """

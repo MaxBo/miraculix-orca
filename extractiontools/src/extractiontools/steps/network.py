@@ -4,7 +4,7 @@ from typing import Dict
 import os
 import orca
 import copy
-from orcadjango.decorators import group
+from orcadjango.decorators import meta
 from extractiontools.connection import Login
 from extractiontools.build_network_car import BuildNetwork
 from extractiontools.build_network_walk_cycle import BuildNetworkWalkCycle
@@ -22,7 +22,7 @@ default_login = Login(
     password=os.environ.get('DB_PASS', '')
 )
 
-@group('Networks')
+@meta(group='Networks')
 @orca.step()
 def build_network_car(database: str,
                       chunksize: int,
@@ -42,7 +42,7 @@ def build_network_car(database: str,
     build_network.build()
 
 
-@group('Networks')
+@meta(group='Networks')
 @orca.step()
 def build_network_fr(database: str,
                      chunksize: int,
@@ -64,7 +64,7 @@ def build_network_fr(database: str,
     build_network.build()
 
 
-@group('Public Transport', order=1)
+@meta(group='Public Transport', order=1)
 @orca.step()
 def extract_stops(database: str):
     """
@@ -75,7 +75,7 @@ def extract_stops(database: str):
     scrape.extract()
 
 
-@group('Public Transport', order=2)
+@meta(group='Public Transport', order=2)
 @orca.step()
 def scrape_stops(database: str):
     """
@@ -86,21 +86,21 @@ def scrape_stops(database: str):
     scrape.scrape()
 
 
-@group('Public Transport')
+@meta(group='Public Transport')
 @orca.injectable()
 def date_timetable() -> str:
     """date for the timetable"""
     return '02.05.2019'
 
 
-@group('Public Transport')
+@meta(group='Public Transport')
 @orca.injectable()
 def recreate_timetable_tables() -> bool:
     """recreate tables for timetables"""
     return False
 
 
-@group('Public Transport', order=3)
+@meta(group='Public Transport', order=3)
 @orca.step()
 def scrape_timetables(database: str,
                       date_timetable: str,
@@ -115,21 +115,21 @@ def scrape_timetables(database: str,
     scrape.scrape()
 
 
-@group('Public Transport')
+@meta(group='Public Transport')
 @orca.injectable()
 def gtfs_only_one_day() -> bool:
     """gtfs valid only on the given day?"""
     return False
 
 
-@group('Public Transport')
+@meta(group='Public Transport')
 @orca.injectable()
 def tbl_kreise() -> str:
     """table with the county geometries"""
     return 'verwaltungsgrenzen.krs_2018_12'
 
 
-@group('Public Transport', order=4)
+@meta(group='Public Transport', order=4)
 @orca.step()
 def timetables_to_gtfs(database: str,
                        date_timetable: str,
@@ -152,7 +152,7 @@ def timetables_to_gtfs(database: str,
     hafas.export_gtfs()
 
 
-@group('OTP')
+@meta(group='OTP')
 @orca.injectable()
 def otp_networks() -> Dict[str, str]:
     """
@@ -165,7 +165,7 @@ def otp_networks() -> Dict[str, str]:
             }
 
 
-@group('Export')
+@meta(group='Export')
 @orca.step()
 def copy_network_to_pbf(database: str,
                         otp_networks: Dict[str, str]):
@@ -178,7 +178,7 @@ def copy_network_to_pbf(database: str,
         copy2pbf.copy()
 
 
-@group('Export')
+@meta(group='Export')
 @orca.step()
 def copy_network_to_pbf_and_xml(database: str,
                                 otp_networks: Dict[str, str]):
@@ -192,7 +192,7 @@ def copy_network_to_pbf_and_xml(database: str,
         copy2pbf.copy()
 
 
-@group('Export')
+@meta(group='Export')
 @orca.step()
 def copy_tagged_network_to_pbf_and_xml(database: str,
                                        otp_networks: Dict[str, str]):
@@ -205,7 +205,7 @@ def copy_tagged_network_to_pbf_and_xml(database: str,
         copy2pbf.copy()
 
 
-@group('OTP')
+@meta(group='OTP')
 @orca.injectable()
 def otp_ports() -> Dict[str, int]:
     """A dict with the OTP Ports"""
@@ -213,14 +213,14 @@ def otp_ports() -> Dict[str, int]:
             'secure_port': 7788, }
 
 
-@group('OTP')
+@meta(group='OTP')
 @orca.injectable()
 def otp_graph_subfolder() -> str:
     """subfolder with the otp graphs"""
     return 'otp_graphs'
 
 
-@group('OTP')
+@meta(group='OTP')
 @orca.injectable()
 def otp_routers(database) -> Dict[str, str]:
     """subfolder with the otp graphs"""
@@ -230,14 +230,14 @@ def otp_routers(database) -> Dict[str, str]:
     return routers
 
 
-@group('OTP')
+@meta(group='OTP')
 @orca.injectable()
 def start_otp_analyst() -> bool:
     """start otp router with analyst"""
     return True
 
 
-@group('OTP', order=2)
+@meta(group='OTP', order=2)
 @orca.step()
 def start_otp_router(otp_ports: Dict[str, int],
                      base_path: str,
@@ -254,7 +254,7 @@ def start_otp_router(otp_ports: Dict[str, int],
     otp_server.start()
 
 
-@group('OTP', order=4)
+@meta(group='OTP', order=4)
 @orca.step()
 def stop_otp_router(otp_ports: Dict[str, int]):
     """Stop the running otp routers on the ports giben in `otp_ports`"""
@@ -262,7 +262,7 @@ def stop_otp_router(otp_ports: Dict[str, int]):
     otp_server.stop()
 
 
-@group('OTP', order=1)
+@meta(group='OTP', order=1)
 @orca.step()
 def create_router(otp_routers: Dict[str, str],
                   database: str,
@@ -279,7 +279,7 @@ def create_router(otp_routers: Dict[str, str],
         otp_server.create_router(build_folder, target_folder)
 
 
-@group('Network')
+@meta(group='Network')
 @orca.injectable()
 def network_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
@@ -292,7 +292,7 @@ def network_layers() -> Dict[str, str]:
     return layers
 
 
-@group('Network')
+@meta(group='Network')
 @orca.injectable()
 def network_fr_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
@@ -302,14 +302,14 @@ def network_fr_layers() -> Dict[str, str]:
     return layers
 
 
-@group('Export')
+@meta(group='Export')
 @orca.injectable()
 def gdbname(database) -> str:
     """the name of the File Geodatabase"""
     return f'{database}.gdb'
 
 
-@group('Export')
+@meta(group='Export')
 @orca.step()
 def copy_network_to_fgdb(database: str,
                          network_layers: Dict[str, str]):
@@ -321,7 +321,7 @@ def copy_network_to_fgdb(database: str,
     copy2fgdb.copy_layers()
 
 
-@group('Export')
+@meta(group='Export')
 @orca.step()
 def copy_network_fr_to_fgdb(database: str,
                             network_fr_layers: Dict[str, str]):
