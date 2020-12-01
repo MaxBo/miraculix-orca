@@ -45,7 +45,7 @@ class Copy2FGDB(Extract):
 
         # get srid
         if self.target_srid is None:
-            srid = self.get_target_srid_from_dest_db()
+            srid = self.get_target_srid()
             srid_option = '-a_srs EPSG:{srid}'.format(srid=srid)
         else:
             srid_option = '-t_srs EPSG:{srid}'.format(

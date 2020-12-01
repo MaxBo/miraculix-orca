@@ -7,7 +7,8 @@ import sys
 import os
 import subprocess
 import time
-from psycopg2.sql import Identifier, Literal, SQL
+import ogr
+from psycopg2.sql import Identifier, SQL
 from psycopg2 import errors
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from copy import deepcopy
@@ -64,6 +65,8 @@ class Extract(DBApp):
                  tables: dict={},
                  source_db: str=None,
                  logger=None,
+                 boundary: ogr.Geometry=None,
+                 boundary_name: str='bbox',
                  **options):
         self.srid = 4326
         self.logger = logger or logging.getLogger(__name__)
@@ -74,6 +77,8 @@ class Extract(DBApp):
         self.tables = tables
         self.tables2cluster = []
         self.check_platform()
+        self.boundary = boundary
+        self.boundary_name = boundary_name
         self.set_login(database=self.destination_db)
         self.foreign_login = foreign_login or Login(
             host=os.environ.get('FOREIGN_HOST', 'localhost'),
@@ -82,7 +87,7 @@ class Extract(DBApp):
             password=os.environ.get('FOREIGN_PASS', ''),
             db=self.source_db
         )
-        self.target_srid = (target_srid or self.get_target_srid_from_dest_db()
+        self.target_srid = (target_srid or self.get_target_srid()
                             or 25832)
 
     def execute_query(self, sql):
@@ -117,7 +122,11 @@ class Extract(DBApp):
                 self.set_session_authorization(self.conn0)
                 self.set_search_path('conn0')
                 self.create_temp_schema()
-                self.create_target_boundary()
+                if self.boundary:
+                    self.set_target_boundary(self.boundary, schema='meta',
+                                             name=self.boundary_name)
+                wkt = self.get_target_boundary()
+                self.create_foreign_boundary(wkt)
                 for tn, geom in self.tables.items():
                     self.extract_table(tn, geom)
                 self.conn0.commit()
@@ -235,32 +244,21 @@ DROP SCHEMA IF EXISTS {schema} CASCADE;
         """.format(schema=self.schema)
         self.run_query(sql, conn=self.conn1)
 
-    def set_target_boundary(self, bbox):
-        """
-        """
-        self.bbox = bbox
-        with Connection(login=self.login) as conn1:
-            self.create_target_boundary(schema='meta', conn=conn1)
-
-    def get_target_boundary_from_dest_db(self):
+    def get_target_boundary(self, name='bbox'):
         """
         get the target boundary from the destination database
         """
-        with Connection(login=self.login) as conn1:
-            cur = conn1.cursor()
-            sql = """
-SELECT
-    st_ymax(a.source_geom) AS top,
-    st_ymin(a.source_geom) AS bottom,
-    st_xmax(a.source_geom) AS right,
-    st_xmin(a.source_geom) AS left
-FROM meta.boundary a;
-"""
+        with Connection(login=self.login) as conn:
+            cur = conn.cursor()
+            sql = f"""
+            SELECT ST_AsText(source_geom) as wkt FROM meta.boundary
+            WHERE name='{name}';
+            """
             cur.execute(sql)
             row = cur.fetchone()
-            self.bbox = BBox(row.top, row.bottom, row.left, row.right)
+            return row.wkt
 
-    def get_target_srid_from_dest_db(self):
+    def get_target_srid(self):
         """
         get the target boundary from the destination database
 
@@ -269,8 +267,8 @@ FROM meta.boundary a;
         srid : int
         """
         try:
-            with Connection(login=self.login) as conn1:
-                cur = conn1.cursor()
+            with Connection(login=self.login) as conn:
+                cur = conn.cursor()
                 sql = """
     SELECT
         st_srid(a.geom) AS srid
@@ -283,32 +281,45 @@ FROM meta.boundary a;
             return
         return srid
 
-    def create_target_boundary(self, schema=None, conn=None):
+    def set_target_boundary(self, geom, name='bbox'):
         """
-        write target boundary into temp_schema
+        insert or replace geometry of entry with given name in boundary table
+        """
+        wkt = geom.ExportToWkt()
+        s_ref = geom.GetSpatialReference()
+        if s_ref:
+            srid = s_ref.GetAuthorityCode(None)
+            if srid != str(self.srid):
+                raise Exception('Provided geometry has wrong projection {srid}.'
+                                ' Projection should be {self.srid} instead!')
+        sql = '''
+INSERT INTO meta.boundary (name, source_geom)
+VALUES ('{name}', st_setsrid(ST_GeomFromText('{wkt}'), {srid}))
+ON CONFLICT (name) DO
+UPDATE SET source_geom=st_setsrid(ST_GeomFromText('{wkt}'), {srid});
+UPDATE meta.boundary SET geom = st_transform(source_geom, {target_srid});
+'''.format(wkt=wkt, srid=self.srid, name=name,
+           target_srid=self.target_srid)
+        with Connection(login=self.login) as conn:
+            self.run_query(sql, conn)
 
-        Parameters
-        ----------
-        top : float
-        bottom : float
-        left : float
-        right : float
+    def create_foreign_boundary(self, wkt, schema=None):
         """
-        bbox = self.bbox
+        write given wkt into boundary table in foreign db
+        """
         sql = '''
 DROP TABLE IF EXISTS {temp}.boundary;
 CREATE TABLE {temp}.boundary (id INTEGER PRIMARY KEY,
-                              source_geom geometry('POLYGON', {srid}),
-                              geom geometry('POLYGON', {target_srid}));
-INSERT INTO {temp}.boundary (id, source_geom)
-VALUES (1, st_setsrid(st_makebox2d(st_point({LEFT}, {TOP}), st_point({RIGHT}, {BOTTOM})), {srid}));
+                              source_geom geometry('MULTIPOLYGON', {srid}),
+                              geom geometry('MULTIPOLYGON', {target_srid}));
+INSERT INTO {temp}.boundary (name, source_geom)
+VALUES (1, st_setsrid(ST_GeomFromText('{wkt}'), {srid}));
 UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
 '''.format(temp=schema or self.temp,
-           LEFT=bbox.left, RIGHT=bbox.right,
-           TOP=bbox.top, BOTTOM=bbox.bottom,
-           srid=self.srid,
+           wkt=wkt, srid=self.srid, name=name,
            target_srid=self.target_srid)
-        self.run_query(sql, conn or self.conn0)
+        with Connection(login=self.login) as conn:
+            self.run_query(sql, conn)
 
     def set_pg_path(self):
         """"""
@@ -336,7 +347,13 @@ UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
             self.run_query(sql, conn=conn)
 
     def create_meta(self):
-        sql = 'CREATE SCHEMA meta;'
+        sql = '''
+        CREATE SCHEMA meta;
+        DROP TABLE IF EXISTS meta.boundary;
+        CREATE TABLE meta.boundary (name VARCHAR PRIMARY KEY,
+                                    source_geom geometry('MULTIPOLYGON', {srid}),
+                                    geom geometry('MULTIPOLYGON', {target_srid}));
+        '''.format(srid=self.srid, target_srid=self.target_srid)
         with Connection(login=self.login) as conn:
             self.run_query(sql, conn=conn)
 
@@ -831,6 +848,6 @@ if __name__ == '__main__':
                           target_srid=options.srid)
     extract.set_login(host=options.host,
                       port=options.port, user=options.user)
-    extract.set_target_boundary(bbox)
+    extract.add_target_boundary(bbox)
     extract.extract()
 

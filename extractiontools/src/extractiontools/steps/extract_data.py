@@ -10,6 +10,7 @@ from extractiontools.extract_verwaltungsgrenzen import ExtractVerwaltungsgrenzen
 from extractiontools.laea_raster import ExtractLAEA
 from extractiontools.zensus2raster import Zensus2Raster
 from extractiontools.copy_osm2fgdb import CopyOSM2FGDB
+import ogr
 
 import extractiontools.steps.create_db
 import extractiontools.steps.network
@@ -19,47 +20,17 @@ __parent_modules__ = [
     'extractiontools.steps.network',
 ]
 
-@meta(hidden=True)
-@orca.injectable()
-def area_choices() -> str:
-    return ['project_area', 'area_1', 'area_2']
-
-@meta(group='Areas', choices=area_choices)
-@orca.injectable()
-def osm_area() -> str:
-    """Area choice for extract_osm"""
-    return 'project_area'
-
-@meta(group='Areas', choices=area_choices)
-@orca.injectable()
-def landuse_area() -> str:
-    """Area choice for extract_landuse"""
-    return 'project_area'
-
-@meta(group='Areas', choices=area_choices)
-@orca.injectable()
-def vwg_area() -> str:
-    """Area choice for extract_verwaltungsgrenzen"""
-    return 'project_area'
-
-@meta(group='Areas', choices=area_choices)
-@orca.injectable()
-def laea_area() -> str:
-    """Area choice for extract_laea_raster"""
-    return 'project_area'
-
 
 @meta(group='(2) Extract Data', order=1, required='create_db')
 @orca.step()
 def extract_osm(source_db: str, database: str, target_srid: str,
-                osm_area: str):
+                project_area: ogr.Geometry):
     """
     extract osm data for the bbox
     """
-    area = orca.get_injectable(osm_area)
     extract = ExtractOSM(source_db=source_db, destination_db=database,
                          target_srid=target_srid, logger=orca.logger,
-                         area=area)
+                         boundary=project_area)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 
@@ -78,14 +49,14 @@ def create_polygons_from_osm(database: str):
 @meta(group='(2) Extract Data', order=3, required='create_db')
 @orca.step()
 def extract_landuse(source_db: str, database: str, gmes: List[str],
-                    corine: List[str], target_srid: str, landuse_area: str):
+                    corine: List[str], target_srid: str,
+                    project_area: ogr.Geometry):
     """
     extract landuse data for the bbox
     """
-    area = orca.get_injectable(landuse_area)
     extract = ExtractLanduse(source_db=source_db, destination_db=database,
                              gmes=gmes, corine=corine, target_srid=target_srid,
-                             logger=orca.logger, area=area)
+                             logger=orca.logger, boundary=project_area)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 
@@ -94,15 +65,15 @@ def extract_landuse(source_db: str, database: str, gmes: List[str],
 @orca.step()
 def extract_verwaltungsgrenzen(source_db: str, database: str,
                                verwaltungsgrenzen_tables: List[str],
-                               target_srid: str, vwg_area: str):
+                               target_srid: str, project_area: ogr.Geometry):
     """
     extract administrative boundaries for the bbox
     """
-    area = orca.get_injectable(vwg_area)
     tables = {f: 'geom' for f in verwaltungsgrenzen_tables}
     extract = ExtractVerwaltungsgrenzen(source_db=source_db,
                                         destination_db=database, tables=tables,
-                                        logger=orca.logger, area=area)
+                                        logger=orca.logger,
+                                        boundary=project_area)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 
@@ -110,13 +81,12 @@ def extract_verwaltungsgrenzen(source_db: str, database: str,
 @meta(group='(2) Extract Data', order=4, required='create_db')
 @orca.step()
 def extract_laea_raster(source_db: str, database: str, target_srid: str,
-                        laea_area: str):
+                        project_area: ogr.Geometry):
     """
     extract laea raster for the bbox
     """
-    area = orca.get_injectable(laea_area)
     extract = ExtractLAEA(source_db=source_db, destination_db=database,
-                          logger=orca.logger, area=area)
+                          logger=orca.logger, boundary=project_area)
     extract.get_target_boundary_from_dest_db()
     extract.extract()
 

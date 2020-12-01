@@ -72,7 +72,7 @@ class ScriptRunner(DBApp):
                               target_srid=options.srid,
                               source_db =options.source_db)
         extract.set_login(host=options.host, port=options.port, user=options.user)
-        extract.set_target_boundary(bbox)
+        extract.add_target_boundary(bbox)
         extract.recreate_db()
         extract.extract()
 
