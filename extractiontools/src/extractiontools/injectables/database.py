@@ -42,10 +42,10 @@ def bbox_dict() -> Dict[str, float]:
             'top': 54.6}
 
 
-@meta(group='(1) Project')
+@meta(group='Areas', order=1)
 @orca.injectable()
 def project_area() -> ogr.Geometry:
-    """The area of the project NOT USED YET, FOR TESTING PURPOSES ONLY"""
+    """The default area of the project"""
     ring = ogr.Geometry(ogr.wkbLinearRing)
     ring.AddPoint(9.0, 54.6)
     ring.AddPoint(9.1, 54.6)
@@ -56,6 +56,17 @@ def project_area() -> ogr.Geometry:
     geom.AddGeometry(ring)
     return geom
 
+@meta(group='Areas', order=2)
+@orca.injectable()
+def area_1() -> ogr.Geometry:
+    """Optional area assignable to extract data"""
+    return
+
+@meta(group='Areas', order=3)
+@orca.injectable()
+def area_2() -> ogr.Geometry:
+    """Optional area assignable to extract data"""
+    return
 
 @meta(group='(1) Project')
 @orca.injectable()
