@@ -122,8 +122,9 @@ class Extract(DBApp):
                 self.set_session_authorization(self.conn0)
                 self.set_search_path('conn0')
                 self.create_temp_schema()
+                self.conn0.commit()
                 if self.boundary:
-                    self.set_target_boundary(self.boundary, schema='meta',
+                    self.set_target_boundary(self.boundary,
                                              name=self.boundary_name)
                 wkt = self.get_target_boundary()
                 self.create_foreign_boundary(wkt)
@@ -312,13 +313,13 @@ DROP TABLE IF EXISTS {temp}.boundary;
 CREATE TABLE {temp}.boundary (id INTEGER PRIMARY KEY,
                               source_geom geometry('MULTIPOLYGON', {srid}),
                               geom geometry('MULTIPOLYGON', {target_srid}));
-INSERT INTO {temp}.boundary (name, source_geom)
+INSERT INTO {temp}.boundary (id, source_geom)
 VALUES (1, st_setsrid(ST_GeomFromText('{wkt}'), {srid}));
 UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
 '''.format(temp=schema or self.temp,
-           wkt=wkt, srid=self.srid, name=name,
+           wkt=wkt, srid=self.srid,
            target_srid=self.target_srid)
-        with Connection(login=self.login) as conn:
+        with Connection(login=self.foreign_login) as conn:
             self.run_query(sql, conn)
 
     def set_pg_path(self):

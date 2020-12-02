@@ -31,7 +31,6 @@ def extract_osm(source_db: str, database: str, target_srid: str,
     extract = ExtractOSM(source_db=source_db, destination_db=database,
                          target_srid=target_srid, logger=orca.logger,
                          boundary=project_area)
-    extract.get_target_boundary_from_dest_db()
     extract.extract()
 
 
@@ -42,7 +41,6 @@ def create_polygons_from_osm(database: str):
     extract osm data for the bbox
     """
     copy2fgdb = CreatePolygons(destination_db=database, logger=orca.logger)
-    copy2fgdb.get_target_boundary_from_dest_db()
     copy2fgdb.create_poly_and_multipolygons()
 
 
@@ -57,7 +55,6 @@ def extract_landuse(source_db: str, database: str, gmes: List[str],
     extract = ExtractLanduse(source_db=source_db, destination_db=database,
                              gmes=gmes, corine=corine, target_srid=target_srid,
                              logger=orca.logger, boundary=project_area)
-    extract.get_target_boundary_from_dest_db()
     extract.extract()
 
 
@@ -74,7 +71,6 @@ def extract_verwaltungsgrenzen(source_db: str, database: str,
                                         destination_db=database, tables=tables,
                                         logger=orca.logger,
                                         boundary=project_area)
-    extract.get_target_boundary_from_dest_db()
     extract.extract()
 
 
@@ -87,7 +83,6 @@ def extract_laea_raster(source_db: str, database: str, target_srid: str,
     """
     extract = ExtractLAEA(source_db=source_db, destination_db=database,
                           logger=orca.logger, boundary=project_area)
-    extract.get_target_boundary_from_dest_db()
     extract.extract()
 
 
