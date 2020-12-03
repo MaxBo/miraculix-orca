@@ -214,7 +214,6 @@ class DBApp(object):
         def execute(query):
             self.logger.info(query)
             cur.execute(query)
-            self.logger.info(cur.statusmessage)
 
         if split:
             query_string = sql.as_string(conn) if isinstance(sql, Composed) else sql
