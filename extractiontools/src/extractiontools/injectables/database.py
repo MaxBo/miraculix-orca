@@ -56,17 +56,6 @@ def project_area() -> ogr.Geometry:
     geom.AddGeometry(ring)
     return geom
 
-@meta(group='Areas', order=2)
-@orca.injectable()
-def area_1() -> ogr.Geometry:
-    """Optional area assignable to extract data"""
-    return
-
-@meta(group='Areas', order=3)
-@orca.injectable()
-def area_2() -> ogr.Geometry:
-    """Optional area assignable to extract data"""
-    return
 
 @meta(group='(1) Project')
 @orca.injectable()
