@@ -28,7 +28,7 @@ def create_db(target_srid: str, project_area: ogr.Geometry, database: str):
 @orca.step()
 def drop_db(database: str):
     """
-    drop the database if this is allowed and remove metadata
+    drop the database and its contents
     """
     extract = DropDatabase(destination_db=database, logger=orca.logger)
     extract.extract()

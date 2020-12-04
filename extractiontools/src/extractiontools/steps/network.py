@@ -22,7 +22,7 @@ default_login = Login(
     password=os.environ.get('DB_PASS', '')
 )
 
-@meta(group='Networks')
+@meta(group='(3) Networks', required='extract_osm')
 @orca.step()
 def build_network_car(database: str,
                       chunksize: int,
@@ -42,7 +42,7 @@ def build_network_car(database: str,
     build_network.build()
 
 
-@meta(group='Networks')
+@meta(group='(3) Networks', required='extract_osm')
 @orca.step()
 def build_network_fr(database: str,
                      chunksize: int,
@@ -64,25 +64,23 @@ def build_network_fr(database: str,
     build_network.build()
 
 
-@meta(group='Public Transport', order=1)
+@meta(group='Public Transport', order=1, required='create_db')
 @orca.step()
 def extract_stops(database: str):
     """
-    extract Stops from master-DB
+    extract public stops from database
     """
     scrape = ScrapeStops(database, logger=orca.logger)
-    scrape.get_target_boundary_from_dest_db()
     scrape.extract()
 
 
-@meta(group='Public Transport', order=2)
+@meta(group='Public Transport', order=2, required='create_db')
 @orca.step()
 def scrape_stops(database: str):
     """
-    Scrape Stops from DB
+    scrape public stops from Deutsche Bahn web interface
     """
     scrape = ScrapeStops(destination_db=database, logger=orca.logger)
-    scrape.get_target_boundary_from_dest_db()
     scrape.scrape()
 
 
@@ -100,18 +98,18 @@ def recreate_timetable_tables() -> bool:
     return False
 
 
-@meta(group='Public Transport', order=3)
+@meta(group='Public Transport', order=3,
+      required='scrape_stops or extract_stops')
 @orca.step()
 def scrape_timetables(database: str,
                       date_timetable: str,
                       recreate_timetable_tables: bool):
     """
-    Scrape Stops from DB
+    Scrape timetables from Deutsche Bahn
     """
     scrape = ScrapeTimetable(destination_db=database,
                              date=date_timetable,
                              recreate_tables=recreate_timetable_tables)
-    scrape.get_target_boundary_from_dest_db()
     scrape.scrape()
 
 
@@ -129,7 +127,7 @@ def tbl_kreise() -> str:
     return 'verwaltungsgrenzen.krs_2018_12'
 
 
-@meta(group='Public Transport', order=4)
+@meta(group='Public Transport', order=4, required=scrape_timetables)
 @orca.step()
 def timetables_to_gtfs(database: str,
                        date_timetable: str,
@@ -147,7 +145,6 @@ def timetables_to_gtfs(database: str,
                          subfolder=subfolder_otp,
                          tbl_kreise=tbl_kreise,
                          logger=orca.logger)
-    hafas.get_target_boundary_from_dest_db()
     hafas.convert()
     hafas.export_gtfs()
 
@@ -165,7 +162,7 @@ def otp_networks() -> Dict[str, str]:
             }
 
 
-@meta(group='Export')
+@meta(group='Export', required=[build_network_car, build_network_fr])
 @orca.step()
 def copy_network_to_pbf(database: str,
                         otp_networks: Dict[str, str]):
@@ -178,7 +175,7 @@ def copy_network_to_pbf(database: str,
         copy2pbf.copy()
 
 
-@meta(group='Export')
+@meta(group='Export', required=[build_network_car, build_network_fr])
 @orca.step()
 def copy_network_to_pbf_and_xml(database: str,
                                 otp_networks: Dict[str, str]):
@@ -192,7 +189,7 @@ def copy_network_to_pbf_and_xml(database: str,
         copy2pbf.copy()
 
 
-@meta(group='Export')
+@meta(group='Export', required=[build_network_car, build_network_fr])
 @orca.step()
 def copy_tagged_network_to_pbf_and_xml(database: str,
                                        otp_networks: Dict[str, str]):
@@ -309,7 +306,7 @@ def gdbname(database) -> str:
     return f'{database}.gdb'
 
 
-@meta(group='Export')
+@meta(group='Export', required=build_network_car)
 @orca.step()
 def copy_network_to_fgdb(database: str,
                          network_layers: Dict[str, str]):
@@ -321,7 +318,7 @@ def copy_network_to_fgdb(database: str,
     copy2fgdb.copy_layers()
 
 
-@meta(group='Export')
+@meta(group='Export', required=build_network_fr)
 @orca.step()
 def copy_network_fr_to_fgdb(database: str,
                             network_fr_layers: Dict[str, str]):

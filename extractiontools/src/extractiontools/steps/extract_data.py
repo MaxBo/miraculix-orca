@@ -90,7 +90,7 @@ def extract_laea_raster(source_db: str, database: str, target_srid: str,
 @orca.step()
 def zensus2raster(database: str, subfolder_tiffs: str):
     """
-    create views on the zensus data with a raster grid
+    create views on the zensus data in a raster grid
     """
     z2r = Zensus2Raster(db=database, subfolder=subfolder_tiffs,
                         logger=orca.logger)
@@ -101,7 +101,7 @@ def zensus2raster(database: str, subfolder_tiffs: str):
 @orca.step()
 def create_osm_views(database: str):
     """
-    creates views on the OSM data
+    creates views on the OSM data;
     attention: drops already existing OSM views and dependent views cascadingly
     """
     copy2fgdb = CopyOSM2FGDB(destination_db=database,
