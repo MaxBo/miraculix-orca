@@ -26,7 +26,7 @@ __parent_modules__ = [
 def extract_osm(source_db: str, database: str, target_srid: str,
                 project_area: ogr.Geometry):
     """
-    extract osm data for the bbox
+    extract OSM data in the area
     """
     extract = ExtractOSM(source_db=source_db, destination_db=database,
                          target_srid=target_srid, logger=orca.logger,
@@ -34,23 +34,23 @@ def extract_osm(source_db: str, database: str, target_srid: str,
     extract.extract()
 
 
-@meta(group='(2) Extract Data', order=2, required=extract_osm)
+@meta(group='(2) Extract Data', order=3, required=extract_osm)
 @orca.step()
 def create_polygons_from_osm(database: str):
     """
-    extract osm data for the bbox
+    create polygons and multipolygons out of the OSM data
     """
     copy2fgdb = CreatePolygons(destination_db=database, logger=orca.logger)
     copy2fgdb.create_poly_and_multipolygons()
 
 
-@meta(group='(2) Extract Data', order=3, required='create_db')
+@meta(group='(2) Extract Data', order=4, required='create_db')
 @orca.step()
 def extract_landuse(source_db: str, database: str, gmes: List[str],
                     corine: List[str], target_srid: str,
                     project_area: ogr.Geometry):
     """
-    extract landuse data for the bbox
+    extract landuse data in the area
     """
     extract = ExtractLanduse(source_db=source_db, destination_db=database,
                              gmes=gmes, corine=corine, target_srid=target_srid,
@@ -64,7 +64,7 @@ def extract_verwaltungsgrenzen(source_db: str, database: str,
                                verwaltungsgrenzen_tables: List[str],
                                target_srid: str, project_area: ogr.Geometry):
     """
-    extract administrative boundaries for the bbox
+    extract administrative boundaries in the area
     """
     tables = {f: 'geom' for f in verwaltungsgrenzen_tables}
     extract = ExtractVerwaltungsgrenzen(source_db=source_db,
@@ -74,33 +74,48 @@ def extract_verwaltungsgrenzen(source_db: str, database: str,
     extract.extract()
 
 
-@meta(group='(2) Extract Data', order=4, required='create_db')
+@meta(group='(2) Extract Data', order=5, required='create_db')
 @orca.step()
 def extract_laea_raster(source_db: str, database: str, target_srid: str,
                         project_area: ogr.Geometry):
     """
-    extract laea raster for the bbox
+    extract laea raster in the area
     """
     extract = ExtractLAEA(source_db=source_db, destination_db=database,
                           logger=orca.logger, boundary=project_area)
     extract.extract()
 
 
-@meta(group='(2) Extract Data', order=5, required=extract_laea_raster)
+@meta(group='(2) Extract Data', order=6, required=extract_laea_raster)
 @orca.step()
 def zensus2raster(database: str, subfolder_tiffs: str):
     """
-    create views for zensus data on raster grid
+    create views on the zensus data with a raster grid
     """
     z2r = Zensus2Raster(db=database, subfolder=subfolder_tiffs,
                         logger=orca.logger)
     z2r.run()
 
 
+@meta(group='(2) Extract Data', order=2, required=extract_osm)
+@orca.step()
+def create_osm_views(database: str):
+    """
+    creates views on the OSM data
+    attention: drops already existing OSM views and dependent views cascadingly
+    """
+    copy2fgdb = CopyOSM2FGDB(destination_db=database,
+                             layers=osm_layers,
+                             gdbname='osm_layers.gdb',
+                             schema='osm_layer',
+                             logger=orca.logger)
+    copy2fgdb.create_views()
+
+
 @meta(group='Export')
 @orca.injectable()
 def osm_layers() -> Dict[str, str]:
-    """the network layers to export to the corresponding schema in a FGDB"""
+    """the OSM network layers to export to the corresponding schema"""
     layers = {'railways': 'osm_layer',
               'buildings': 'osm_layer',
               'leisure_pnt': 'osm_layer',
@@ -115,12 +130,11 @@ def osm_layers() -> Dict[str, str]:
     return layers
 
 
-@meta(group='Export', required=extract_osm)
+@meta(group='Export', required=create_osm_views)
 @orca.step()
 def copy_osm_to_fgdb(database: str, osm_layers: Dict[str, str]):
     """
-    create osm layers and copy osm stuff to a file-gdb
-    attention: drops cascadingly the depending views
+    copy OSM layers and views to a file-gdb
     """
 
     copy2fgdb = CopyOSM2FGDB(destination_db=database,
@@ -128,18 +142,6 @@ def copy_osm_to_fgdb(database: str, osm_layers: Dict[str, str]):
                              gdbname='osm_layers.gdb',
                              schema='osm_layer',
                              logger=orca.logger)
-    copy2fgdb.create_views()
     copy2fgdb.copy_layers()
 
 
-@meta(group='Export', required=extract_osm)
-@orca.step()
-def copy_to_fgdb(database: str, osm_layers: Dict[str, str]):
-    """copy osm stuff to a file-gdb"""
-
-    copy2fgdb = CopyOSM2FGDB(destination_db=database,
-                             layers=osm_layers,
-                             gdbname='osm_layers.gdb',
-                             schema='osm_layer',
-                             logger=orca.logger)
-    copy2fgdb.copy_layers()
