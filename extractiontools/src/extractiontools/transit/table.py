@@ -10,13 +10,6 @@ from collections import OrderedDict
 import os
 import numpy as np
 from simcommon.matrixio import XMaskedRecarray
-import logging
-logger = logging.getLogger('OrcaLog')
-formatter = logging.Formatter('%(asctime)s %(message)s', datefmt='%H:%M:%S')
-sh = logging.StreamHandler()
-sh.setFormatter(formatter)
-logger.addHandler(sh)
-logger.level = logging.DEBUG
 
 
 class Dictlist(dict):

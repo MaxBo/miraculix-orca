@@ -3,8 +3,6 @@
 
 
 import time
-import os
-import datetime
 from argparse import ArgumentParser
 import random
 
@@ -12,7 +10,7 @@ from urllib.parse import urlparse, parse_qs
 import requests
 from lxml import html
 
-from extractiontools.ausschnitt import Extract, Connection, logger
+from extractiontools.ausschnitt import Extract, Connection
 
 
 class ScrapeStops(Extract):
@@ -23,13 +21,12 @@ class ScrapeStops(Extract):
 
     def scrape(self):
         """scrape stop from railway page"""
-        with Connection(login=self.login1) as conn1:
+        with Connection(login=self.login) as conn1:
             self.conn1 = conn1
             self.read_haltestellen()
             self.conn1.commit()
 
-    @staticmethod
-    def get_session_id():
+    def get_session_id(self):
         """get a session_id"""
         url = 'http://mobile.bahn.de/bin/mobil/query.exe/dox?'\
             'country=DEU&rt=1&use_realtime_filter=1&stationNear=1)'
@@ -37,7 +34,7 @@ class ScrapeStops(Extract):
         tree = html.fromstring(r.content)
         elems = tree.xpath('/html/body/div/div[2]/div/div/div/form')
         if not elems:
-            logger.warning('connection failed, no valid response')
+            self.logger.warning('connection failed, no valid response')
 
         elem = elems[0]
         o = urlparse(elem.action)
@@ -47,7 +44,7 @@ class ScrapeStops(Extract):
             id2 = query['ld'][0]
             id1 = query['i'][0]
         except (KeyError, IndexError):
-            logger.warning('no valid response')
+            self.logger.warning('no valid response')
 
         return id1, id2
 
@@ -142,7 +139,7 @@ FROM {schema}.route_types;
         stops_inserted = 0
         for j in range(int(lat0 * 10), int(lat1 * 10)):
             for i in range(int(lon0 * 10), int(lon1 * 10)):
-                logger.debug(f'search at {lon0}, {lon1}, {lat0}, {lat1}')
+                self.logger.debug(f'search at {lon0}, {lon1}, {lat0}, {lat1}')
                 stops_found_in_tile = 0
                 stops_inserted_in_tile = 0
 
@@ -151,7 +148,7 @@ FROM {schema}.route_types;
                 lat = j * 100000
                 lon = i * 100000
 
-                logger.info(f'search in {i}, {j}')
+                self.logger.info(f'search in {i}, {j}')
 
                 id1, id2 = self.get_session_id()
 
@@ -175,7 +172,7 @@ FROM {schema}.route_types;
                     overview_clicktable = '//div[@class="overview clicktable"]/*'
                     elems = tree.xpath(overview_clicktable)
                     if not elems:
-                        logger.warning(
+                        self.logger.warning(
                             'connection failed, no valid response')
 
                     for elem in elems:
@@ -224,10 +221,10 @@ FROM {schema}.route_types;
                 except TypeError:
                     pass
 
-                logger.info(f' found {stops_inserted_in_tile} new stops')
+                self.logger.info(f' found {stops_inserted_in_tile} new stops')
                 self.conn1.commit()
 
-        logger.info(f'{stops_inserted} stops found and inserted')
+        self.logger.info(f'{stops_inserted} stops found and inserted')
 
 
 if __name__ == '__main__':

@@ -3,7 +3,7 @@
 
 from argparse import ArgumentParser
 
-from extractiontools.ausschnitt import Extract, BBox, logger
+from extractiontools.ausschnitt import Extract
 
 
 class ExtractVerwaltungsgrenzen(Extract):
@@ -77,6 +77,6 @@ if __name__ == '__main__':
     extract.set_login(host=options.host,
                       port=options.port,
                       user=options.user)
-    extract.get_target_boundary_from_dest_db()
-    extract.get_target_srid_from_dest_db()
+    extract.get_target_boundary()
+    extract.get_target_srid()
     extract.extract()

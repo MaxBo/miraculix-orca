@@ -1,40 +1,34 @@
 import orca
-from orcadjango.decorators import group
-from extractiontools.master import BBox
-from extractiontools.ausschnitt import ExtractMeta
+from orcadjango.decorators import meta
+from extractiontools.ausschnitt import Extract
 from extractiontools.drop_db import DropDatabase
-from extractiontools.injectables.database import Login
+import ogr
 
-__parent_modules__ = ['extractiontools.injectables.database',
-                      ]
+__parent_modules__ = [
+    'extractiontools.injectables.database'
+]
 
 
-@group('CreateProject', order=1)
+@meta(group='(1) Project', order=1)
 @orca.step()
-def create_db(source_db: str, target_srid: str, bbox_dict: dict, login: Login):
+def create_db(target_srid: str, project_area: ogr.Geometry, database: str):
     """
     (re)-create the target database
     and copy the selected files
     """
-    bbox = BBox(**bbox_dict)
 
-    extract = ExtractMeta(destination_db=login.db,
-                          target_srid=target_srid,
-                          source_db =source_db)
-    extract.set_login(**login.__dict__)
-    extract.get_target_boundary(bbox)
+    extract = Extract(destination_db=database,
+                      target_srid=target_srid,
+                      logger=orca.logger)
     extract.recreate_db()
-    extract.extract()
+    extract.set_target_boundary(project_area)
 
 
-@group('DeleteProject', order=1)
+@meta(group='(1) Project', order=1)
 @orca.step()
-def drop_db(source_db: str, login: Login):
+def drop_db(database: str):
     """
-    drop the database if this is allowed and remove metadata
+    drop the database and its contents
     """
-
-    extract = DropDatabase(source_db=source_db,
-                           destination_db=login.db,)
-    extract.set_login(**login.__dict__)
+    extract = DropDatabase(destination_db=database, logger=orca.logger)
     extract.extract()

@@ -7,23 +7,21 @@ from typing import Dict
 import sys
 import os
 import subprocess
-from extractiontools.connection import Login, Connection, logger
+from extractiontools.connection import Login, Connection
 from extractiontools.ausschnitt import Extract
 
 
 class Copy2FGDB(Extract):
     def __init__(self,
-                 login: Login,
+                 destination_db,
                  layers: Dict[str, str],
                  gdbname: str,
                  schema: str=None,
+                 logger=None
                  ):
 
         """"""
-        self.check_platform()
-        self.login1 = self.login = login
-        self.destination_db = login.db
-        self.target_srid = self.get_target_srid_from_dest_db()
+        super().__init__(destination_db, logger=logger)
         self.layers = layers
         self.gdbname = gdbname
         self.schema = schema
@@ -47,7 +45,7 @@ class Copy2FGDB(Extract):
 
         # get srid
         if self.target_srid is None:
-            srid = self.get_target_srid_from_dest_db()
+            srid = self.get_target_srid()
             srid_option = '-a_srs EPSG:{srid}'.format(srid=srid)
         else:
             srid_option = '-t_srs EPSG:{srid}'.format(
@@ -64,14 +62,14 @@ class Copy2FGDB(Extract):
                               layer=layer,
                               srid_option=srid_option,
                               path=path,
-                              host=self.login.host,
-                              port=self.login.port,
-                              user=self.login.user,
-                              db=self.login.db,
+                              host=self.foreign_login.host,
+                              port=self.foreign_login.port,
+                              user=self.foreign_login.user,
+                              db=self.foreign_login.db,
                               schema=schema,
                               dest_schema=dest_schema,
                               )
-        logger.info(full_cmd)
+        self.logger.info(full_cmd)
         ret = subprocess.call(full_cmd, shell=self.SHELL)
         if ret:
             raise IOError('Layer {layer} could not be copied to FGDB'.format(layer=layer))
@@ -83,7 +81,7 @@ class Copy2FGDB(Extract):
         ----------
         layer : str
         """
-        with Connection(self.login1) as conn:
+        with Connection(self.login) as conn:
             cur = conn.cursor()
             sql = '''
 SELECT * FROM {schema}.{layer} LIMIT 1;

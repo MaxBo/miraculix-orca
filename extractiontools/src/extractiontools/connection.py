@@ -8,12 +8,13 @@ from psycopg2.extras import NamedTupleConnection, DictCursor
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from collections import OrderedDict
 import sqlparse
+from psycopg2.sql import SQL, Composed, Identifier, Literal
+from copy import deepcopy
+from typing import Union
 
 from types import MethodType
 import os
-
 import logging
-logger = logging.getLogger('OrcaLog')
 
 
 class Login(object):
@@ -67,6 +68,7 @@ class Connection(object):
         return conn
 
     def __exit__(self, t, value, traceback):
+        self.conn.commit()
         self.conn.close()
 
     def set_copy_command_format(self):
@@ -152,19 +154,24 @@ class DBApp(object):
     """
     role = None
 
-    def __init__(self, schema='osm', conn=None):
+    def __init__(self, schema='osm', conn=None, logger=None):
         """
         """
         self.schema = schema
+        self.logger = logger or logging.getLogger(__name__)
         self.conn = conn
         self.conn1 = conn
         self.conn2 = conn
 
-    def set_db_user(self, login):
-        """
-        set login user
-        """
-        self.login = login
+    def set_login(self, host: str=None, port: int=None, user: str=None,
+                  password: str=None, database: str=None):
+        self.login = Login(
+            host or os.environ.get('DB_HOST', 'localhost'),
+            port or os.environ.get('DB_PORT', 5432),
+            user or os.environ.get('DB_USER', 'postgres'),
+            password or os.environ.get('DB_PASS', ''),
+            database
+        )
 
     def check_platform(self):
         """
@@ -183,43 +190,42 @@ class DBApp(object):
         raise an IOError, if this fails
         """
         self.check_platform()
-        cmd = f'mkdir -p {folder}'
-        logger.debug(cmd)
-        ret = subprocess.call(cmd, shell=self.SHELL)
-        if ret:
-            raise IOError(f'folder {folder} could not be created')
+        if not os.path.exists(folder):
+            os.makedirs(folder)
 
-    def run_query(self, sql, conn=None, values=None, many=False):
+    def run_query(self, sql: Union[str, Composed], conn=None,
+                  split=True):
         """
-        runs an sql query in seperate steps and
-        log the statusmessage of each query
+        runs an sql query log the statusmessage of each query
 
         Parameters
         ----------
-        sql : str
-            the queries in a string, separated by ;
+        sql : str or SQL
+            the queries in a string, separated by ; or
+            formatted composed SQL
         conn : Connection-Instance (optional)
             if not given, than the default connection self.conn is taken
-        values : tuple or list or list of tuples or array
-            if given, the values are passed to the query
-        many : bool, Default=False
-            if True, pass vars to cur.executemany instead of cur.execute
+        split : bool (optional)
+            run the sql query in seperate steps, defaults to True
         """
         conn = conn or self.conn
         cur = conn.cursor()
-        for query in sqlparse.split(sql):
-            if query.strip().rstrip(';'):
-                logger.debug(query)
-                query_without_comments = '\n'.join([
-                    q for q in query.split(os.linesep)
-                    if not q.strip().startswith('--')])
-                if query_without_comments.strip():
-                    #logger.info('execute {}'.format(query_without_comments))
-                    if many:
-                        cur.executemany(query_without_comments, values)
-                    else:
-                        cur.execute(query_without_comments, values)
-                    logger.debug(cur.statusmessage)
+
+        def execute(query):
+            self.logger.info(query)
+            cur.execute(query)
+
+        if split:
+            query_string = sql.as_string(conn) if isinstance(sql, Composed) else sql
+            for query in sqlparse.split(query_string):
+                if query.strip().rstrip(';'):
+                    query_without_comments = '\n'.join([
+                        q for q in query.replace('\r', '').split('\n')
+                        if not q.strip().startswith('--')])
+                    if query_without_comments.strip():
+                        execute(query)
+        else:
+            execute(sql)
 
     def set_search_path(self, connstr='conn'):
         conn = getattr(self, connstr)
@@ -232,7 +238,7 @@ class DBApp(object):
         sql = 'show search_path ;'
         cur.execute(sql)
         rows = cur.fetchall()
-        logger.info(rows)
+        self.logger.info(rows)
 
     def set_session_authorization(self, conn):
         """
@@ -262,11 +268,12 @@ class DBApp(object):
         -------
         exists : bool
         """
-        with Connection(login=self.login0) as conn:
+        login = deepcopy(self.login)
+        login.db = 'postgres'
+        with Connection(login=login) as conn:
             cursor = conn.cursor()
-            sql = """
-SELECT 1 AS e FROM pg_database WHERE datname = '{}';
-            """.format(db_name)
+            sql = SQL('SELECT 1 AS e FROM pg_database WHERE datname = {}'
+                      ).format(Literal(db_name))
             cursor.execute(sql)
             rows = cursor.fetchall()
         return len(rows) > 0

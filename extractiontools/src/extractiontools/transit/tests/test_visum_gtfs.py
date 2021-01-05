@@ -34,7 +34,7 @@ class TestGTFS2VISUM(unittest.TestCase):
 
     def test_01_convert(self):
         self.converter.visum2gtfs()
-        print self.converter.gtfs
+        print( self.converter.gtfs)
 
 
 

@@ -140,7 +140,7 @@ def write_routes_tripes_stop_times(input_file_names):
     stop_times = []
 
     for f in input_file_names:
-        print f
+        print(f)
         r, t, st = get_routes_tripes_stop_times(f)
         routes.extend(r)
         trips.extend(t)
@@ -313,7 +313,7 @@ def main():
     (options, args) = parser.parse_args()
 
     if len(args) != 1:
-        print 'ERROR: invalid argument(s)'
+        print('ERROR: invalid argument(s)')
         parser.print_help()
         exit(-1)
 
@@ -327,12 +327,12 @@ def main():
         output_file_name = input_dir + '.gtfs.zip'
 
     if not os.path.exists(input_dir):
-        print 'ERROR: invalid input'
+        print( 'ERROR: invalid input')
         parser.print_help()
         exit(-1)
 
     if os.path.exists(output_file_name):
-        print 'ERROR: output file already exists!'
+        print( 'ERROR: output file already exists!')
         parser.print_help()
         exit(-1)
 
@@ -340,19 +340,19 @@ def main():
 
     # validate the input
     if 'bitfeld' not in files:
-        print 'ERROR: invalid input data (bitfeld)'
+        print( 'ERROR: invalid input data (bitfeld)')
         parser.print_help()
         exit(-1)
     if 'fplan' not in files:
-        print 'ERROR: invalid input data (fplan)'
+        print( 'ERROR: invalid input data (fplan)')
         parser.print_help()
         exit(-1)
     if 'eckdaten' not in files:
-        print 'ERROR: invalid input data (eckdaten)'
+        print( 'ERROR: invalid input data (eckdaten)')
         parser.print_help()
         exit(-1)
     if 'bfkoord' not in files:
-        print 'ERROR: invalid input data (bfkoord)'
+        print( 'ERROR: invalid input data (bfkoord)')
         parser.print_help()
         exit(-1)
 

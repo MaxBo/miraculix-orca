@@ -5,9 +5,6 @@ import os
 import sys
 import tempfile
 import subprocess
-import logging
-logger = logging.getLogger('OrcaLog')
-logger.level = logging.INFO
 from extractiontools.connection import Connection, DBApp, Login
 
 
@@ -55,14 +52,12 @@ class Points2Raster(DBApp):
 
     def __init__(self,
                  db: str = 'extract',
-                 subfolder: str = 'tiffs'):
-        self.db = db
+                 subfolder: str = 'tiffs', **kwargs):
+        super().__init__(**kwargs)
+        self.destination_db = self.db = db
+        self.set_login(database=db)
         self.check_platform()
-        self.destination_db = db
         self.subfolder = subfolder
-
-    def set_login(self, host, port, user, password=None, db=None):
-        self.login = Login(host, port, user, password, db=self.db)
 
     def run(self):
         """
@@ -240,12 +235,12 @@ COPY (
 
         with tempfile.NamedTemporaryFile('wb', delete=False) as f:
             cur = self.conn.cursor()
-            logger.info(copy_sql)
+            self.logger.info(copy_sql)
             cur.copy_expert(copy_sql, f)
             f.close()
 
             cmd = f'/usr/bin/xxd -p -r {f.name} > {file_path}'
-            logger.info(cmd)
+            self.logger.info(cmd)
             ret = subprocess.call(cmd, shell=self.SHELL)
             try:
                 os.remove(f.name)

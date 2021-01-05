@@ -1,31 +1,30 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 from argparse import ArgumentParser
 
 import sys
 import os
 import subprocess
-import psycopg2
-from extractiontools.connection import Login, Connection, DBApp, logger
+from extractiontools.connection import Login, Connection, DBApp
 
 
 class CopyNetwork2Pbf(DBApp):
     """
     Copy osm data that belong to a network
     """
-    def __init__(self,
-                 login: Login,
-                 as_xml: bool=False,
-                 network_schema: str='network_fr',
-                 subfolder_pbf: str='pbf',
-                 srid: int=4326):
 
+    def __init__(self,
+                 database: str,
+                 as_xml: bool = False,
+                 network_schema: str = 'network_fr',
+                 subfolder_pbf: str = 'pbf',
+                 srid: int = 4326,
+                 **kwargs):
         """"""
-        self.check_platform()
-        self.login = login
+        super().__init__(schema='osm84', **kwargs)
+        self.set_login(database=database)
         self.as_xml = as_xml
-        self.schema = 'osm84'
         self.network = network_schema
         self.subfolder = subfolder_pbf
         self.srid = srid
@@ -202,7 +201,7 @@ USING btree(id);
             self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
         else:
             self.OSM_FOLDER = '$HOME/gis/osm'
-            self.OSMOSISPATH = os.path.join('/usr',
+            self.OSMOSISPATH = os.path.join('/opt', 'osmosis', 'osmosis-0.48',
                                             'bin', 'osmosis')
         self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
 
@@ -243,11 +242,188 @@ USING btree(id);
                               fn=file_path,
                               to_xml=to_xml,
                               )
-        logger.info(full_cmd)
+        self.logger.info(full_cmd)
         ret = subprocess.call(full_cmd, shell=self.SHELL)
         if ret:
             layer = 'pbf'
             raise IOError(f'Layer {layer} could not becopied to pbf-file')
+
+
+class CopyNetwork2PbfTagged(CopyNetwork2Pbf):
+    """
+    Copy osm data that belong to a network with additional tags
+    """
+
+    def create_views(self):
+        """"""
+        sql = """
+DROP SCHEMA IF EXISTS {schema} CASCADE;
+CREATE SCHEMA {schema};
+
+CREATE OR REPLACE VIEW {schema}.actions AS
+ SELECT a.data_type,
+    a.action,
+    a.id
+   FROM osm.actions a;
+
+CREATE OR REPLACE VIEW {schema}.boundary AS
+ SELECT b.id,
+    st_transform(b.geom, {srid}) AS geom
+   FROM meta.boundary b;
+
+DROP VIEW IF EXISTS {schema}.ways CASCADE;
+CREATE MATERIALIZED VIEW {schema}.ways AS
+ SELECT l.wayid * 1000 + l.segment AS id,
+    w.version,
+    w.user_id,
+    w.tstamp,
+    w.changeset_id,
+    w.tags || hstore(ARRAY['innerorts', 'slope'],
+                     ARRAY[l.io::text, l.slope::text]) AS tags,
+    lp.nodes,
+    (st_transform(l.geom, {srid}))::box2d::geometry AS bbox,
+    st_transform(l.geom, {srid}) AS linestring,
+    l.wayid AS way_id_original
+   FROM osm.ways w, {network}.links_reached_without_planned l,
+   (SELECT
+   l.wayid, l.segment,
+   array_agg(lp.nodeid ORDER BY lp.idx) AS nodes
+   FROM
+   {network}.link_points lp,
+   {network}.links_reached_without_planned l
+   WHERE lp.wayid = l.wayid
+   AND lp.segment = l.segment
+   GROUP BY l.wayid, l.segment
+   ) lp
+   WHERE w.id = l.wayid
+   AND l.wayid = lp.wayid
+   AND l.segment = lp.segment;
+
+CREATE INDEX way_id_idx ON {schema}.ways
+USING btree(id);
+CREATE INDEX way_id_original_idx ON {schema}.ways
+USING btree(way_id_original);
+
+CREATE OR REPLACE VIEW {schema}.schema_info AS
+ SELECT s.version
+   FROM osm.schema_info s;
+
+CREATE OR REPLACE VIEW {schema}.way_nodes AS
+ SELECT w.id AS way_id,
+    lp.nodeid AS node_id,
+    row_number() OVER(PARTITION BY w.id ORDER BY lp.idx) AS sequence_id
+   FROM {network}.link_points lp,
+        {schema}.ways w
+   WHERE lp.wayid * 1000 + lp.segment = w.id;
+
+DROP VIEW IF EXISTS {schema}.nodes CASCADE;
+CREATE MATERIALIZED VIEW {schema}.nodes AS
+ SELECT n.id,
+    n.version,
+    n.user_id,
+    n.tstamp,
+    n.changeset_id,
+    CASE WHEN j.z IS NULL THEN n.tags
+    ELSE n.tags || hstore(ARRAY['elevation', j.z::text])
+    END AS tags,
+    st_transform(n.geom, {srid}) AS geom
+   FROM osm.nodes n
+   LEFT JOIN {network}.junctions_z j ON (n.id = j.nodeid)
+   ,
+   (SELECT DISTINCT node_id FROM {schema}.way_nodes) wn
+   WHERE n.id = wn.node_id;
+CREATE INDEX node_id_idx ON {schema}.nodes
+USING btree(id);
+
+CREATE TABLE {schema}.active_relations (id integer primary key);
+
+INSERT INTO {schema}.active_relations
+SELECT DISTINCT r.id
+FROM osm.relations r,
+osm.relation_members rm,
+{schema}.nodes n
+WHERE r.id = rm.relation_id
+AND rm.member_type = 'N'
+AND rm.member_id = n.id;
+
+INSERT INTO {schema}.active_relations
+SELECT DISTINCT r.id
+FROM osm.relations r,
+osm.relation_members rm,
+{schema}.ways w
+WHERE r.id = rm.relation_id
+AND rm.member_type = 'W'
+AND rm.member_id = w.way_id_original
+AND NOT EXISTS (SELECT 1 FROM {schema}.active_relations ar WHERE r.id = ar.id);
+
+INSERT INTO {schema}.active_relations
+SELECT DISTINCT r.id
+FROM osm.relations r,
+osm.relation_members rm,
+{schema}.active_relations ar
+WHERE r.id = rm.relation_id
+AND rm.member_type = 'R'
+AND rm.member_id = ar.id
+AND NOT EXISTS (SELECT 1 FROM {schema}.active_relations ar WHERE r.id = ar.id);
+
+        """.format(schema=self.schema,
+                   network=self.network,
+                   srid=self.srid)
+        self.run_query(sql)
+
+        sql = """
+CREATE INDEX node_user_id_idx ON {schema}.nodes
+USING btree(user_id);
+CREATE INDEX ways_user_id_idx ON {schema}.ways
+USING btree(user_id);
+DROP VIEW IF EXISTS {schema}.relations CASCADE;
+CREATE MATERIALIZED VIEW {schema}.relations AS
+ SELECT r.id,
+    r.version,
+    r.user_id,
+    r.tstamp,
+    r.changeset_id,
+    r.tags
+   FROM osm.relations r,
+   {schema}.active_relations ar
+   WHERE r.id = ar.id;
+CREATE INDEX relations_id_idx ON {schema}.relations
+USING btree(id);
+ANALYZE {schema}.relations;
+ANALYZE {schema}.nodes;
+ANALYZE {schema}.ways;
+
+DROP VIEW IF EXISTS {schema}.relation_members CASCADE;
+CREATE MATERIALIZED VIEW {schema}.relation_members AS
+ SELECT rm.relation_id,
+    rm.member_id,
+    rm.member_type,
+    rm.member_role,
+    rm.sequence_id
+   FROM osm.relation_members rm,
+   {schema}.active_relations ar
+   WHERE rm.relation_id = ar.id;
+CREATE INDEX relation_members_id_idx ON {schema}.relation_members
+USING btree(relation_id, sequence_id);
+
+DROP VIEW IF EXISTS {schema}.users CASCADE;
+CREATE MATERIALIZED VIEW {schema}.users AS
+ SELECT u.id,
+    u.name
+   FROM osm.users u
+   WHERE EXISTS
+   (SELECT 1 FROM {schema}.relations r WHERE u.id = r.user_id)
+   OR EXISTS
+   (SELECT 1 FROM {schema}.ways w WHERE u.id = w.user_id)
+   OR EXISTS
+   (SELECT 1 FROM {schema}.nodes n WHERE u.id = n.user_id);
+CREATE INDEX users_pkey ON {schema}.users
+USING btree(id);
+
+        """.format(schema=self.schema,
+                   srid=self.srid)
+        self.run_query(sql)
+
 
 if __name__ == '__main__':
 

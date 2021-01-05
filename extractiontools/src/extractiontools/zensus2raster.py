@@ -33,8 +33,8 @@ v.cellcode,
 v.pnt_laea,
 z.einwohner
 FROM
-{schema}.zensus_ew_hectar z,
-{schema}.laea_vector_100 v
+laea.zensus_ew_hectar z,
+laea.laea_vector_100 v
 WHERE v.cellcode = z.id;
         """.format(schema=self.schema)
         self.run_query(sql)
@@ -46,7 +46,7 @@ WHERE v.cellcode = z.id;
             target_raster='{}.ew_ha_raster'.format(self.schema),
             pixeltype='16BSI',
             srid=3035,
-            reference_raster='{}.laea_raster_100'.format(self.schema),
+            reference_raster='laea.laea_raster_100'.format(self.schema),
             raster_pkey='rid',
             raster_col='rast',
             band=1,
@@ -73,8 +73,8 @@ z.leerstandsquote,
 z.wohnfl_bew_d,
 z.wohnfl_wohnung
 FROM
-{schema}.zensus_km2 z,
-{schema}.laea_vector_1000 v
+laea.zensus_km2 z,
+laea.laea_vector_1000 v
 WHERE v.cellcode = z.id;
         """.format(schema=self.schema)
         self.run_query(sql)
@@ -95,8 +95,8 @@ v.cellcode,
 v.pnt_laea,
 z.einwohner
 FROM
-{schema}.geostat_km2 z,
-{schema}.laea_vector_1000 v
+laea.geostat_km2 z,
+laea.laea_vector_1000 v
 WHERE v.cellcode = z.id;
         """.format(schema=self.schema)
         self.run_query(sql)
@@ -111,7 +111,7 @@ WHERE v.cellcode = z.id;
                                                               c=column),
             pixeltype=dtype,
             srid=3035,
-            reference_raster='{}.laea_raster_1000'.format(self.schema),
+            reference_raster='laea.laea_raster_1000'.format(self.schema),
             raster_pkey='rid',
             raster_col='rast',
             band=1,
@@ -139,7 +139,7 @@ WHERE v.cellcode = z.id;
                                                       c=column),
             pixeltype=dtype,
             srid=3035,
-            reference_raster='{}.laea_raster_1000'.format(self.schema),
+            reference_raster='laea.laea_raster_1000'.format(self.schema),
             raster_pkey='rid',
             raster_col='rast',
             band=1,

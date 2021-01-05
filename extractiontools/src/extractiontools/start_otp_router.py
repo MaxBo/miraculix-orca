@@ -14,7 +14,7 @@ class OTPServer:
                  base_path: str='',
                  graph_subfolder: str='otp_graphs',
                  routers: Dict[str, str]=None,
-                 start_analyst: bool=True,
+                 start_analyst: bool=True
                  ):
         """"""
         self.base_path = base_path.replace('~', os.environ['HOME'])

@@ -5,13 +5,14 @@
 # Created: 13/03/2015
 
 
-from extractiontools.transit.gtfs import GTFS, logger
+from extractiontools.transit.gtfs import GTFS
 from extractiontools.transit.visum import Visum
 from extractiontools.transit.time_utils import (get_timedelta_from_arr,
                                                 timedelta_to_HHMMSS, )
 import numpy as np
 from simcommon.matrixio import XRecArray, XMaskedRecarray
 import os
+import logging
 
 net_types_map={'Rail': 2,
                'Bus': 3,
@@ -23,10 +24,12 @@ def get_nettype(key):
 
 class GTFSVISUM(object):
 
-    def __init__(self, netfile, gtfs_folder, gtfs_filename='gtfs.zip'):
+    def __init__(self, netfile, gtfs_folder, gtfs_filename='gtfs.zip',
+                 logger=None):
         """
         convert a visum netfile into a gtfs zipfile
         """
+        self.logger = logger or logging.getLogger(__name__)
         self.visum = Visum(netfile)
         self.gtfs = GTFS(gtfs_folder, gtfs_filename)
 
@@ -42,30 +45,30 @@ class GTFSVISUM(object):
         return self
 
     def visum2gtfs(self):
-        logger.info('read visum tables from {}'.format(self.visum.path))
+        self.logger.info('read visum tables from {}'.format(self.visum.path))
         self.visum.read_tables()
-        logger.info('convert calendar')
+        self.logger.info('convert calendar')
         self.convert_calendar()
-        logger.info('convert betreiber')
+        self.logger.info('convert betreiber')
         self.convert_betreiber()
-        logger.info('convert knoten')
+        self.logger.info('convert knoten')
         self.convert_knoten()
 
-        logger.info('convert stops')
+        self.logger.info('convert stops')
         self.convert_stops()
-        logger.info('convert gehzeiten')
+        self.logger.info('convert gehzeiten')
         self.convert_gehzeiten()
 
-        logger.info('convert linienrouten')
+        self.logger.info('convert linienrouten')
         self.convert_linienrouten()
-        logger.info('convert routes')
+        self.logger.info('convert routes')
         self.convert_routes()
 
-        logger.info('convert stop_times')
+        self.logger.info('convert stop_times')
         self.convert_stop_times()
-        logger.info('write gtfs tables to {}'.format(self.gtfs.path))
+        self.logger.info('write gtfs tables to {}'.format(self.gtfs.path))
         self.gtfs.write_tables()
-        logger.info('finished writing')
+        self.logger.info('finished writing')
 
     def convert_calendar(self):
         visum_vt = self.visum.verkehrstag
@@ -95,7 +98,7 @@ class GTFSVISUM(object):
         hp.is_angefahren = np.in1d(hp.NR, unique_hp, assume_unique=True)
 
         hp_angefahren = hp.rows[hp.is_angefahren]
-        logger.debug('{} of {} hp angefahren'.format(len(hp_angefahren), hp.n_rows))
+        self.logger.debug('{} of {} hp angefahren'.format(len(hp_angefahren), hp.n_rows))
 
         gtfs_stops.add_rows(len(hp_angefahren))
         knoten = self.visum.knoten
@@ -225,7 +228,7 @@ class GTFSVISUM(object):
         lr = self.visum.linienroute
         lre = self.visum.linienroutenelement
 
-        logger.debug('add trips')
+        self.logger.debug('add trips')
         trips = self.gtfs.trips
         stoptimes = self.gtfs.stoptimes
 
@@ -248,7 +251,7 @@ class GTFSVISUM(object):
         fahrt_counts_in_fzpe = fp.get_rows_by_pkey('fzpe_counts',
                                                    fahrt_profil_cols)
 
-        logger.debug('add shapes')
+        self.logger.debug('add shapes')
         # get the unique shapes defined by lr and vonlreidx -> tolreidx
 
         fahrt_von_fzpe_cols = fahrten.get_columns_by_names_hashable(fp.pkey_cols+
@@ -313,7 +316,7 @@ class GTFSVISUM(object):
         # set trip shape_id
         trips.rows.shape_id = fahrt_shape_ids
 
-        logger.debug('add stop_times')
+        self.logger.debug('add stop_times')
         # stop times
         n_rows = (fahrten.NACHFZPELEMINDEX - fahrten.VONFZPELEMINDEX + 1).sum()
 
@@ -325,7 +328,7 @@ class GTFSVISUM(object):
         # loop over fahrten
         for f, fahrt in enumerate(fahrten.rows):
             if not f % 500:
-                logger.debug('{}: fahrt {}'.format(f, fahrt))
+                self.logger.debug('{}: fahrt {}'.format(f, fahrt))
             start_idx = fahrt_rowidx_in_fzpe[f]
             counts = fahrt_counts_in_fzpe[f]
             end_idx = start_idx + counts

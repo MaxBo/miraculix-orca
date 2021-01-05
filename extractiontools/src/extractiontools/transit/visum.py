@@ -13,11 +13,12 @@ import csv
 from pyproj import Proj, transform
 from simcommon.matrixio import XRecArray
 import numpy as np
+import logging
 
 from extractiontools.utils.utf8csv import UnicodeWriter
 
 from collections import OrderedDict
-from extractiontools.transit.table import Table, Tables, Base, logger
+from extractiontools.transit.table import Table, Tables, Base
 from extractiontools.transit.projections import Transform
 
 
@@ -102,8 +103,9 @@ class HeaderException(Exception):
 class Visum(Base):
     """Visum Netfile"""
 
-    def __init__(self, netfile):
+    def __init__(self, netfile, logger=None):
         super(Visum, self).__init__()
+        self.logger = logger or logging.getLogger(__name__)
         self.netfile = netfile
 
     def add_tables(self):
@@ -146,7 +148,7 @@ class Visum(Base):
                         # start with new block
                         header_line = current_line.strip().split(':')
                         tablename = header_line[0].lower().lstrip('$')
-                        logger.debug('start reading ${}'.format(tablename))
+                        self.logger.debug('start reading ${}'.format(tablename))
 
                         # check if real table with columns
                         if len(header_line) > 1:
@@ -169,7 +171,7 @@ class Visum(Base):
                 # finish the last block
                 if table_found:
                     table.read_file(header, lines)
-                logger.info('file completely read')
+                self.logger.info('file completely read')
 
     def next_line(self):
         """Get the next line, that is not empty or a comment"""

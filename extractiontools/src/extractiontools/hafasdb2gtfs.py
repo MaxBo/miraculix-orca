@@ -5,8 +5,8 @@ import datetime
 import os
 import zipfile
 from argparse import ArgumentParser
-import numpy as np
-from extractiontools.connection import Connection, logger
+import orca
+from extractiontools.connection import Connection
 from extractiontools.ausschnitt import Extract
 from extractiontools.utils.get_date import Date
 
@@ -23,7 +23,9 @@ class HafasDB2GTFS(Extract):
                  base_path: str,
                  subfolder: str,
                  tbl_kreise: str,
+                 logger=None
                  ):
+        self.logger = logger or orca.logger
         self.destination_db = db
         self.today = Date.from_string(date)
         self.only_one_day = only_one_day
@@ -32,7 +34,7 @@ class HafasDB2GTFS(Extract):
         self.tbl_kreise = tbl_kreise
 
     def convert(self):
-        with Connection(self.login1) as conn:
+        with Connection(self.login) as conn:
             self.conn = conn
             self.set_search_path()
             self.create_aggregate_functions()
@@ -371,7 +373,7 @@ FROM {schema}.fahrten f;
         sql = 'show search_path ;'
         cur.execute(sql)
         rows = cur.fetchall()
-        logger.info(rows)
+        self.logger.info(rows)
 
     def create_aggregate_functions(self):
         """
@@ -407,19 +409,19 @@ CREATE AGGREGATE public.array_accum (anyelement)
         cur = self.conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
-        logger.info('Haltestellen: %s, ' % rows[0][0])
+        self.logger.info('Haltestellen: %s, ' % rows[0][0])
 
         sql = 'SELECT count(*) FROM departures;'
         cur = self.conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
-        logger.info('Abfahrten: %s ' % rows[0][0])
+        self.logger.info('Abfahrten: %s ' % rows[0][0])
 
         sql = 'SELECT count(*) FROM trips;'
         cur = self.conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
-        logger.info('Fahrten: %s' % rows[0][0])
+        self.logger.info('Fahrten: %s' % rows[0][0])
 
     def delete_invalid_fahrten(self):
         sql = """
@@ -430,7 +432,7 @@ WHERE a.abfahrt_id IS NULL) ;
         """
         cur = self.conn.cursor()
         cur.execute(sql)
-        logger.info('Delete invalid trips: %s' % cur.statusmessage)
+        self.logger.info('Delete invalid trips: %s' % cur.statusmessage)
 
     def set_stop_id(self):
         sql = """
@@ -440,7 +442,7 @@ DELETE FROM stops WHERE "H_ID" >= 10000000;
         """
         cur = self.conn.cursor()
         cur.execute(sql)
-        logger.info('Set Stop ID: %s' % cur.statusmessage)
+        self.logger.info('Set Stop ID: %s' % cur.statusmessage)
 
     def workaround_sommerzeit(self):
         """
@@ -519,7 +521,7 @@ AND extract(hour from "H_Ankunft") >= 12;
 """
         cur = self.conn.cursor()
         cur.execute(sql)
-        logger.info('set_arrival_to_day_before: %s' % cur.statusmessage)
+        self.logger.info('set_arrival_to_day_before: %s' % cur.statusmessage)
 
     def set_departure_to_day_before(self):
         """
@@ -564,7 +566,7 @@ AND extract(hour from "H_Abfahrt") >= 12;
 """
         cur = self.conn.cursor()
         cur.execute(sql)
-        logger.info('set_departure_to_day_before: %s' % cur.statusmessage)
+        self.logger.info('set_departure_to_day_before: %s' % cur.statusmessage)
 
     def shift_trips(self):
         sql1 = """
@@ -601,14 +603,14 @@ WHERE f.abfahrt_id = v.abfahrt_id
             cur.execute(sql1)
             msg = cur.statusmessage
             n_updated = int(msg.split(' ')[1])
-            logger.info('Shift Trips forward: %s' % cur.statusmessage)
+            self.logger.info('Shift Trips forward: %s' % cur.statusmessage)
 
         n_updated = 1
         while n_updated:
             cur.execute(sql2)
             msg = cur.statusmessage
             n_updated = int(msg.split(' ')[1])
-            logger.info('Shift Trips backward: %s' % cur.statusmessage)
+            self.logger.info('Shift Trips backward: %s' % cur.statusmessage)
 
     def reset_ein_aus(self):
         sql1 = """
@@ -625,9 +627,9 @@ WHERE aus = FALSE;
 """
         cur = self.conn.cursor()
         cur.execute(sql1)
-        logger.info('no Entry: %s' % cur.statusmessage)
+        self.logger.info('no Entry: %s' % cur.statusmessage)
         cur.execute(sql2)
-        logger.info('no Exit: %s' % cur.statusmessage)
+        self.logger.info('no Exit: %s' % cur.statusmessage)
 
     def set_ein_aus(self):
         sql1 = """
@@ -642,9 +644,9 @@ WHERE "H_Ankunft" IS NULL
 """
         cur = self.conn.cursor()
         cur.execute(sql1)
-        logger.info('no Entry: %s' % cur.statusmessage)
+        self.logger.info('no Entry: %s' % cur.statusmessage)
         cur.execute(sql2)
-        logger.info('no Exit: %s' % cur.statusmessage)
+        self.logger.info('no Exit: %s' % cur.statusmessage)
 
         sql3 = """
 UPDATE trips f
@@ -662,7 +664,7 @@ WHERE ank.abfahrt_id = f.abfahrt_id
 AND ank.fahrt_index = f.fahrt_index;
         """
         cur.execute(sql3)
-        logger.info('Missing Departure Time added : %s' % cur.statusmessage)
+        self.logger.info('Missing Departure Time added : %s' % cur.statusmessage)
 
         sql4 = """
 UPDATE trips f
@@ -672,7 +674,7 @@ AND "H_Ankunft" IS NULL
 AND "H_Abfahrt" IS NOT NULL;
         """
         cur.execute(sql4)
-        logger.info('Missing Arrival Time added : %s' % cur.statusmessage)
+        self.logger.info('Missing Arrival Time added : %s' % cur.statusmessage)
 
     def test_for_negative_travel_times(self):
         cur = self.conn.cursor()
@@ -694,7 +696,7 @@ where "H_Abfahrt" < "H_Ankunft";
         cur.execute(sql)
         result2 = cur.fetchone()
         if result[0] or result2[0]:
-            logger.warning('''There exist still negative travel times with
+            self.logger.warning('''There exist still negative travel times with
             departures before arrivals!''')
             if result[0]:
                 sql = """
@@ -707,7 +709,7 @@ WHERE "H_Ankunft" < ab0;
                 """
                 cur.execute(sql)
                 abfahrten = np.array(cur.fetchall())
-                logger.warning('%s' % abfahrten)
+                self.logger.warning('%s' % abfahrten)
 
             if result2[0]:
                 sql = """
@@ -717,11 +719,11 @@ WHERE "H_Abfahrt" < "H_Ankunft";
                 """
                 cur.execute(sql)
                 abfahrten = np.array(cur.fetchall())
-                logger.warning('%s' % abfahrten)
+                self.logger.warning('%s' % abfahrten)
             # raise ValueError('''There exist still negative travel times with
             # departures before arrivals!''')
         else:
-            logger.info('no negative travel times')
+            self.logger.info('no negative travel times')
 
     def count_multiple_abfahrten(self):
         """
@@ -787,7 +789,7 @@ FROM (
 WHERE b.abfahrt_id = a.abfahrt_id;
 """
         cur.execute(sql)
-        logger.info('Multiple_abfahrten: %s' % cur.statusmessage)
+        self.logger.info('Multiple_abfahrten: %s' % cur.statusmessage)
 
         sql = """
 -- zähle, wie viele doppelte vorhanden
@@ -801,7 +803,7 @@ GROUP BY keep;
         msg = 'keep abfahrten: {0.keep}: {0.count}'
         for row in rows:
             pass
-            # logger.info(msg.format(row))
+            # self.logger.info(msg.format(row))
 
     def show_multiple_trips(self):
         cur = self.conn.cursor()
@@ -825,7 +827,7 @@ ORDER BY f."Fahrt_Name", f.abfahrt_id, f.fahrt_index;
         msg = '{0.Fahrt_Name}\t{0.abfahrt_id}\t{0.fahrt_index}\t{0.H_Ankunft} - {0.H_Abfahrt}\t{0.H_ID}\t{0.H_Name}'
         for row in rows:
             m = msg.format(row)
-            logger.info(m)
+            self.logger.info(m)
 
     def save_haltestellen_id(self):
         """
@@ -852,7 +854,7 @@ WHERE f.abfahrt_id = f2.abfahrt_id_final
       AND f2."H_ID" IS NOT NULL;
         """
         cur.execute(sql)
-        logger.info('save haltestellen_ids: %s' % cur.statusmessage)
+        self.logger.info('save haltestellen_ids: %s' % cur.statusmessage)
 
     def update_haltestellen_d(self,
                               haltestellen='haltestellen_mitteleuropa.haltestellen'):
@@ -896,7 +898,7 @@ DELETE FROM departures WHERE keep = FALSE
 OR keep IS NULL;
         """
         cur.execute(sql)
-        logger.info('abfahrten deleted: %s' % cur.statusmessage)
+        self.logger.info('abfahrten deleted: %s' % cur.statusmessage)
 
         sql = """
 -- remove copied dummy-haltestellen-ids
@@ -905,7 +907,7 @@ SET stop_id = NULL WHERE stop_id > 10000000;
 
         """
         cur.execute(sql)
-        logger.info('dummy-haltestellen_ids removed: %s' % cur.statusmessage)
+        self.logger.info('dummy-haltestellen_ids removed: %s' % cur.statusmessage)
 
     def reset_stop_id(self):
         """
@@ -939,7 +941,7 @@ AND f."H_Name" = h."H_Name";
 
         """
         cur.execute(sql)
-        logger.info('eindeutige stop_ids aus Haltestellen: %s' %
+        self.logger.info('eindeutige stop_ids aus Haltestellen: %s' %
                     cur.statusmessage)
 
     def update_stop_id_from_database(self):
@@ -976,14 +978,14 @@ AND hd."H_Name" IN (SELECT DISTINCT f."H_Name" FROM trips AS f);
 """
 
         query = sql
-        logger.info(query)
+        self.logger.info(query)
         cur.execute(query)
-        logger.info('{msg}'.format(msg=cur.statusmessage))
+        self.logger.info('{msg}'.format(msg=cur.statusmessage))
 
         query = sql2.format(srid=self.target_srid)
-        logger.info(query)
+        self.logger.info(query)
         cur.execute(query)
-        logger.info('{msg}'.format(msg=cur.statusmessage))
+        self.logger.info('{msg}'.format(msg=cur.statusmessage))
 
     def cleanup_haltestellen(self):
         """
@@ -1075,7 +1077,7 @@ AND f.fahrt_index = c.fahrt_index
 ;
         """
         cur.execute(sql)
-        logger.info('UPDATE stop_id FROM similar routes: %s' %
+        self.logger.info('UPDATE stop_id FROM similar routes: %s' %
                     cur.statusmessage)
 
         sql = """
@@ -1095,7 +1097,7 @@ AND f.fahrt_index = a.fahrt_index;
 """
 
         cur.execute(sql)
-        logger.info('UPDATE stop_id for busses: %s' % cur.statusmessage)
+        self.logger.info('UPDATE stop_id for busses: %s' % cur.statusmessage)
 
         sql = """
 -- setze die Haltestellennummer bei Nicht-Bussen auf die größte bekannte "H_ID" für den Haltestellennamen
@@ -1113,7 +1115,7 @@ AND f.fahrt_index = a.fahrt_index;
 
 """
         cur.execute(sql)
-        logger.info('UPDATE stop_id for busses: %s' % cur.statusmessage)
+        self.logger.info('UPDATE stop_id for busses: %s' % cur.statusmessage)
 
         sql = """
 -- Setze die Koordinaten in haltestellen auf 0, wenn unbekannte Halteselle
@@ -1511,7 +1513,7 @@ WHERE departure_time IS NULL;
                             self.destination_db,
                             self.subfolder)
 
-        with Connection(self.login1) as conn:
+        with Connection(self.login) as conn:
             self.conn = conn
             self.set_search_path()
             cur = self.conn.cursor()
@@ -1529,10 +1531,10 @@ WHERE departure_time IS NULL;
                     tn = 'gtfs_{tn}'.format(tn=table)
                     tablename = '{tn}.txt'.format(tn=table)
                     fn = os.path.join(folder, tablename)
-                    logger.info('write {}'.format(fn))
+                    self.logger.info('write {}'.format(fn))
                     with open(fn, 'w') as f:
                         sql = self.conn.copy_sql.format(tn=tn, fn=fn)
-                        logger.info(sql)
+                        self.logger.info(sql)
                         cur.copy_expert(sql, f)
                     z.write(fn, tablename)
                     os.remove(fn)

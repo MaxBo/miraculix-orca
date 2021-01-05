@@ -28,7 +28,7 @@ class TestVisum(unittest.TestCase):
         visum = self.visum
         #print visum
         visum.read_tables()
-        print visum
+        print(visum)
 
     def test_02_transform(self):
         visum = self.visum

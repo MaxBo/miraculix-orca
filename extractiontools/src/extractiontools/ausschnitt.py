@@ -3,13 +3,16 @@
 
 from argparse import ArgumentParser
 
-import numpy as np
-import logging
-logger = logging.getLogger('OrcaLog')
-logger.level = logging.DEBUG
 import sys
 import os
 import subprocess
+import time
+import ogr
+from psycopg2.sql import Identifier, SQL
+from psycopg2 import errors
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from copy import deepcopy
+import logging
 
 from .connection import Connection, DBApp, Login
 
@@ -54,93 +57,94 @@ class Extract(DBApp):
     role = 'group_osm'
 
     def __init__(self,
-                 destination_db='extract',
-                 temp='temp',
-                 target_srid=31467,
+                 destination_db,
+                 target_srid: int=None,
+                 temp: str=None,
+                 foreign_server: str='foreign_server',
+                 foreign_login: Login=None,
+                 tables: dict={},
+                 source_db: str=None,
+                 logger=None,
+                 boundary: ogr.Geometry=None,
+                 boundary_name: str='bbox',
                  **options):
         self.srid = 4326
-        self.target_srid = target_srid
-        self.temp = temp
-        self.source_db = options.get('source_db', 'europe')
+        self.logger = logger or logging.getLogger(__name__)
+        self.temp = temp or f'temp{round(time.time() * 100)}'
+        self.foreign_server = foreign_server
+        self.source_db = source_db or os.environ.get('FOREIGN_NAME', 'europe')
         self.destination_db = destination_db
+        self.tables = tables
         self.tables2cluster = []
         self.check_platform()
-
-    def set_login(self, host, port, user, password=None, **kwargs):
-        """
-        set login information for source and destination database
-        to self.login0 and self.login1
-
-        Parameters
-        ----------
-        host : str
-        port : int
-        user : str
-        password : str, optional
-        """
-        self.login0 = Login(host, port, user, password, db=self.source_db)
-        self.login1 = Login(host, port, user, password,
-                            db=self.destination_db)
-
-    def set_login01(self, login: Login, source_db):
-        """
-        set login information for source and destination database
-        to self.login0 and self.login1
-
-        Parameters
-        ----------
-        login : Login
-        source_db : str
-        """
-        self.login0 = Login(login.host, login.port,
-                            login.user, login.password,
-                            db=source_db)
-        self.login1 = login
+        self.boundary = boundary
+        self.boundary_name = boundary_name
+        self.set_login(database=self.destination_db)
+        self.foreign_login = foreign_login or Login(
+            host=os.environ.get('FOREIGN_HOST', 'localhost'),
+            port=os.environ.get('FOREIGN_PORT', 5432),
+            user=os.environ.get('FOREIGN_USER'),
+            password=os.environ.get('FOREIGN_PASS', ''),
+            db=self.source_db
+        )
+        self.target_srid = (target_srid or self.get_target_srid()
+                            or 25832)
 
     def execute_query(self, sql):
         """
         establishes a connection and executes some code
         """
-        with Connection(login=self.login0) as conn0, \
-                Connection(login=self.login1) as conn1:
+        with Connection(login=self.foreign_login) as conn0, \
+                Connection(login=self.login) as conn1:
             self.run_query(sql)
 
     def recreate_db(self):
         self.set_pg_path()
         exists = self.check_if_database_exists(self.destination_db)
         if exists:
-            logger.info(f'Truncate Database {self.destination_db}')
+            self.logger.info(f'Truncate Database {self.destination_db}')
             self.truncate_db()
         else:
-            logger.info(f'Create Database {self.destination_db}')
-            self.create_target_db(self.login1)
-            logger.info(f'Create Database {self.destination_db}')
+            self.logger.info(f'Create Database {self.destination_db}')
+            self.create_target_db(self.login)
+            self.logger.info(f'Create Database {self.destination_db}')
+        self.create_meta()
+        self.create_extensions()
         self.create_serverside_folder()
 
     def extract(self):
         self.set_pg_path()
-        with Connection(login=self.login0) as conn0, \
-                Connection(login=self.login1) as conn1:
-            self.conn0 = conn0
-            self.conn1 = conn1
-            self.set_session_authorization(self.conn0)
-            self.set_search_path('conn0')
-            self.create_temp_schema()
-            self.create_target_boundary()
-            for tn, geom in self.tables.items():
-                self.extract_table(tn, geom)
-            self.additional_stuff()
-            self.conn0.commit()
-            self.reset_authorization(self.conn0)
-            self.conn1.commit()
+        try:
+            with Connection(login=self.foreign_login) as conn0, \
+                    Connection(login=self.login) as conn1:
+                self.conn0 = conn0
+                self.conn1 = conn1
+                self.set_session_authorization(self.conn0)
+                self.set_search_path('conn0')
+                self.create_temp_schema()
+                self.conn0.commit()
+                if self.boundary:
+                    self.set_target_boundary(self.boundary,
+                                             name=self.boundary_name)
+                wkt = self.get_target_boundary()
+                self.create_foreign_boundary(wkt)
+                for tn, geom in self.tables.items():
+                    self.extract_table(tn, geom)
+                self.conn0.commit()
+                self.additional_stuff()
+                self.conn0.commit()
+                self.reset_authorization(self.conn0)
+                self.conn1.commit()
 
-            self.copy_temp_schema_to_target_db(schema=self.temp)
-            self.rename_schema()
-            self.final_stuff()
+                self.copy_temp_schema_to_target_db(schema=self.temp)
+                self.rename_schema()
+                self.final_stuff()
+                self.conn0.commit()
+                self.conn1.commit()
+        except Exception as e:
+            raise(e)
+        finally:
             self.cleanup()
-            self.conn0.commit()
-            self.conn1.commit()
-
         self.further_stuff()
 
     def further_stuff(self):
@@ -152,6 +156,27 @@ class Extract(DBApp):
         """
         additional steps, to be defined in the subclass
         """
+
+    def create_extensions(self):
+        """
+        extensions needed later (usually provided by the template already)
+        """
+        sql = '''
+        CREATE EXTENSION IF NOT EXISTS dblink;
+        CREATE EXTENSION IF NOT EXISTS postgis;
+        CREATE EXTENSION IF NOT EXISTS postgis_raster;
+        CREATE EXTENSION IF NOT EXISTS hstore;
+        CREATE EXTENSION IF NOT EXISTS pgRouting;
+        CREATE EXTENSION IF NOT EXISTS plpython3u;
+        CREATE EXTENSION IF NOT EXISTS kmeans;
+        CREATE OR REPLACE AGGREGATE public.hstore_sum (public.hstore)
+        (
+          SFUNC = public.hs_concat,
+          STYPE = public.hstore
+        );
+        '''
+        with Connection(login=self.foreign_login) as conn0:
+            self.run_query(sql, conn=conn0)
 
     def rename_schema(self):
         """
@@ -220,32 +245,21 @@ DROP SCHEMA IF EXISTS {schema} CASCADE;
         """.format(schema=self.schema)
         self.run_query(sql, conn=self.conn1)
 
-    def get_target_boundary(self, bbox):
-        """
-        """
-        self.bbox = bbox
-
-    def get_target_boundary_from_dest_db(self):
+    def get_target_boundary(self, name='bbox'):
         """
         get the target boundary from the destination database
         """
-        with Connection(login=self.login1) as conn1:
-            cur = conn1.cursor()
-            sql = """
-SELECT
-    st_ymax(a.source_geom) AS top,
-    st_ymin(a.source_geom) AS bottom,
-    st_xmax(a.source_geom) AS right,
-    st_xmin(a.source_geom) AS left
-FROM meta.boundary a;
-"""
+        with Connection(login=self.login) as conn:
+            cur = conn.cursor()
+            sql = f"""
+            SELECT ST_AsText(source_geom) as wkt FROM meta.boundary
+            WHERE name='{name}';
+            """
             cur.execute(sql)
             row = cur.fetchone()
-            self.bbox = BBox(row.top, row.bottom, row.left, row.right)
+            return row.wkt
 
-        self.target_srid = self.get_target_srid_from_dest_db()
-
-    def get_target_srid_from_dest_db(self):
+    def get_target_srid(self):
         """
         get the target boundary from the destination database
 
@@ -253,85 +267,105 @@ FROM meta.boundary a;
         -------
         srid : int
         """
-        with Connection(login=self.login1) as conn1:
-            cur = conn1.cursor()
-            sql = """
-SELECT
-    st_srid(a.geom) AS srid
-FROM meta.boundary a;
-"""
-            cur.execute(sql)
-            row = cur.fetchone()
-            srid = row.srid
+        try:
+            with Connection(login=self.login) as conn:
+                cur = conn.cursor()
+                sql = """
+    SELECT
+        st_srid(a.geom) AS srid
+    FROM meta.boundary a;
+    """
+                cur.execute(sql)
+                row = cur.fetchone()
+                srid = row.srid
+        except errors.UndefinedTable:
+            return
         return srid
 
-    def create_target_boundary(self):
+    def set_target_boundary(self, geom, name='bbox'):
         """
-        write target boundary into temp_schema
+        insert or replace geometry of entry with given name in boundary table
+        """
+        wkt = geom.ExportToWkt()
+        s_ref = geom.GetSpatialReference()
+        if s_ref:
+            srid = s_ref.GetAuthorityCode(None)
+            if srid != str(self.srid):
+                raise Exception('Provided geometry has wrong projection {srid}.'
+                                ' Projection should be {self.srid} instead!')
+        sql = '''
+INSERT INTO meta.boundary (name, source_geom)
+VALUES ('{name}', st_setsrid(ST_GeomFromText('{wkt}'), {srid}))
+ON CONFLICT (name) DO
+UPDATE SET source_geom=st_setsrid(ST_GeomFromText('{wkt}'), {srid});
+UPDATE meta.boundary SET geom = st_transform(source_geom, {target_srid});
+'''.format(wkt=wkt, srid=self.srid, name=name,
+           target_srid=self.target_srid)
+        with Connection(login=self.login) as conn:
+            self.run_query(sql, conn)
 
-        Parameters
-        ----------
-        top : float
-        bottom : float
-        left : float
-        right : float
+    def create_foreign_boundary(self, wkt, schema=None):
         """
-        bbox = self.bbox
+        write given wkt into boundary table in foreign db
+        """
         sql = '''
 DROP TABLE IF EXISTS {temp}.boundary;
 CREATE TABLE {temp}.boundary (id INTEGER PRIMARY KEY,
-                              source_geom geometry('POLYGON', {srid}),
-                              geom geometry('POLYGON', {target_srid}));
+                              source_geom geometry('MULTIPOLYGON', {srid}),
+                              geom geometry('MULTIPOLYGON', {target_srid}));
 INSERT INTO {temp}.boundary (id, source_geom)
-VALUES (1, st_setsrid(st_makebox2d(st_point({LEFT}, {TOP}), st_point({RIGHT}, {BOTTOM})), {srid}));
+VALUES (1, st_setsrid(ST_GeomFromText('{wkt}'), {srid}));
 UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
-'''.format(temp=self.temp,
-           LEFT=bbox.left, RIGHT=bbox.right,
-           TOP=bbox.top, BOTTOM=bbox.bottom,
-           srid=self.srid,
+'''.format(temp=schema or self.temp,
+           wkt=wkt, srid=self.srid,
            target_srid=self.target_srid)
-        self.run_query(sql, self.conn0)
+        with Connection(login=self.foreign_login) as conn:
+            self.run_query(sql, conn)
 
     def set_pg_path(self):
         """"""
+        pg_path = os.environ.get('PGPATH')
         if sys.platform.startswith('win'):
-            self.PGPATH = r'C:\Program Files\PostgreSQL\9.3\bin'
+            self.PGPATH = pg_path or r'C:\Program Files\PostgreSQL\9.3\bin'
             self.SHELL = False
         else:
-            self.PGPATH = '/usr/bin'
+            self.PGPATH = pg_path or '/usr/bin'
             self.SHELL = True
 
     def create_target_db(self, login):
         """
         create the target database
         """
-        createdb = os.path.join(self.PGPATH, 'createdb')
+        sql = SQL("""
+        CREATE DATABASE {db};
+        ALTER DATABASE {db} OWNER TO {role};
+        """).format(db=Identifier(self.login.db), role=Identifier(self.role))
 
-        cmd = '''"{createdb}" -U {user} -h {host} -p {port} -w -T pg_template {destination_db}'''.format(createdb=createdb, destination_db=login.db, user=login.user,
-                                                                                                         port=login.port, host=login.host)
-        logger.info(cmd)
-        ret = subprocess.call(cmd, shell=self.SHELL)
-        if ret:
-            raise IOError(
-                'Database {db} could not be recreated'.format(db=login.db))
+        login = deepcopy(self.login)
+        login.db = 'postgres'
+        with Connection(login=login) as conn:
+            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+            self.run_query(sql, conn=conn)
 
-        sql = """
-ALTER DATABASE {db} OWNER TO {role};
-        """
-        with Connection(login=self.login0) as conn0:
-            self.run_query(sql.format(db=login.db,
-                                      role=self.role),
-                           conn=conn0)
-            conn0.commit()
+    def create_meta(self):
+        sql = '''
+        CREATE SCHEMA meta;
+        DROP TABLE IF EXISTS meta.boundary;
+        CREATE TABLE meta.boundary (name VARCHAR PRIMARY KEY,
+                                    source_geom geometry('MULTIPOLYGON', {srid}),
+                                    geom geometry('MULTIPOLYGON', {target_srid}));
+        '''.format(srid=self.srid, target_srid=self.target_srid)
+        with Connection(login=self.login) as conn:
+            self.run_query(sql, conn=conn)
 
     def truncate_db(self):
         """Truncate the database"""
-        sql = """
-SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
-        """.format(db=self.destination_db)
-        with Connection(login=self.login0) as conn:
-            self.run_query(sql, conn=conn)
-            conn.commit()
+        #sql = """
+#SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
+        #""".format(db=self.destination_db)
+        #with Connection(login=self.login) as conn:
+            #self.run_query(sql, conn=conn)
+            #conn.commit()
 
         sql = """
 SELECT 'drop schema if exists "' || schema_name || '" cascade;' AS sql
@@ -341,7 +375,7 @@ FROM (SELECT catalog_name, schema_name
       schema_name not IN ('information_schema', 'public',
                           'topology', 'repack')) s;
         """
-        with Connection(login=self.login1) as conn:
+        with Connection(login=self.login) as conn:
             cursor2 = conn.cursor()
             cursor = conn.cursor()
             cursor.execute(sql)
@@ -349,12 +383,12 @@ FROM (SELECT catalog_name, schema_name
                 cursor2.execute(row.sql)
             conn.commit()
 
-        sql = """
-update pg_database set datallowconn = 'True' where datname = '{db}';
-        """.format(db=self.destination_db)
-        with Connection(login=self.login0) as conn:
-            self.run_query(sql, conn=conn)
-            conn.commit()
+        #sql = """
+#update pg_database set datallowconn = 'True' where datname = '{db}';
+        #""".format(db=self.destination_db)
+        #with Connection(login=self.login) as conn:
+            #self.run_query(sql, conn=conn)
+            #conn.commit()
 
     def copy_temp_schema_to_target_db(self, schema):
         """
@@ -365,26 +399,25 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
         pg_dump = os.path.join(self.PGPATH, 'pg_dump')
         pg_restore = os.path.join(self.PGPATH, 'pg_restore')
 
-        logger.info('copy schema {schema} from {db0} to {db1}'.format(schema=schema,
-                                                                      db0=self.login0.db,
-                                                                      db1=self.login1.db))
+        self.logger.info('copy schema {schema} from {db0} to {db1}'.format(
+            schema=schema, db0=self.foreign_login.db, db1=self.login.db))
 
-        logger.info('login_source: %s' % self.login0)
-        logger.info('login_dest: %s' % self.login1)
+        #self.logger.info('login_source: %s' % self.foreign_login)
+        #self.logger.info('login_dest: %s' % self.login)
 
         pg_dump_cmd = ' '.join([
             '"{cmd}"'.format(cmd=pg_dump),
-            '--host={host}'.format(host=self.login0.host),
-            '--port={port}'.format(port=self.login0.port),
-            '--username={user}'.format(user=self.login0.user),
+            '--host={host}'.format(host=self.foreign_login.host),
+            '--port={port}'.format(port=self.foreign_login.port),
+            '--username={user}'.format(user=self.foreign_login.user),
             '-w',
             '--format=custom',
             '--verbose',
             '--schema={schema}'.format(schema=schema),
-            '{db}'.format(db=self.login0.db),
+            '{db}'.format(db=self.foreign_login.db),
         ])
 
-        logger.info(pg_dump_cmd)
+        self.logger.info(pg_dump_cmd)
 
         dump = subprocess.Popen(pg_dump_cmd,
                                 stdout=subprocess.PIPE,
@@ -393,16 +426,16 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
 
         pg_restore_cmd = ' '.join([
             '"{cmd}"'.format(cmd=pg_restore),
-            '-d {db}'.format(db=self.login1.db),
-            '--host={host}'.format(host=self.login1.host),
-            '--port={port}'.format(port=self.login1.port),
-            '--username={user}'.format(user=self.login1.user),
+            '-d {db}'.format(db=self.login.db),
+            '--host={host}'.format(host=self.login.host),
+            '--port={port}'.format(port=self.login.port),
+            '--username={user}'.format(user=self.login.user),
             # '--clean',
             '-w',
             '--format=custom',
             '--verbose',
         ])
-        logger.info(pg_restore_cmd)
+        self.logger.info(pg_restore_cmd)
 
         try:
 
@@ -410,7 +443,7 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
                                               stdin=dump.stdout,
                                               shell=self.SHELL)
         except subprocess.CalledProcessError as err:
-            logger.info(err)
+            self.logger.error(err)
 
         dump.terminate()
 
@@ -418,14 +451,15 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
         """
         remove the temp schema
         """
-        sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
-            temp=self.temp)
-        self.run_query(sql, conn=self.conn0)
+        with Connection(login=self.foreign_login) as conn0:
+            sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
+                temp=self.temp)
+            self.run_query(sql, conn=conn0)
 
     def cluster_and_analyse(self):
         """
         """
-        login = self.login1
+        login = self.login
 
         cmd = '''"{clusterdb}" -U {user} -h {host} -p {port} -w --verbose {tbls} -d {destination_db}'''
         if self.tables2cluster:
@@ -437,10 +471,10 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
                              port=login.port,
                              host=login.host,
                              tbls=tbls)
-            logger.info(cmd)
+            self.logger.info(cmd)
             subprocess.call(cmd, shell=self.SHELL)
         else:
-            logger.info('no tables to cluster')
+            self.logger.info('no tables to cluster')
 
         vacuumdb = os.path.join(self.PGPATH, 'vacuumdb')
         cmd = '''"{vacuumdb}" -U {user} -h {host} -p {port} -w --analyze-in-stages -d {destination_db}'''
@@ -449,7 +483,7 @@ update pg_database set datallowconn = 'True' where datname = '{db}';
                          user=login.user,
                          port=login.port,
                          host=login.host)
-        logger.info(cmd)
+        self.logger.info(cmd)
         subprocess.call(cmd, shell=self.SHELL)
 
     def create_serverside_folder(self):
@@ -815,6 +849,6 @@ if __name__ == '__main__':
                           target_srid=options.srid)
     extract.set_login(host=options.host,
                       port=options.port, user=options.user)
-    extract.get_target_boundary(bbox)
+    extract.add_target_boundary(bbox)
     extract.extract()
 
