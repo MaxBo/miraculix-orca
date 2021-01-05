@@ -23,7 +23,7 @@ __parent_modules__ = [
 
 @meta(group='(2) Extract Data', order=1, required='create_db')
 @orca.step()
-def extract_osm(source_db: str, database: str, target_srid: str,
+def extract_osm(source_db: str, database: str, target_srid: int,
                 project_area: ogr.Geometry):
     """
     extract OSM data in the area
@@ -47,7 +47,7 @@ def create_polygons_from_osm(database: str):
 @meta(group='(2) Extract Data', order=4, required='create_db')
 @orca.step()
 def extract_landuse(source_db: str, database: str, gmes: List[str],
-                    corine: List[str], target_srid: str,
+                    corine: List[str], target_srid: int,
                     project_area: ogr.Geometry):
     """
     extract landuse data in the area
@@ -62,7 +62,7 @@ def extract_landuse(source_db: str, database: str, gmes: List[str],
 @orca.step()
 def extract_verwaltungsgrenzen(source_db: str, database: str,
                                verwaltungsgrenzen_tables: List[str],
-                               target_srid: str, project_area: ogr.Geometry):
+                               target_srid: int, project_area: ogr.Geometry):
     """
     extract administrative boundaries in the area
     """
@@ -76,7 +76,7 @@ def extract_verwaltungsgrenzen(source_db: str, database: str,
 
 @meta(group='(2) Extract Data', order=5, required='create_db')
 @orca.step()
-def extract_laea_raster(source_db: str, database: str, target_srid: str,
+def extract_laea_raster(source_db: str, database: str, target_srid: int,
                         project_area: ogr.Geometry):
     """
     extract laea raster in the area
