@@ -10,7 +10,6 @@ class ExtractOSM(Extract):
     """
     Extract the osm data
     """
-    tables = {}
     schema = 'osm'
     role = 'group_osm'
 
@@ -19,53 +18,49 @@ class ExtractOSM(Extract):
         copy relation and relation_member Schema
         """
         sql = """
-        SELECT *
-        INTO {temp}.relations
-        FROM {schema}.relations
-        LIMIT 0;
+        CREATE TABLE {schema}.relations AS
+        (SELECT * FROM {temp}.relations) WITH NO DATA;
 
-        SELECT *
-        INTO {temp}.relation_members
-        FROM {schema}.relation_members
-        LIMIT 0;
+        CREATE TABLE {schema}.relation_members AS
+        (SELECT * FROM {temp}.relation_members) WITH NO DATA;
         """.format(temp=self.temp, schema=self.schema)
-        self.run_query(sql, conn=self.conn0)
-        self.conn0.commit()
+        self.run_query(sql, conn=self.conn)
+        self.conn.commit()
 
         sql = """
 -- copy relations for ways and nodes
-INSERT INTO {temp}.relations
+INSERT INTO {schema}.relations
 SELECT DISTINCT ON (r.id) r.*
-FROM {schema}.relations r,
+FROM {temp}.relations r,
 (SELECT rm.relation_id AS rid
-FROM {schema}.relation_members rm, {temp}.ways AS w
+FROM {temp}.relation_members rm, {schema}.ways AS w
 WHERE rm.member_type = 'W'
 AND w.id = rm.member_id
 
 UNION ALL
 
 SELECT rm.relation_id AS rid
-FROM {schema}.relation_members rm, {temp}.nodes AS n
+FROM {temp}.relation_members rm, {schema}.nodes AS n
 WHERE rm.member_type = 'N'
 AND n.id = rm.member_id) rnw
 
 WHERE rnw.rid = r.id
 ;
         """.format(temp=self.temp, schema=self.schema)
-        self.run_query(sql, conn=self.conn0)
+        self.run_query(sql, conn=self.conn)
 
         sql = """
 -- Insert relation that point to an existing relation
-INSERT INTO {temp}.relations
+INSERT INTO {schema}.relations
 SELECT DISTINCT ON (r.id) r.*
-FROM {schema}.relations r, {schema}.relation_members rm, {temp}.relations tr
+FROM {temp}.relations r, {temp}.relation_members rm, {schema}.relations tr
 WHERE r.id = rm.relation_id
 AND rm.member_id = tr.id
 AND rm.member_type = 'R'
-AND NOT EXISTS (SELECT 1 FROM {temp}.relations tr2 WHERE tr2.id = r.id);
+AND NOT EXISTS (SELECT 1 FROM {schema}.relations tr2 WHERE tr2.id = r.id);
         """.format(temp=self.temp, schema=self.schema)
 
-        cur = self.conn0.cursor()
+        cur = self.conn.cursor()
         n_inserted = 1
         while n_inserted:
             self.logger.info(sql)
@@ -76,12 +71,12 @@ AND NOT EXISTS (SELECT 1 FROM {temp}.relations tr2 WHERE tr2.id = r.id);
 
         sql = """
 -- INSERT Relation members
-INSERT INTO {temp}.relation_members
+INSERT INTO {schema}.relation_members
 SELECT rm.*
-FROM {schema}.relation_members rm, {temp}.relations r
+FROM {temp}.relation_members rm, {schema}.relations r
 WHERE r.id = rm.relation_id;
         """.format(temp=self.temp, schema=self.schema)
-        self.run_query(sql, conn=self.conn0)
+        self.run_query(sql, conn=self.conn)
 
 
     def copy_way_nodes(self):
@@ -92,22 +87,22 @@ WHERE r.id = rm.relation_id;
         sql = """
 -- copy way nodes
 SELECT wn.*
-INTO {temp}.way_nodes
-FROM {schema}.way_nodes wn, {temp}.ways w
+INTO {schema}.way_nodes
+FROM {temp}.way_nodes wn, {schema}.ways w
 WHERE wn.way_id = w.id;
 
 -- copy nodes that are in way_nodes but not yet in nodes
-INSERT INTO {temp}.nodes
+INSERT INTO {schema}.nodes
 SELECT DISTINCT ON (n.id)
   n.id, n.version, n.user_id, n.tstamp, n.changeset_id, n.tags,
   st_transform(n.geom, {target_srid}) AS geom
-FROM {schema}.nodes n, {temp}.way_nodes wn
+FROM {temp}.nodes n, {schema}.way_nodes wn
 WHERE n.id = wn.node_id
-AND NOT EXISTS (SELECT 1 FROM {temp}.nodes tn WHERE tn.id= n.id);
+AND NOT EXISTS (SELECT 1 FROM {schema}.nodes tn WHERE tn.id= n.id);
         """.format(temp=self.temp, schema=self.schema,
                    target_srid=self.target_srid)
 
-        self.run_query(sql, conn=self.conn0)
+        self.run_query(sql, conn=self.conn)
 
     def copy_users(self):
         """
@@ -115,16 +110,16 @@ AND NOT EXISTS (SELECT 1 FROM {temp}.nodes tn WHERE tn.id= n.id);
         """
         sql = """
 SELECT DISTINCT ON (u.id) u.*
-INTO {temp}.users
-FROM {schema}.users u,
-(SELECT DISTINCT user_id FROM {temp}.nodes
+INTO {schema}.users
+FROM {temp}.users u,
+(SELECT DISTINCT user_id FROM {schema}.nodes
 UNION ALL
-SELECT DISTINCT user_id FROM {temp}.ways
+SELECT DISTINCT user_id FROM {schema}.ways
 UNION ALL
-SELECT DISTINCT user_id FROM {temp}.relations) tu
+SELECT DISTINCT user_id FROM {schema}.relations) tu
 WHERE u.id = tu.user_id;
         """.format(temp=self.temp, schema=self.schema)
-        self.run_query(sql, conn=self.conn0)
+        self.run_query(sql, conn=self.conn)
 
 
     def additional_stuff(self):
@@ -140,38 +135,45 @@ WHERE u.id = tu.user_id;
     def extract_ways(self):
         """
         """
+        wkt = self.get_target_boundary()
         sql = """
 SELECT
   w.id, w.version, w.user_id, w.tstamp, w.changeset_id, w.tags, w.nodes,
   st_transform(st_setsrid(Box2D(w.linestring), {source_srid}), {target_srid})::geometry('GEOMETRY', {target_srid}) AS bbox,
   st_transform(w.linestring, {target_srid})::geometry('GEOMETRY', {target_srid}) AS linestring
-INTO {temp}.ways
-FROM {schema}.ways w, {temp}.boundary tb
+INTO {schema}.ways
+FROM {temp}.ways w,
+(SELECT ST_GeomFromEWKT('SRID={source_srid};{wkt}') AS source_geom) tb
 WHERE
 st_intersects(w.linestring, tb.source_geom);
-ANALYZE {temp}.ways;
+ANALYZE {schema}.ways;
         """
         self.run_query(sql.format(temp=self.temp, schema=self.schema,
                                   target_srid=self.target_srid,
-                                  source_srid=self.srid),
-                       conn=self.conn0)
+                                  source_srid=self.srid, wkt=wkt,
+                                  area_name=self.boundary_name),
+                       conn=self.conn)
 
     def extract_nodes(self):
         """
         """
+        wkt = self.get_target_boundary()
         sql = """
 SELECT
   n.id, n.version, n.user_id, n.tstamp, n.changeset_id, n.tags,
   st_transform(n.geom, {target_srid})::geometry('POINT', {target_srid}) AS geom
-INTO {temp}.nodes
-FROM {schema}.nodes n, {temp}.boundary tb
+INTO {schema}.nodes
+FROM {temp}.nodes n,
+(SELECT ST_GeomFromEWKT('SRID={source_srid};{wkt}') AS source_geom) tb
 WHERE
 n.geom && tb.source_geom;
-ANALYZE {temp}.nodes;
+ANALYZE {schema}.nodes;
         """
         self.run_query(sql.format(temp=self.temp, schema=self.schema,
-                                  target_srid=self.target_srid),
-                       conn=self.conn0)
+                                  target_srid=self.target_srid,
+                                  source_srid=self.srid, wkt=wkt,
+                                  area_name=self.boundary_name),
+                       conn=self.conn)
 
 
     def copy_schema_info(self):
@@ -180,14 +182,14 @@ ANALYZE {temp}.nodes;
         """
         sql = """
 SELECT a.*
-INTO {temp}.actions
-FROM {schema}.actions a;
+INTO {schema}.actions
+FROM {temp}.actions a;
 
 SELECT s.*
-INTO {temp}.schema_info
-FROM {schema}.schema_info s;
+INTO {schema}.schema_info
+FROM {temp}.schema_info s;
         """.format(temp=self.temp, schema=self.schema)
-        self.run_query(sql, self.conn0)
+        self.run_query(sql, self.conn)
 
     def create_index(self):
         """
@@ -262,7 +264,7 @@ ALTER TABLE osm.relations
 
 
         """.format(schema=self.schema)
-        self.run_query(sql, self.conn1)
+        self.run_query(sql, self.conn)
         self.tables2cluster.append('{schema}.nodes'.format(schema=self.schema))
         self.tables2cluster.append('{schema}.ways'.format(schema=self.schema))
 
@@ -271,8 +273,8 @@ ALTER TABLE osm.relations
         Copy the osm classifications and osm-view in wgs84
         to destination database
         """
-        self.copy_temp_schema_to_target_db(schema='classifications')
-        self.copy_temp_schema_to_target_db(schema='osm84')
+        self.copy_schema_to_target_db(schema='classifications')
+        self.copy_schema_to_target_db(schema='osm84')
         self.cluster_and_analyse()
 
 
@@ -305,5 +307,4 @@ if __name__ == '__main__':
     extract.set_login(host=options.host,
                       port=options.port,
                       user=options.user)
-    extract.get_target_boundary_from_dest_db()
     extract.extract()
