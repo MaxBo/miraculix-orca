@@ -194,7 +194,7 @@ class DBApp(object):
             os.makedirs(folder)
 
     def run_query(self, sql: Union[str, Composed], conn=None,
-                  split=True):
+                  split=True, verbose=True):
         """
         runs an sql query log the statusmessage of each query
 
@@ -212,7 +212,8 @@ class DBApp(object):
         cur = conn.cursor()
 
         def execute(query):
-            self.logger.info(query)
+            if verbose:
+                self.logger.info(query)
             cur.execute(query)
 
         if split:

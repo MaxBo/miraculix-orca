@@ -8,7 +8,7 @@ import os
 import subprocess
 import time
 import ogr
-from psycopg2.sql import Identifier, SQL
+from psycopg2.sql import Identifier, SQL, Literal
 from psycopg2 import errors
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from copy import deepcopy
@@ -55,6 +55,8 @@ class Extract(DBApp):
     """
     tables = {}
     role = 'group_osm'
+    foreign_schema = None
+    schema = None
 
     def __init__(self,
                  destination_db,
@@ -90,14 +92,6 @@ class Extract(DBApp):
         self.target_srid = (target_srid or self.get_target_srid()
                             or 25832)
 
-    def execute_query(self, sql):
-        """
-        establishes a connection and executes some code
-        """
-        with Connection(login=self.foreign_login) as conn0, \
-                Connection(login=self.login) as conn1:
-            self.run_query(sql)
-
     def recreate_db(self):
         self.set_pg_path()
         exists = self.check_if_database_exists(self.destination_db)
@@ -110,37 +104,26 @@ class Extract(DBApp):
             self.logger.info(f'Create Database {self.destination_db}')
         self.create_meta()
         self.create_extensions()
+        self.create_foreign_server()
         self.create_serverside_folder()
 
     def extract(self):
         self.set_pg_path()
         try:
-            with Connection(login=self.foreign_login) as conn0, \
-                    Connection(login=self.login) as conn1:
-                self.conn0 = conn0
-                self.conn1 = conn1
-                self.set_session_authorization(self.conn0)
-                self.set_search_path('conn0')
-                self.create_temp_schema()
-                self.conn0.commit()
+            with Connection(login=self.login) as conn:
+                self.conn = conn
+                self.create_foreign_schema()
+                self.conn.commit()
                 if self.boundary:
                     self.set_target_boundary(self.boundary,
                                              name=self.boundary_name)
-                wkt = self.get_target_boundary()
-                self.create_foreign_boundary(wkt)
+                self.update_boundaries()
                 for tn, geom in self.tables.items():
                     self.extract_table(tn, geom)
-                self.conn0.commit()
                 self.additional_stuff()
-                self.conn0.commit()
-                self.reset_authorization(self.conn0)
-                self.conn1.commit()
-
-                self.copy_temp_schema_to_target_db(schema=self.temp)
-                self.rename_schema()
+                self.conn.commit()
                 self.final_stuff()
-                self.conn0.commit()
-                self.conn1.commit()
+                self.conn.commit()
         except Exception as e:
             raise(e)
         finally:
@@ -157,6 +140,30 @@ class Extract(DBApp):
         additional steps, to be defined in the subclass
         """
 
+    def create_foreign_server(self):
+        sql = f"""
+        -- server
+        DROP SERVER IF EXISTS {self.foreign_server} CASCADE;
+        CREATE SERVER {self.foreign_server}
+        FOREIGN DATA WRAPPER postgres_fdw
+        OPTIONS (
+            host '{self.foreign_login.host}',
+            port '{self.foreign_login.port}', dbname '{self.foreign_login.db}',
+            fetch_size '100000',
+            extensions 'postgis, hstore, postgis_raster',
+            updatable 'false'
+        );
+        -- user
+        CREATE USER MAPPING FOR {self.login.user}
+        SERVER {self.foreign_server}
+        OPTIONS (user '{self.foreign_login.user}',
+        password '{self.foreign_login.password}');
+        """
+        self.logger.info(
+            f'Creating connection to database "{self.foreign_login.db}"')
+        with Connection(login=self.login) as conn:
+            self.run_query(sql, conn=conn, verbose=False)
+
     def create_extensions(self):
         """
         extensions needed later (usually provided by the template already)
@@ -169,24 +176,35 @@ class Extract(DBApp):
         CREATE EXTENSION IF NOT EXISTS pgRouting;
         CREATE EXTENSION IF NOT EXISTS plpython3u;
         CREATE EXTENSION IF NOT EXISTS kmeans;
+        CREATE EXTENSION IF NOT EXISTS postgres_fdw;
         CREATE OR REPLACE AGGREGATE public.hstore_sum (public.hstore)
         (
           SFUNC = public.hs_concat,
           STYPE = public.hstore
         );
+        CREATE OR REPLACE FUNCTION clone_schema(source_schema text, dest_schema text) RETURNS void AS
+        $BODY$
+        DECLARE
+          objeto text;
+          buffer text;
+        BEGIN
+            EXECUTE 'CREATE SCHEMA ' || dest_schema ;
+
+            FOR objeto IN
+                SELECT table_name::text FROM information_schema.tables WHERE table_schema = source_schema
+            LOOP
+                buffer := dest_schema || '.' || objeto;
+                EXECUTE 'CREATE TABLE ' || buffer || ' (LIKE ' || source_schema || '.' || objeto || ' INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING DEFAULTS)';
+                EXECUTE 'INSERT INTO ' || buffer || '(SELECT * FROM ' || source_schema || '.' || objeto || ')';
+            END LOOP;
+
+        END;
+        $BODY$
+        LANGUAGE plpgsql VOLATILE;
         '''
+        self.logger.info('Adding extensions')
         with Connection(login=self.foreign_login) as conn0:
             self.run_query(sql, conn=conn0)
-
-    def rename_schema(self):
-        """
-        """
-        # Rename restored temp-Schema to new name
-        sql = '''
-ALTER SCHEMA {temp} RENAME TO {schema}
-        '''.format(temp=self.temp,
-                   schema=self.schema)
-        self.run_query(sql, self.conn1)
 
     def final_stuff(self):
         """
@@ -199,53 +217,60 @@ ALTER SCHEMA {temp} RENAME TO {schema}
         To be defined in the subclass
         """
 
-    def extract_table(self, tn, geom='geom'):
+    def extract_table(self, tn, boundary_name='bbox', geom='geom'):
         """
         extracts a single table
         """
         geometrytype = self.get_geometrytype(tn, geom)
-        cols = self.conn0.get_column_dict(tn, self.schema)
+        cols = self.conn.get_column_dict(tn, self.temp)
         cols_without_geom = ('t."{}"'.format(c) for c in cols if c != geom)
         col_str = ', '.join(cols_without_geom)
 
-        sql = """
-SELECT {cols}, st_transform(t.{geom}, {srid})::geometry({gt}, {srid}) as geom
-INTO {temp}.{tn}
-FROM {schema}.{tn} t, {temp}.boundary tb
+        sql = SQL(f"""
+SELECT {col_str}, st_transform(t.{geom}, {srid})::geometry({geometrytype}, {self.target_srid}) as geom
+INTO {self.schema}.{tn}
+FROM {self.temp}.{tn} t, meta.boundary tb
 WHERE
+tb.name = {area_name}
+AND
 st_intersects(t.{geom}, tb.source_geom)
-        """
-        self.run_query(sql.format(tn=tn, temp=self.temp, geom=geom,
-                                  schema=self.schema, cols=col_str, srid=self.target_srid,
-                                  gt=geometrytype),
-                       conn=self.conn0)
+        """).format(area_name=Literal(boundary_name))
+        self.run_query(sql, conn=self.conn)
 
     def get_geometrytype(self, tn, geom):
         sql = """
 SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
-        """.format(geom=geom, sn=self.schema, tn=tn)
-        cur = self.conn0.cursor()
+        """.format(geom=geom, sn=self.temp, tn=tn)
+        cur = self.conn.cursor()
         cur.execute(sql)
         geometrytype = cur.fetchone()[0]
         return geometrytype
 
-    def create_temp_schema(self):
+    def create_foreign_schema(self, foreign_schema=None, target_schema=None):
         """
-        Creates a temporary schema
+        links schema in database to schema on foreign server
         """
-        sql = '''
-DROP SCHEMA IF EXISTS {temp} CASCADE;
-CREATE SCHEMA {temp};
-        '''.format(temp=self.temp)
+        foreign_schema = foreign_schema or self.foreign_schema or self.schema
+        target_schema = target_schema or self.temp
+        sql = f'''
+        DROP SCHEMA IF EXISTS {self.schema} CASCADE;
+        CREATE SCHEMA {self.schema};
+        '''
+        self.run_query(sql, conn=self.conn)
+        sql = f"""
+        DROP SCHEMA IF EXISTS {target_schema} CASCADE;
+        CREATE SCHEMA {target_schema};
+        """
+        self.run_query(sql, conn=self.conn)
 
-        self.run_query(sql, self.conn0)
+        sql = f"""
+        IMPORT FOREIGN SCHEMA {foreign_schema}
+        FROM SERVER {self.foreign_server} INTO {target_schema};
+        """
 
-        sql = """
-DROP SCHEMA IF EXISTS {schema} CASCADE;
-        """.format(schema=self.schema)
-        self.run_query(sql, conn=self.conn1)
+        self.run_query(sql, self.conn)
 
-    def get_target_boundary(self, name='bbox'):
+    def get_target_boundary(self, name=None):
         """
         get the target boundary from the destination database
         """
@@ -253,7 +278,7 @@ DROP SCHEMA IF EXISTS {schema} CASCADE;
             cur = conn.cursor()
             sql = f"""
             SELECT ST_AsText(source_geom) as wkt FROM meta.boundary
-            WHERE name='{name}';
+            WHERE name='{name or self.boundary_name}';
             """
             cur.execute(sql)
             row = cur.fetchone()
@@ -294,32 +319,20 @@ DROP SCHEMA IF EXISTS {schema} CASCADE;
                 raise Exception('Provided geometry has wrong projection {srid}.'
                                 ' Projection should be {self.srid} instead!')
         sql = '''
-INSERT INTO meta.boundary (name, source_geom)
-VALUES ('{name}', st_setsrid(ST_GeomFromText('{wkt}'), {srid}))
-ON CONFLICT (name) DO
-UPDATE SET source_geom=st_setsrid(ST_GeomFromText('{wkt}'), {srid});
-UPDATE meta.boundary SET geom = st_transform(source_geom, {target_srid});
-'''.format(wkt=wkt, srid=self.srid, name=name,
-           target_srid=self.target_srid)
+        INSERT INTO meta.boundary (name, source_geom)
+        VALUES ('{name}', st_setsrid(ST_GeomFromText('{wkt}'), {srid}))
+        ON CONFLICT (name) DO
+        UPDATE SET source_geom=st_setsrid(ST_GeomFromText('{wkt}'), {srid});
+        '''.format(wkt=wkt, srid=self.srid, name=name)
         with Connection(login=self.login) as conn:
             self.run_query(sql, conn)
 
-    def create_foreign_boundary(self, wkt, schema=None):
-        """
-        write given wkt into boundary table in foreign db
-        """
+    def update_boundaries(self):
         sql = '''
-DROP TABLE IF EXISTS {temp}.boundary;
-CREATE TABLE {temp}.boundary (id INTEGER PRIMARY KEY,
-                              source_geom geometry('MULTIPOLYGON', {srid}),
-                              geom geometry('MULTIPOLYGON', {target_srid}));
-INSERT INTO {temp}.boundary (id, source_geom)
-VALUES (1, st_setsrid(ST_GeomFromText('{wkt}'), {srid}));
-UPDATE {temp}.boundary SET geom = st_transform(source_geom, {target_srid});
-'''.format(temp=schema or self.temp,
-           wkt=wkt, srid=self.srid,
-           target_srid=self.target_srid)
-        with Connection(login=self.foreign_login) as conn:
+        UPDATE meta.boundary
+        SET geom = st_transform(source_geom, {target_srid});
+        '''.format(target_srid=self.target_srid)
+        with Connection(login=self.login) as conn:
             self.run_query(sql, conn)
 
     def set_pg_path(self):
@@ -390,70 +403,13 @@ FROM (SELECT catalog_name, schema_name
             #self.run_query(sql, conn=conn)
             #conn.commit()
 
-    def copy_temp_schema_to_target_db(self, schema):
-        """
-        copy the temp_schema to the target db
-        build a pipe between the Databases to copy the temp_schema into the
-        osm_schema in the new Database
-        """
-        pg_dump = os.path.join(self.PGPATH, 'pg_dump')
-        pg_restore = os.path.join(self.PGPATH, 'pg_restore')
-
-        self.logger.info('copy schema {schema} from {db0} to {db1}'.format(
-            schema=schema, db0=self.foreign_login.db, db1=self.login.db))
-
-        #self.logger.info('login_source: %s' % self.foreign_login)
-        #self.logger.info('login_dest: %s' % self.login)
-
-        pg_dump_cmd = ' '.join([
-            '"{cmd}"'.format(cmd=pg_dump),
-            '--host={host}'.format(host=self.foreign_login.host),
-            '--port={port}'.format(port=self.foreign_login.port),
-            '--username={user}'.format(user=self.foreign_login.user),
-            '-w',
-            '--format=custom',
-            '--verbose',
-            '--schema={schema}'.format(schema=schema),
-            '{db}'.format(db=self.foreign_login.db),
-        ])
-
-        self.logger.info(pg_dump_cmd)
-
-        dump = subprocess.Popen(pg_dump_cmd,
-                                stdout=subprocess.PIPE,
-                                shell=self.SHELL,
-                                )
-
-        pg_restore_cmd = ' '.join([
-            '"{cmd}"'.format(cmd=pg_restore),
-            '-d {db}'.format(db=self.login.db),
-            '--host={host}'.format(host=self.login.host),
-            '--port={port}'.format(port=self.login.port),
-            '--username={user}'.format(user=self.login.user),
-            # '--clean',
-            '-w',
-            '--format=custom',
-            '--verbose',
-        ])
-        self.logger.info(pg_restore_cmd)
-
-        try:
-
-            restore = subprocess.check_output(pg_restore_cmd,
-                                              stdin=dump.stdout,
-                                              shell=self.SHELL)
-        except subprocess.CalledProcessError as err:
-            self.logger.error(err)
-
-        dump.terminate()
-
-    def cleanup(self):
+    def cleanup(self, schema=None):
         """
         remove the temp schema
         """
         with Connection(login=self.foreign_login) as conn0:
             sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
-                temp=self.temp)
+                temp=schema or self.temp)
             self.run_query(sql, conn=conn0)
 
     def cluster_and_analyse(self):
@@ -492,310 +448,14 @@ FROM (SELECT catalog_name, schema_name
         folder = os.path.join(self.folder, 'projekte', self.destination_db)
         self.make_folder(folder)
 
-
-class ExtractMeta(Extract):
-    """
-    Create the target DB and Extract the Meta Tables
-    """
-    schema = 'meta'
-
-    def get_credentials(self):
-        """get credentials for db_link user"""
-        sql = """
-SELECT key, value FROM meta_master.credentials;
-        """
-        cursor = self.conn0.cursor()
-        cursor.execute(sql)
-        rows = cursor.fetchall()
-        credentials = dict(row for row in rows)
-        return credentials
-
-    def additional_stuff(self):
-        """
-        additional steps, to be defined in the subclass
-        """
-        cursor = self.conn0.cursor()
-
-        credentials = self.get_credentials()
-
-        # create dblink tables
-        sql = """
-CREATE OR REPLACE FUNCTION {temp}.select_master_scripts()
-  RETURNS TABLE (id integer, scriptcode text, scriptname text,
-         description text, parameter text, category text) AS
-$BODY$
-DECLARE
-BEGIN
-perform dblink_connect_u('conn', 'host=localhost dbname={sd} user={source_user}');
-RETURN QUERY
-SELECT *
-FROM dblink('conn',
-'SELECT id, scriptcode, scriptname, description, parameter, category
-FROM meta_master.scripts'
-  ) AS m(id integer,
-         scriptcode text,
-         scriptname text,
-         description text,
-         parameter text,
-         category text);
-perform dblink_disconnect('conn');
-END;
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-
-CREATE OR REPLACE VIEW {temp}.master_scripts AS
-SELECT *
-FROM {temp}.select_master_scripts();
-
-CREATE OR REPLACE FUNCTION {temp}.select_dependencies()
-  RETURNS TABLE (scriptcode text,
-         needs_script text) AS
-$BODY$
-DECLARE
-BEGIN
-perform dblink_connect_u('conn', 'host=localhost dbname={sd} user={source_user}');
-RETURN QUERY
-SELECT *
-FROM dblink('conn',
-'SELECT scriptcode, needs_script
-   FROM meta_master.dependencies'
-  ) AS m(scriptcode text,
-         needs_script text);
-perform dblink_disconnect('conn');
-END;
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-
-CREATE OR REPLACE VIEW {temp}.master_dependencies AS
-SELECT *
-FROM {temp}.select_dependencies();
-
-CREATE TABLE {temp}.local_dependencies
-(
-  scriptcode text NOT NULL,
-  needs_script text NOT NULL,
-  CONSTRAINT local_dependencies_pkey PRIMARY KEY (scriptcode, needs_script)
-);
-
-CREATE OR REPLACE VIEW {temp}.dependencies AS
- SELECT master_dependencies.scriptcode,
-    master_dependencies.needs_script
-   FROM {temp}.master_dependencies
-UNION
- SELECT local_dependencies.scriptcode,
-    local_dependencies.needs_script
-   FROM {temp}.local_dependencies;
-        """
-        cursor.execute(sql.format(temp=self.temp, sd=self.source_db,
-                                  source_user=credentials['user'],
-                                  source_pw=credentials['password']))
-
-        sql = """
-CREATE OR REPLACE FUNCTION {temp}.select_dependent_scripts()
-  RETURNS trigger AS
-$BODY$
-DECLARE
-BEGIN
-  IF NEW.todo
-  THEN
-  UPDATE meta.scripts s
-  SET todo = TRUE
-  FROM meta.dependencies d
-  WHERE d.needs_script = s.scriptcode
-  AND d.scriptcode = NEW.scriptcode
-  AND s.success IS NOT True;
-  END IF;
-  RETURN NEW;
-
-END;
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-        """
-        cursor.execute(sql.format(temp=self.temp))
-
-        sql = """
-CREATE OR REPLACE FUNCTION {temp}.unselect_dependent_scripts()
-  RETURNS trigger AS
-$BODY$
-DECLARE
-BEGIN
-  IF NOT NEW.todo AND NEW.success IS NOT True
-  THEN
-  UPDATE meta.scripts s
-  SET todo = False
-  FROM meta.dependencies d
-  WHERE d.scriptcode = s.scriptcode
-  AND d.needs_script = NEW.scriptcode;
-  END IF;
-  RETURN NEW;
-
-END;
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-        """
-        cursor.execute(sql.format(temp=self.temp))
-
-        sql = """
-CREATE OR REPLACE FUNCTION {temp}.check_script_id()
-  RETURNS trigger AS
-$BODY$
-DECLARE mid integer;
-BEGIN
-  SELECT m.id INTO mid FROM meta.master_scripts m WHERE m.scriptcode = NEW.scriptcode;
-  IF NOT mid IS NULL THEN
-      NEW.id := mid;
-  END IF;
-  RETURN NEW;
-END;
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100;
-        """
-        cursor.execute(sql.format(temp=self.temp))
-
-        sql = '''
-CREATE TABLE {temp}.scripts
-( id integer,
-  scriptcode text,
-  started boolean NOT NULL DEFAULT false,
-  success boolean DEFAULT NULL,
-  starttime timestamp with time zone,
-  endtime timestamp with time zone,
-  todo boolean NOT NULL DEFAULT false,
-  CONSTRAINT scripts_pkey PRIMARY KEY (id),
-  CONSTRAINT scripts_scriptcode_key UNIQUE (scriptcode)
-);
-
-CREATE TRIGGER scripts_select_trigger
-  AFTER INSERT OR UPDATE OF todo
-  ON {temp}.scripts
-  FOR EACH ROW
-  EXECUTE PROCEDURE {temp}.select_dependent_scripts();
-
-CREATE TRIGGER scripts_unselect_trigger
-  AFTER UPDATE OF todo
-  ON {temp}.scripts
-  FOR EACH ROW
-  EXECUTE PROCEDURE {temp}.unselect_dependent_scripts();
-
-CREATE TRIGGER scripts_update_trigger
-  BEFORE UPDATE
-  ON {temp}.scripts
-  FOR EACH ROW
-  EXECUTE PROCEDURE {temp}.check_script_id();
-'''.format(schema=self.schema, temp=self.temp)
-        self.run_query(sql, conn=self.conn0)
-        self.conn0.commit()
-
-        sql = '''
-CREATE OR REPLACE FUNCTION {temp}.check_scriptcode()
-  RETURNS trigger AS
-$BODY$
-DECLARE
-BEGIN
-  IF EXISTS(SELECT 1 FROM meta.master_scripts m WHERE m.scriptcode = NEW.scriptcode)
-  THEN
-    RAISE EXCEPTION 'scriptcode % already in meta.master_scripts', NEW.scriptcode;
-  END IF;
-  RETURN NEW;
-END;
-$BODY$
-LANGUAGE 'plpgsql'
-VOLATILE
-CALLED ON NULL INPUT
-SECURITY INVOKER
-COST 100;
-    '''
-        cursor.execute(sql.format(temp=self.temp))
-
-        sql = '''
-CREATE SEQUENCE {temp}.local_scripts_id_seq
-  INCREMENT 1 MINVALUE 1000
-  MAXVALUE 2147483647 START 1000
-  CACHE 1;
-ALTER SEQUENCE {temp}.local_scripts_id_seq RESTART WITH 1000;
-
-CREATE TABLE {temp}.local_scripts
-(
-  id integer NOT NULL DEFAULT nextval(('meta.local_scripts_id_seq'::text)::regclass),
-  scriptcode text,
-  scriptname text,
-  description text,
-  parameter text,
-  category text,
-  CONSTRAINT local_scripts_pkey PRIMARY KEY (id),
-  CONSTRAINT local_scripts_scriptcode_key UNIQUE (scriptcode)
-)
-WITH (
-  OIDS=FALSE
-);
-
-CREATE TRIGGER check_scriptcode_tr
-  BEFORE INSERT OR UPDATE OF scriptcode
-  ON {temp}.local_scripts FOR EACH ROW
-  EXECUTE PROCEDURE {temp}.check_scriptcode();
-
-CREATE OR REPLACE VIEW {temp}.all_scripts(
-    id,
-    scriptcode,
-    scriptname,
-    description,
-    parameter,
-    category,
-    source)
-AS
-  SELECT master_scripts.id,
-         master_scripts.scriptcode,
-         master_scripts.scriptname,
-         master_scripts.description,
-         master_scripts.parameter,
-         master_scripts.category,
-         'm'::text AS source
-  FROM {temp}.master_scripts
-  UNION ALL
-  SELECT local_scripts.id::integer,
-         local_scripts.scriptcode,
-         local_scripts.scriptname,
-         local_scripts.description,
-         local_scripts.parameter,
-         local_scripts.category,
-         'l'::text AS source
-  FROM {temp}.local_scripts;
-
-CREATE OR REPLACE VIEW {temp}.script_view AS
-SELECT
-    m.id,
-    m.scriptcode,
-    m.scriptname,
-    m.description,
-    m.parameter,
-    m.category,
-    s.started,
-    s.success,
-    s.starttime,
-    s.endtime,
-    s.todo
-FROM
-    {temp}.all_scripts m
-    LEFT JOIN {temp}.scripts s ON m.scriptcode = s.scriptcode
-ORDER BY m.id
-;
-        '''.format(temp=self.temp)
-        self.run_query(sql, conn=self.conn0)
-        self.conn0.commit()
-
-    def final_stuff(self):
-        """Final things to do"""
-        sql = '''
-INSERT INTO {schema}.scripts (id, scriptcode)
-SELECT id, scriptcode FROM {schema}.all_scripts;
-    '''.format(schema=self.schema)
-        self.run_query(sql, conn=self.conn1)
-
+    def copy_schema_to_target_db(self, schema):
+        temp_schema = round(time.time());
+        self.create_foreign_schema(foreign_schema=schema,
+                                   target_schema=temp_schema)
+        sql = f"SELECT clone_schema('{temp_schema}','{schema}');"
+        with Connection(login=self.login) as conn:
+            self.run_query(sql, conn=conn)
+        self.cleanup(schema=temp_schema)
 
 if __name__ == '__main__':
 
