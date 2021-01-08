@@ -4,6 +4,7 @@
 from argparse import ArgumentParser
 
 from extractiontools.ausschnitt import Extract
+from .connection import Connection
 
 
 class ExtractOSM(Extract):
@@ -18,66 +19,82 @@ class ExtractOSM(Extract):
         copy relation and relation_member Schema
         """
         sql = """
-        CREATE TABLE {schema}.relations AS
-        (SELECT * FROM {temp}.relations) WITH NO DATA;
-
         CREATE TABLE {schema}.relation_members AS
         (SELECT * FROM {temp}.relation_members) WITH NO DATA;
         """.format(temp=self.temp, schema=self.schema)
         self.run_query(sql, conn=self.conn)
         self.conn.commit()
 
-        sql = """
--- copy relations for ways and nodes
-INSERT INTO {schema}.relations
-SELECT DISTINCT ON (r.id) r.*
-FROM {temp}.relations r,
-(SELECT rm.relation_id AS rid
-FROM {temp}.relation_members rm, {schema}.ways AS w
-WHERE rm.member_type = 'W'
-AND w.id = rm.member_id
-
-UNION ALL
-
-SELECT rm.relation_id AS rid
-FROM {temp}.relation_members rm, {schema}.nodes AS n
-WHERE rm.member_type = 'N'
-AND n.id = rm.member_id) rnw
-
-WHERE rnw.rid = r.id
-;
-        """.format(temp=self.temp, schema=self.schema)
+        sql = f"""
+        -- copy relations for ways and nodes
+        SELECT id, version, user_id, tstamp, changeset_id, tags
+        INTO {self.schema}.relations
+        FROM {self.temp_meta}.osm_relations
+        WHERE session_id='{self.session_id}';
+        ;"""
         self.run_query(sql, conn=self.conn)
 
-        sql = """
--- Insert relation that point to an existing relation
-INSERT INTO {schema}.relations
-SELECT DISTINCT ON (r.id) r.*
-FROM {temp}.relations r, {temp}.relation_members rm, {schema}.relations tr
-WHERE r.id = rm.relation_id
-AND rm.member_id = tr.id
-AND rm.member_type = 'R'
-AND NOT EXISTS (SELECT 1 FROM {schema}.relations tr2 WHERE tr2.id = r.id);
-        """.format(temp=self.temp, schema=self.schema)
-
+        sql = f"""
+        SELECT id FROM {self.temp_meta}.osm_related_relations
+        WHERE session_id='{self.session_id}';
+        """
         cur = self.conn.cursor()
-        n_inserted = 1
-        while n_inserted:
+        self.logger.info(sql)
+        cur.execute(sql)
+        rows = cur.fetchall()
+        ids = [row[0] for row in rows]
+
+        while ids:
+            arr = ','.join([str(i) for i in ids])
+            sql = f'''
+            SELECT id FROM {self.schema}.relations tr WHERE id = ANY(ARRAY[{arr}]);
+            '''
             self.logger.info(sql)
             cur.execute(sql)
-            msg = cur.statusmessage
-            n_inserted = int(msg.split(' ')[1])
-            self.logger.info('INSERT relation of relations: %s' % cur.statusmessage)
+            rows = cur.fetchall()
+            already_in = {row[0] for row in rows}
+            ids = set(ids) - already_in
+            if not ids:
+                break
+            arr = ','.join([str(i) for i in ids])
 
-        sql = """
--- INSERT Relation members
-INSERT INTO {schema}.relation_members
-SELECT rm.*
-FROM {temp}.relation_members rm, {schema}.relations r
-WHERE r.id = rm.relation_id;
-        """.format(temp=self.temp, schema=self.schema)
-        self.run_query(sql, conn=self.conn)
+            sql = f'''
+            INSERT INTO {self.schema}.relations
+            SELECT id, version, user_id, tstamp, changeset_id, tags
+            FROM {self.temp}.relations WHERE id = ANY(ARRAY[{arr}])
+            '''
+            self.logger.info(sql)
+            cur.execute(sql)
 
+            sql = f'''
+            SELECT DISTINCT rm.relation_id AS id
+            FROM {self.temp}.relation_members rm
+            WHERE rm.member_id = ANY(ARRAY[{arr}])
+            AND rm.member_type = 'R';
+            '''
+            self.logger.info(sql)
+            cur.execute(sql)
+            rows = cur.fetchall()
+            ids = [row[0] for row in rows]
+
+        sql = f'''
+        SELECT id FROM {self.schema}.relations r;
+        '''
+        cur.execute(sql)
+        rows = cur.fetchall()
+        ids = [row[0] for row in rows]
+        chunksize = 1000
+        for i in range(0, len(ids), chunksize):
+            cur_ids = ids[i: i + chunksize]
+            arr = ','.join([str(ci) for ci in cur_ids])
+            sql = f"""
+            -- INSERT Relation members
+            INSERT INTO {self.schema}.relation_members
+            SELECT rm.*
+            FROM {self.temp}.relation_members rm
+            WHERE rm.relation_id = ANY(ARRAY[{arr}]);
+            """
+            self.run_query(sql, conn=self.conn)
 
     def copy_way_nodes(self):
         """
@@ -85,94 +102,136 @@ WHERE r.id = rm.relation_id;
         """
 
         sql = """
--- copy way nodes
-SELECT wn.*
-INTO {schema}.way_nodes
-FROM {temp}.way_nodes wn, {schema}.ways w
-WHERE wn.way_id = w.id;
+        -- copy way nodes
+        SELECT *
+        INTO {schema}.way_nodes
+        FROM {temp_meta}.osm_way_nodes
+        WHERE session_id='{session_id}';
+        """.format(temp_meta=self.temp_meta, schema=self.schema,
+                   session_id=self.session_id)
+        self.run_query(sql, conn=self.conn)
 
--- copy nodes that are in way_nodes but not yet in nodes
-INSERT INTO {schema}.nodes
-SELECT DISTINCT ON (n.id)
-  n.id, n.version, n.user_id, n.tstamp, n.changeset_id, n.tags,
-  st_transform(n.geom, {target_srid}) AS geom
-FROM {temp}.nodes n, {schema}.way_nodes wn
-WHERE n.id = wn.node_id
-AND NOT EXISTS (SELECT 1 FROM {schema}.nodes tn WHERE tn.id= n.id);
-        """.format(temp=self.temp, schema=self.schema,
-                   target_srid=self.target_srid)
+        sql = '''
+        SELECT DISTINCT wn.node_id FROM {schema}.way_nodes wn
+        WHERE NOT EXISTS (SELECT 1 FROM {schema}.nodes tn WHERE wn.node_id = tn.id);
+        '''.format(temp=self.temp, schema=self.schema)
 
+        cur = self.conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        ids = [row[0] for row in rows]
+        arr = ','.join([str(id) for id in ids])
+        sql = f'''
+        INSERT INTO {self.schema}.nodes
+        SELECT
+          n.id, n.version, n.user_id, n.tstamp, n.changeset_id, n.tags,
+          st_transform(n.geom, {self.target_srid}) AS geom
+        FROM {self.temp}.nodes n
+        WHERE n.id = ANY(ARRAY[{arr}]);
+        '''
         self.run_query(sql, conn=self.conn)
 
     def copy_users(self):
         """
         copy users
         """
-        sql = """
-SELECT DISTINCT ON (u.id) u.*
-INTO {schema}.users
-FROM {temp}.users u,
-(SELECT DISTINCT user_id FROM {schema}.nodes
-UNION ALL
-SELECT DISTINCT user_id FROM {schema}.ways
-UNION ALL
-SELECT DISTINCT user_id FROM {schema}.relations) tu
-WHERE u.id = tu.user_id;
-        """.format(temp=self.temp, schema=self.schema)
+        sql = f"""
+        SELECT DISTINCT a.user_id FROM
+        (SELECT user_id FROM {self.schema}.nodes
+        UNION
+        SELECT user_id FROM {self.schema}.ways
+        UNION
+        SELECT user_id FROM {self.schema}.relations) a;
+        """
+        cur = self.conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        ids = [row[0] for row in rows]
+        chunksize = 1000
+        for i in range(0, len(ids), chunksize):
+            cur_ids = ids[i: i + chunksize]
+            arr = ','.join([str(ci) for ci in cur_ids])
+            sql = f"""
+            SELECT *
+            INTO {self.schema}.users
+            FROM {self.temp}.users
+            WHERE id = ANY(ARRAY[{arr}]);
+            """
+            self.run_query(sql, conn=self.conn)
+
+    def set_session(self):
+        self.wkt = self.get_target_boundary()
+        self.temp_meta = 'meta_temp'
+        self.create_foreign_schema(foreign_schema='meta',
+                                   target_schema=self.temp_meta)
+        sql = f'''
+        INSERT INTO {self.temp_meta}.session_boundary (session_id, source_geom, target_srid)
+        VALUES
+        ('{self.session_id}', st_transform(ST_GeomFromEWKT('SRID={self.srid};{self.wkt}'), 4326), {self.target_srid});
+        '''
         self.run_query(sql, conn=self.conn)
 
+    def remove_session(self):
+        with Connection(login=self.login) as conn:
+            sql = f'''
+            DELETE FROM {self.temp_meta}.session_boundary
+            WHERE session_id='{self.session_id}'
+            '''
+            self.run_query(sql, conn=conn)
+        self.cleanup(self.temp_meta)
 
     def additional_stuff(self):
         """
         """
-        self.extract_nodes()
-        self.extract_ways()
-        self.copy_relations()
-        self.copy_way_nodes()
-        self.copy_users()
-        self.copy_schema_info()
+        self.set_session()
+        try:
+            self.extract_nodes()
+            self.extract_ways()
+            self.copy_way_nodes()
+            self.copy_relations()
+            self.copy_users()
+            self.copy_schema_info()
+        except Exception as e:
+            self.conn.rollback()
+            raise(e)
+        finally:
+            self.remove_session()
 
     def extract_ways(self):
         """
         """
-        wkt = self.get_target_boundary()
         sql = """
-SELECT
-  w.id, w.version, w.user_id, w.tstamp, w.changeset_id, w.tags, w.nodes,
-  st_transform(st_setsrid(Box2D(w.linestring), {source_srid}), {target_srid})::geometry('GEOMETRY', {target_srid}) AS bbox,
-  st_transform(w.linestring, {target_srid})::geometry('GEOMETRY', {target_srid}) AS linestring
-INTO {schema}.ways
-FROM {temp}.ways w,
-(SELECT ST_GeomFromEWKT('SRID={source_srid};{wkt}') AS source_geom) tb
-WHERE
-st_intersects(w.linestring, tb.source_geom);
-ANALYZE {schema}.ways;
+        SELECT
+          w.id, w.version, w.user_id, w.tstamp, w.changeset_id, w.tags, w.nodes,
+          st_transform(st_setsrid(Box2D(w.linestring), {source_srid}), {target_srid})::geometry('GEOMETRY', {target_srid}) AS bbox,
+          st_transform(w.linestring, {target_srid})::geometry('GEOMETRY', {target_srid}) AS linestring
+        INTO {schema}.ways
+        FROM {temp_meta}.osm_ways w
+        WHERE w.session_id='{session_id}';
+        ANALYZE {schema}.ways;
         """
-        self.run_query(sql.format(temp=self.temp, schema=self.schema,
+        self.run_query(sql.format(temp_meta=self.temp_meta, schema=self.schema,
                                   target_srid=self.target_srid,
-                                  source_srid=self.srid, wkt=wkt,
-                                  area_name=self.boundary_name),
+                                  source_srid=self.srid,
+                                  session_id=self.session_id),
                        conn=self.conn)
 
     def extract_nodes(self):
         """
         """
-        wkt = self.get_target_boundary()
         sql = """
-SELECT
-  n.id, n.version, n.user_id, n.tstamp, n.changeset_id, n.tags,
-  st_transform(n.geom, {target_srid})::geometry('POINT', {target_srid}) AS geom
-INTO {schema}.nodes
-FROM {temp}.nodes n,
-(SELECT ST_GeomFromEWKT('SRID={source_srid};{wkt}') AS source_geom) tb
-WHERE
-n.geom && tb.source_geom;
-ANALYZE {schema}.nodes;
+        SELECT
+          n.id, n.version, n.user_id, n.tstamp, n.changeset_id, n.tags,
+          st_transform(n.geom, {target_srid})::geometry('POINT', {target_srid}) AS geom
+        INTO {schema}.nodes
+        FROM {temp_meta}.osm_nodes n
+        WHERE n.session_id='{session_id}';
+        ANALYZE {schema}.nodes;
         """
         self.run_query(sql.format(temp=self.temp, schema=self.schema,
                                   target_srid=self.target_srid,
-                                  source_srid=self.srid, wkt=wkt,
-                                  area_name=self.boundary_name),
+                                  temp_meta=self.temp_meta,
+                                  session_id=self.session_id),
                        conn=self.conn)
 
 
@@ -181,13 +240,13 @@ ANALYZE {schema}.nodes;
         copy schema and actions
         """
         sql = """
-SELECT a.*
-INTO {schema}.actions
-FROM {temp}.actions a;
+        SELECT a.*
+        INTO {schema}.actions
+        FROM {temp}.actions a;
 
-SELECT s.*
-INTO {schema}.schema_info
-FROM {temp}.schema_info s;
+        SELECT s.*
+        INTO {schema}.schema_info
+        FROM {temp}.schema_info s;
         """.format(temp=self.temp, schema=self.schema)
         self.run_query(sql, self.conn)
 
@@ -196,86 +255,85 @@ FROM {temp}.schema_info s;
         CREATE INDEX
         """
         sql = """
-ALTER TABLE {schema}.actions ADD PRIMARY KEY (data_type, id);
-ALTER TABLE {schema}.nodes ADD PRIMARY KEY (id);
-CREATE INDEX idx_nodes_geom
-  ON {schema}.nodes
-  USING gist
-  (geom);
-ALTER TABLE {schema}.nodes CLUSTER ON idx_nodes_geom;
-ALTER TABLE {schema}.relation_members ADD PRIMARY KEY (relation_id, sequence_id);
-CREATE INDEX idx_relation_members_member_id_and_type
-  ON {schema}.relation_members
-  USING btree
-  (member_id, member_type COLLATE pg_catalog."default");
-ALTER TABLE {schema}.relations ADD PRIMARY KEY (id);
-ALTER TABLE {schema}.schema_info ADD PRIMARY KEY (version);
-ALTER TABLE {schema}.users ADD PRIMARY KEY (id);
-ALTER TABLE {schema}.way_nodes ADD PRIMARY KEY (way_id, sequence_id);
-CREATE INDEX idx_way_nodes_node_id
-  ON {schema}.way_nodes
-  USING btree
-  (node_id);
-ALTER TABLE {schema}.ways ADD PRIMARY KEY (id);
-CREATE INDEX idx_ways_bbox
-  ON {schema}.ways
-  USING gist
-  (bbox);
+        ALTER TABLE {schema}.actions ADD PRIMARY KEY (data_type, id);
+        ALTER TABLE {schema}.nodes ADD PRIMARY KEY (id);
+        CREATE INDEX idx_nodes_geom
+          ON {schema}.nodes
+          USING gist
+          (geom);
+        ALTER TABLE {schema}.nodes CLUSTER ON idx_nodes_geom;
+        CLUSTER {schema}.nodes;
+        ALTER TABLE {schema}.relation_members ADD PRIMARY KEY (relation_id, sequence_id);
+        CREATE INDEX idx_relation_members_member_id_and_type
+          ON {schema}.relation_members
+          USING btree
+          (member_id, member_type COLLATE pg_catalog."default");
+        ALTER TABLE {schema}.relations ADD PRIMARY KEY (id);
+        ALTER TABLE {schema}.schema_info ADD PRIMARY KEY (version);
+        ALTER TABLE {schema}.users ADD PRIMARY KEY (id);
+        ALTER TABLE {schema}.way_nodes ADD PRIMARY KEY (way_id, sequence_id);
+        CREATE INDEX idx_way_nodes_node_id
+          ON {schema}.way_nodes
+          USING btree
+          (node_id);
+        ANALYZE osm.way_nodes;
+        ALTER TABLE {schema}.ways ADD PRIMARY KEY (id);
+        CREATE INDEX idx_ways_bbox
+          ON {schema}.ways
+          USING gist
+          (bbox);
 
-CREATE INDEX idx_ways_linestring
-  ON {schema}.ways
-  USING gist
-  (linestring);
-ALTER TABLE {schema}.ways CLUSTER ON idx_ways_linestring;
+        CREATE INDEX idx_ways_linestring
+          ON {schema}.ways
+          USING gist
+          (linestring);
+        ALTER TABLE {schema}.ways CLUSTER ON idx_ways_linestring;
+        CLUSTER {schema}.ways;
 
-CREATE INDEX way_tags_idx
-ON osm.ways
-USING gist(tags);
+        CREATE INDEX way_tags_idx
+        ON osm.ways
+        USING gist(tags);
 
--- Partial index for nodes
-CREATE INDEX node_tags_idx
-ON osm.nodes
-USING gist(tags)
-WHERE tags <> ''::hstore;
+        -- Partial index for nodes
+        CREATE INDEX node_tags_idx
+        ON osm.nodes
+        USING gist(tags)
+        WHERE tags <> ''::hstore;
 
-CREATE INDEX relations_tags_idx
-ON osm.relations
-USING gist(tags);
+        CREATE INDEX relations_tags_idx
+        ON osm.relations
+        USING gist(tags);
+        ANALYZE osm.relations;
 
-ALTER TABLE osm.way_nodes
-   ALTER COLUMN way_id
-   SET (n_distinct=-0.1);
+        ALTER TABLE osm.way_nodes
+           ALTER COLUMN way_id
+           SET (n_distinct=-0.1);
 
-ALTER TABLE osm.way_nodes
-   ALTER COLUMN node_id
-   SET (n_distinct=-0.75);
+        ALTER TABLE osm.way_nodes
+           ALTER COLUMN node_id
+           SET (n_distinct=-0.75);
 
-ALTER TABLE osm.nodes
-   ALTER COLUMN tags
-   SET (n_distinct=-0.1);
+        ALTER TABLE osm.nodes
+           ALTER COLUMN tags
+           SET (n_distinct=-0.1);
 
-ALTER TABLE osm.ways
-   ALTER COLUMN tags
-   SET (n_distinct=-0.1);
+        ALTER TABLE osm.ways
+           ALTER COLUMN tags
+           SET (n_distinct=-0.1);
 
-ALTER TABLE osm.relations
-   ALTER COLUMN tags
-   SET (n_distinct=-0.1);
-
+        ALTER TABLE osm.relations
+           ALTER COLUMN tags
+           SET (n_distinct=-0.1);
 
         """.format(schema=self.schema)
         self.run_query(sql, self.conn)
-        self.tables2cluster.append('{schema}.nodes'.format(schema=self.schema))
-        self.tables2cluster.append('{schema}.ways'.format(schema=self.schema))
 
     def further_stuff(self):
         """
         Copy the osm classifications and osm-view in wgs84
         to destination database
         """
-        self.copy_schema_to_target_db(schema='classifications')
-        self.copy_schema_to_target_db(schema='osm84')
-        self.cluster_and_analyse()
+        self.copy_tables_to_target_db(schema='classifications')
 
 
 if __name__ == '__main__':

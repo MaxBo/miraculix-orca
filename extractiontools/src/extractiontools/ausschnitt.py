@@ -72,7 +72,8 @@ class Extract(DBApp):
                  **options):
         self.srid = 4326
         self.logger = logger or logging.getLogger(__name__)
-        self.temp = temp or f'temp{round(time.time() * 100)}'
+        self.session_id = f'{destination_db}{round(time.time() * 100)}'
+        self.temp = temp or 'temp'# f'temp{self.session_id}'
         self.foreign_server = foreign_server
         self.source_db = source_db or os.environ.get('FOREIGN_NAME', 'europe')
         self.destination_db = destination_db
@@ -112,12 +113,12 @@ class Extract(DBApp):
         try:
             with Connection(login=self.login) as conn:
                 self.conn = conn
-                self.create_foreign_schema()
-                self.conn.commit()
                 if self.boundary:
                     self.set_target_boundary(self.boundary,
                                              name=self.boundary_name)
                 self.update_boundaries()
+                self.create_foreign_schema()
+                self.conn.commit()
                 for tn, geom in self.tables.items():
                     self.extract_table(tn, geom)
                 self.additional_stuff()
@@ -125,6 +126,7 @@ class Extract(DBApp):
                 self.final_stuff()
                 self.conn.commit()
         except Exception as e:
+            self.conn.rollback()
             raise(e)
         finally:
             self.cleanup()
@@ -151,7 +153,7 @@ class Extract(DBApp):
             port '{self.foreign_login.port}', dbname '{self.foreign_login.db}',
             fetch_size '100000',
             extensions 'postgis, hstore, postgis_raster',
-            updatable 'false'
+            updatable 'true'
         );
         -- user
         CREATE USER MAPPING FOR {self.login.user}
@@ -217,10 +219,11 @@ class Extract(DBApp):
         To be defined in the subclass
         """
 
-    def extract_table(self, tn, boundary_name='bbox', geom='geom'):
+    def extract_table(self, tn, boundary_name=None, geom='geom'):
         """
         extracts a single table
         """
+        wkt = self.get_target_boundary(name=boundary_name)
         geometrytype = self.get_geometrytype(tn, geom)
         cols = self.conn.get_column_dict(tn, self.temp)
         cols_without_geom = ('t."{}"'.format(c) for c in cols if c != geom)
@@ -229,13 +232,12 @@ class Extract(DBApp):
         sql = SQL(f"""
 SELECT {col_str}, st_transform(t.{geom}, {srid})::geometry({geometrytype}, {self.target_srid}) as geom
 INTO {self.schema}.{tn}
-FROM {self.temp}.{tn} t, meta.boundary tb
+FROM {self.temp}.{tn} t,
+(SELECT ST_GeomFromEWKT('SRID={source_srid};{wkt}') AS source_geom) tb
 WHERE
-tb.name = {area_name}
-AND
 st_intersects(t.{geom}, tb.source_geom)
         """).format(area_name=Literal(boundary_name))
-        self.run_query(sql, conn=self.conn)
+        self.run_query(sql, conn=self.conn, source_srid=self.srid)
 
     def get_geometrytype(self, tn, geom):
         sql = """
@@ -407,30 +409,15 @@ FROM (SELECT catalog_name, schema_name
         """
         remove the temp schema
         """
-        with Connection(login=self.foreign_login) as conn0:
+        with Connection(login=self.login) as conn:
             sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
                 temp=schema or self.temp)
-            self.run_query(sql, conn=conn0)
+            self.run_query(sql, conn=conn)
 
-    def cluster_and_analyse(self):
+    def vacuum(self, schema=None,  tables=[]):
         """
         """
         login = self.login
-
-        cmd = '''"{clusterdb}" -U {user} -h {host} -p {port} -w --verbose {tbls} -d {destination_db}'''
-        if self.tables2cluster:
-            tbls = ' '.join(('-t {}'.format(d) for d in self.tables2cluster))
-            clusterdb = os.path.join(self.PGPATH, 'clusterdb')
-            cmd = cmd.format(clusterdb=clusterdb,
-                             destination_db=login.db,
-                             user=login.user,
-                             port=login.port,
-                             host=login.host,
-                             tbls=tbls)
-            self.logger.info(cmd)
-            subprocess.call(cmd, shell=self.SHELL)
-        else:
-            self.logger.info('no tables to cluster')
 
         vacuumdb = os.path.join(self.PGPATH, 'vacuumdb')
         cmd = '''"{vacuumdb}" -U {user} -h {host} -p {port} -w --analyze-in-stages -d {destination_db}'''
@@ -448,13 +435,32 @@ FROM (SELECT catalog_name, schema_name
         folder = os.path.join(self.folder, 'projekte', self.destination_db)
         self.make_folder(folder)
 
-    def copy_schema_to_target_db(self, schema):
-        temp_schema = round(time.time());
+    def copy_tables_to_target_db(self, schema: str=None, tables: list=None):
+        schema = schema or self.schema
+        cur = self.conn.cursor()
+        if not tables:
+            sql = f'''
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = {schema};
+            '''
+            self.logger.info(sql)
+            cur.execute(sql)
+            rows = cur.fetchall()
+            tables = [row[0] for row in rows]
+        temp_schema = f'copy{schema}{self.session_id}'
         self.create_foreign_schema(foreign_schema=schema,
                                    target_schema=temp_schema)
-        sql = f"SELECT clone_schema('{temp_schema}','{schema}');"
-        with Connection(login=self.login) as conn:
-            self.run_query(sql, conn=conn)
+
+        sql = f'''CREATE SCHEMA IF NOT EXISTS {schema};'''
+        self.run_query(sql, conn=self.conn)
+
+        for table in tables:
+            sql = f'''
+            CREATE TABLE {schema}.{table} LIKE {temp_schema}.{table}
+            INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING DEFAULTS)';
+            INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};
+            '''
+            self.run_query(sql, conn=self.conn)
         self.cleanup(schema=temp_schema)
 
 if __name__ == '__main__':

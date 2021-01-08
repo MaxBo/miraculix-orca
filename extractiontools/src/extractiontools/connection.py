@@ -64,7 +64,6 @@ class Connection(object):
         self.conn.get_dict_cursor = self.get_dict_cursor
         self.conn.get_column_dict = self.get_column_dict
         self.set_copy_command_format()
-        self.set_vacuum_analyze_command()
         return conn
 
     def __exit__(self, t, value, traceback):
@@ -86,21 +85,6 @@ class Connection(object):
         '''.format(data_format=data_format, quote=quote,
                    delimiter=delimiter)
         self.conn.copy_sql = '''COPY "{tn}" TO STDOUT ''' + strWith
-
-    def set_vacuum_analyze_command(self):
-        """
-        run vacuum analze on a table with the according transaction isolation
-        """
-
-        def vacuum_analyze(self, table):
-            old_isolation_level = self.isolation_level
-            self.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-            cursor = self.cursor()
-            cursor.execute('VACUUM ANALYZE {table};'.format(table=table))
-            self.set_isolation_level(old_isolation_level)
-
-        self.conn.vacuum_analyze = MethodType(vacuum_analyze,
-                                              self.conn)
 
     def get_dict_cursor(self):
         return self.conn.cursor(cursor_factory=DictCursor)
