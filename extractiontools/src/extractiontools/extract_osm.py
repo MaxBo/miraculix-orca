@@ -172,12 +172,11 @@ class ExtractOSM(Extract):
         self.run_query(sql, conn=self.conn)
 
     def remove_session(self):
-        with Connection(login=self.login) as conn:
-            sql = f'''
-            DELETE FROM {self.temp_meta}.session_boundary
-            WHERE session_id='{self.session_id}'
-            '''
-            self.run_query(sql, conn=conn)
+        sql = f'''
+        DELETE FROM {self.temp_meta}.session_boundary
+        WHERE session_id='{self.session_id}'
+        '''
+        self.run_query(sql, conn=self.conn)
         self.cleanup(self.temp_meta)
 
     def additional_stuff(self):
@@ -240,13 +239,13 @@ class ExtractOSM(Extract):
         copy schema and actions
         """
         sql = """
-        SELECT a.*
+        SELECT *
         INTO {schema}.actions
-        FROM {temp}.actions a;
+        FROM {temp}.actions;
 
-        SELECT s.*
+        SELECT *
         INTO {schema}.schema_info
-        FROM {temp}.schema_info s;
+        FROM {temp}.schema_info;
         """.format(temp=self.temp, schema=self.schema)
         self.run_query(sql, self.conn)
 

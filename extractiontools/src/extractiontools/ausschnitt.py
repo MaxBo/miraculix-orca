@@ -125,12 +125,13 @@ class Extract(DBApp):
                 self.conn.commit()
                 self.final_stuff()
                 self.conn.commit()
+                self.further_stuff()
         except Exception as e:
             self.conn.rollback()
             raise(e)
         finally:
-            self.cleanup()
-        self.further_stuff()
+            with Connection(login=self.login) as conn:
+                self.cleanup(conn=conn)
 
     def further_stuff(self):
         """
@@ -184,25 +185,6 @@ class Extract(DBApp):
           SFUNC = public.hs_concat,
           STYPE = public.hstore
         );
-        CREATE OR REPLACE FUNCTION clone_schema(source_schema text, dest_schema text) RETURNS void AS
-        $BODY$
-        DECLARE
-          objeto text;
-          buffer text;
-        BEGIN
-            EXECUTE 'CREATE SCHEMA ' || dest_schema ;
-
-            FOR objeto IN
-                SELECT table_name::text FROM information_schema.tables WHERE table_schema = source_schema
-            LOOP
-                buffer := dest_schema || '.' || objeto;
-                EXECUTE 'CREATE TABLE ' || buffer || ' (LIKE ' || source_schema || '.' || objeto || ' INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING DEFAULTS)';
-                EXECUTE 'INSERT INTO ' || buffer || '(SELECT * FROM ' || source_schema || '.' || objeto || ')';
-            END LOOP;
-
-        END;
-        $BODY$
-        LANGUAGE plpgsql VOLATILE;
         '''
         self.logger.info('Adding extensions')
         with Connection(login=self.foreign_login) as conn0:
@@ -248,10 +230,12 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         geometrytype = cur.fetchone()[0]
         return geometrytype
 
-    def create_foreign_schema(self, foreign_schema=None, target_schema=None):
+    def create_foreign_schema(self, foreign_schema=None, target_schema=None,
+                              conn=None):
         """
         links schema in database to schema on foreign server
         """
+        conn = conn or self.conn
         foreign_schema = foreign_schema or self.foreign_schema or self.schema
         target_schema = target_schema or self.temp
         sql = f'''
@@ -405,14 +389,13 @@ FROM (SELECT catalog_name, schema_name
             #self.run_query(sql, conn=conn)
             #conn.commit()
 
-    def cleanup(self, schema=None):
+    def cleanup(self, schema=None, conn=None):
         """
         remove the temp schema
         """
-        with Connection(login=self.login) as conn:
-            sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
-                temp=schema or self.temp)
-            self.run_query(sql, conn=conn)
+        sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
+            temp=schema or self.temp)
+        self.run_query(sql, conn=conn or self.conn)
 
     def vacuum(self, schema=None,  tables=[]):
         """
@@ -435,33 +418,36 @@ FROM (SELECT catalog_name, schema_name
         folder = os.path.join(self.folder, 'projekte', self.destination_db)
         self.make_folder(folder)
 
-    def copy_tables_to_target_db(self, schema: str=None, tables: list=None):
+    def copy_tables_to_target_db(self, schema: str=None, tables: list=None,
+                                 conn=None):
         schema = schema or self.schema
-        cur = self.conn.cursor()
+        conn = conn or self.conn
+        temp_schema = f'class_temp'
+        self.create_foreign_schema(foreign_schema=schema,
+                                   target_schema=temp_schema, conn=conn)
+
+        cur = conn.cursor()
         if not tables:
             sql = f'''
             SELECT table_name FROM information_schema.tables
-            WHERE table_schema = {schema};
+            WHERE table_schema = '{temp_schema}';
             '''
             self.logger.info(sql)
             cur.execute(sql)
             rows = cur.fetchall()
             tables = [row[0] for row in rows]
-        temp_schema = f'copy{schema}{self.session_id}'
-        self.create_foreign_schema(foreign_schema=schema,
-                                   target_schema=temp_schema)
 
         sql = f'''CREATE SCHEMA IF NOT EXISTS {schema};'''
         self.run_query(sql, conn=self.conn)
-
         for table in tables:
             sql = f'''
-            CREATE TABLE {schema}.{table} LIKE {temp_schema}.{table}
-            INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING DEFAULTS)';
+            CREATE TABLE {schema}.{table} (LIKE {temp_schema}.{table}
+            INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING DEFAULTS);
             INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};
             '''
-            self.run_query(sql, conn=self.conn)
-        self.cleanup(schema=temp_schema)
+            self.run_query(sql, conn=conn)
+
+        self.cleanup(schema=temp_schema, conn=conn)
 
 if __name__ == '__main__':
 
