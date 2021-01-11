@@ -2,7 +2,6 @@
 #coding:utf-8
 
 from argparse import ArgumentParser
-
 from extractiontools.ausschnitt import Extract
 
 
@@ -32,6 +31,7 @@ class ExtractLanduse(Extract):
     def additional_stuff(self):
         """
         """
+        self.wkt = self.get_target_boundary()
         self.extract_oceans()
         self.extract_corine_vector()
         self.extract_aster()
@@ -42,38 +42,35 @@ class ExtractLanduse(Extract):
         """
         Extract OSM oceans and transform into target srid
         """
-        sql = """
-SELECT
-  c.gid,
-  st_transform(c.geom, {target_srid})::geometry(MULTIPOLYGON, {target_srid}) AS geom
-INTO {temp}.oceans
-FROM {schema}.oceans c, {temp}.boundary tb
-WHERE
-st_intersects(c.geom, tb.source_geom)
+        sql = f"""
+        SELECT
+          c.gid,
+          st_transform(c.geom, {self.target_srid})::geometry(MULTIPOLYGON, {self.target_srid}) AS geom
+        INTO {self.schema}.oceans
+        FROM {self.temp}.oceans c,
+        (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
+        WHERE
+        st_intersects(c.geom, tb.source_geom)
         """
-        self.run_query(sql.format(temp=self.temp, schema=self.schema,
-                                  target_srid=self.target_srid),
-                       conn=self.conn0)
+        self.run_query(sql, conn=self.conn)
 
     def extract_corine_vector(self):
         """
         Extract Corine Landcover data and transform into target srid
         """
-        sql = """
-    SELECT
-      c.ogc_fid, c.code, c.id, c.remark,
-      st_transform(c.geom, {target_srid})::geometry('MULTIPOLYGON',
-      {target_srid}) AS geom
-    INTO {temp}.{corine}
-    FROM {schema}.{corine} c, {temp}.boundary tb
-    WHERE
-    st_intersects(c.geom, tb.source_geom)
-            """
         for corine in self.corine:
-            self.run_query(sql.format(temp=self.temp, schema=self.schema,
-                                      target_srid=self.target_srid,
-                                      corine=corine),
-                           conn=self.conn0)
+            sql = f"""
+            SELECT
+              c.ogc_fid, c.code, c.id, c.remark,
+              st_transform(c.geom, {self.target_srid})::geometry('MULTIPOLYGON',
+              {self.target_srid}) AS geom
+            INTO {self.schema}.{corine}
+            FROM {self.temp}.{corine} c,
+            (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
+            WHERE
+            st_intersects(c.geom, tb.source_geom)
+            """
+            self.run_query(sql, conn=self.conn)
 
     def get_corine_raster_name(self, corine):
         corine_raster = '{}_raster'.format(corine)
@@ -99,27 +96,23 @@ st_intersects(c.geom, tb.source_geom)
                                   rt=corine_raster_table)
              for ov in self.corine_overviews]
 
-        sql = """
-CREATE TABLE {temp}.{tn}
-(rid serial PRIMARY KEY,
-  rast raster,
-  filename text);
-
-INSERT INTO {temp}.{tn} (rast, filename)
-SELECT
-  rast,
-  r.filename
-FROM {schema}.{tn} r, {temp}.boundary tb
-WHERE
-st_intersects(r.rast, st_transform(tb.source_geom, {corine_srid}));
-        """
         for tn in tables:
-            self.run_query(sql.format(temp=self.temp,
-                                      schema=self.schema,
-                                      target_srid=self.target_srid,
-                                      tn=tn,
-                                      corine_srid=corine_raster_srid),
-                           conn=self.conn0)
+            sql = f"""
+            CREATE TABLE {self.schema}.{tn}
+            (rid serial PRIMARY KEY,
+              rast raster,
+              filename text);
+
+            INSERT INTO {self.schema}.{tn} (rast, filename)
+            SELECT
+              rast,
+              r.filename
+            FROM {self.temp}.{tn} r,
+            (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
+            WHERE
+            st_intersects(r.rast, st_transform(tb.source_geom, {corine_raster_srid}));
+            """
+            self.run_query(sql, conn=self.conn)
 
 
     def extract_aster(self):
@@ -133,77 +126,71 @@ st_intersects(r.rast, st_transform(tb.source_geom, {corine_srid}));
                                   rt=self.raster_table)
              for ov in self.aster_overviews]
 
-        sql = """
-CREATE TABLE {temp}.{tn}
-(rid serial PRIMARY KEY,
-  rast raster,
-  filename text);
-
-INSERT INTO {temp}.{tn} (rast, filename)
-SELECT
-  rast,
-  r.filename
-FROM {schema}.{tn} r, {temp}.boundary tb
-WHERE
-st_intersects(r.rast, tb.source_geom);
-        """
         for tn in tables:
-            self.run_query(sql.format(temp=self.temp, schema=self.schema,
-                                      target_srid=self.target_srid,
-                                      tn=tn),
-                           conn=self.conn0)
+            sql = f"""
+            CREATE TABLE {self.schema}.{tn}
+            (rid serial PRIMARY KEY,
+              rast raster,
+              filename text);
+
+            INSERT INTO {self.schema}.{tn} (rast, filename)
+            SELECT
+              rast,
+              r.filename
+            FROM {self.temp}.{tn} r,
+            (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
+            WHERE
+            st_intersects(r.rast, tb.source_geom);
+            """
+            self.run_query(sql, conn=self.conn)
 
         # raster points
         sql = """
-CREATE MATERIALIZED VIEW {schema}.aster_centroids AS
- SELECT DISTINCT st_transform((b.a).geom, {target_srid})::geometry(POINT, {target_srid}) AS geom,
-    (b.a).val AS val
-   FROM ( SELECT st_pixelascentroids(aster.rast) AS a
-           FROM {schema}.aster AS aster) b
-WITH NO DATA;
+        CREATE MATERIALIZED VIEW {schema}.aster_centroids AS
+         SELECT DISTINCT st_transform((b.a).geom, {target_srid})::geometry(POINT, {target_srid}) AS geom,
+            (b.a).val AS val
+           FROM ( SELECT st_pixelascentroids(aster.rast) AS a
+                   FROM {temp}.aster AS aster) b
+        WITH NO DATA;
         """
-        self.run_query(sql.format(schema=self.temp,
+        self.run_query(sql.format(temp=self.temp,
+                                  schema=self.schema,
                                   target_srid=self.target_srid),
-                       conn=self.conn0)
+                       conn=self.conn)
 
     def extract_gmes_vector(self):
         """
         Extract GMES Urban Atlas Landcover data and transform into target srid
         """
-        sql = """
-SELECT
-  c.gid, c.country, c.cities, c.fua_or_cit,
-  st_multi(st_transform(c.geom, {target_srid}))::geometry('MULTIPOLYGON',
-  {target_srid}) AS geom
-INTO {temp}.{gmes}
-FROM {schema}.{gmes} c, {temp}.boundary tb
-WHERE
-st_intersects(c.geom, tb.source_geom)
+        sql = f"""
+        SELECT
+          c.gid, c.country, c.cities, c.fua_or_cit,
+          st_multi(st_transform(c.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
+          {self.target_srid}) AS geom
+        INTO {self.schema}.ua2012_boundary
+        FROM {self.temp}.ua2012_boundary c,
+        (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
+        WHERE
+        st_intersects(c.geom, tb.source_geom)
             """
-        self.run_query(sql.format(temp=self.temp, schema=self.schema,
-                                  target_srid=self.target_srid,
-                                  gmes='ua2012_boundary'),
-                       conn=self.conn0, )
+        self.run_query(sql, conn=self.conn)
 
-        sql = """
-SELECT
-  c.gid, c.country, c.cities, c.fua_or_cit,
-  c.code2012 AS code,
-  c.item2012 AS item,
-  c.prod_date,
-  st_multi(st_transform(c.geom, {target_srid}))::geometry('MULTIPOLYGON',
-  {target_srid}) AS geom
-INTO {temp}.{gmes}
-FROM {schema}.{gmes} c, {temp}.boundary tb
-WHERE
-st_intersects(c.geom, tb.source_geom)
-            """
         for gmes in self.gmes:
-            self.run_query(sql.format(temp=self.temp, schema=self.schema,
-                                      target_srid=self.target_srid,
-                                      gmes=gmes),
-                           conn=self.conn0)
-
+            sql = f"""
+            SELECT
+              c.gid, c.country, c.cities, c.fua_or_cit,
+              c.code2012 AS code,
+              c.item2012 AS item,
+              c.prod_date,
+              st_multi(st_transform(c.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
+              {self.target_srid}) AS geom
+            INTO {self.schema}.{gmes}
+            FROM {self.temp}.{gmes} c,
+            (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
+            WHERE
+            st_intersects(c.geom, tb.source_geom)
+            """
+            self.run_query(sql, conn=self.conn)
 
     def create_index(self):
         """
@@ -221,19 +208,19 @@ st_intersects(c.geom, tb.source_geom)
         """ Corine landcover Index"""
 
         sql = """
-    ALTER TABLE {schema}.{corine} ADD PRIMARY KEY (ogc_fid);
-    CREATE INDEX {corine}_geom_idx
-      ON {schema}.{corine}
-      USING gist(geom);
-    CREATE INDEX idx_{corine}_code
-      ON {schema}.{corine}
-      USING btree(code);
-    ALTER TABLE {schema}.{corine} CLUSTER ON {corine}_geom_idx;
-    """
+        ALTER TABLE {schema}.{corine} ADD PRIMARY KEY (ogc_fid);
+        CREATE INDEX {corine}_geom_idx
+          ON {schema}.{corine}
+          USING gist(geom);
+        CREATE INDEX idx_{corine}_code
+          ON {schema}.{corine}
+          USING btree(code);
+        ALTER TABLE {schema}.{corine} CLUSTER ON {corine}_geom_idx;
+        """
         for corine in self.corine:
 
             self.run_query(sql.format(schema=self.schema,
-                                      corine=corine), conn=self.conn1)
+                                      corine=corine), conn=self.conn)
             self.tables2cluster.append('{schema}.{corine}'.format(
                 schema=self.schema,
                 corine=corine))
@@ -241,29 +228,29 @@ st_intersects(c.geom, tb.source_geom)
     def create_index_gmes(self):
         """ Corine GMES Index"""
         sql = """
-    ALTER TABLE {schema}.{gmes} ADD PRIMARY KEY (gid);
-    CREATE INDEX {gmes}_geom_idx
-      ON {schema}.{gmes}
-      USING gist(geom);
+        ALTER TABLE {schema}.{gmes} ADD PRIMARY KEY (gid);
+        CREATE INDEX {gmes}_geom_idx
+        ON {schema}.{gmes}
+        USING gist(geom);
         """
         self.run_query(sql.format(schema=self.schema,
-                                  gmes='ua2012_boundary'), conn=self.conn1)
+                                  gmes='ua2012_boundary'), conn=self.conn)
 
 
         sql = """
-    ALTER TABLE {schema}.{gmes} ADD PRIMARY KEY (gid);
-    CREATE INDEX {gmes}_geom_idx
-      ON {schema}.{gmes}
-      USING gist(geom);
-    CREATE INDEX idx_{gmes}_code
-      ON {schema}.{gmes}
-      USING btree(code);
-    ALTER TABLE {schema}.{gmes} CLUSTER ON {gmes}_geom_idx;
-    """
+        ALTER TABLE {schema}.{gmes} ADD PRIMARY KEY (gid);
+        CREATE INDEX {gmes}_geom_idx
+          ON {schema}.{gmes}
+          USING gist(geom);
+        CREATE INDEX idx_{gmes}_code
+          ON {schema}.{gmes}
+          USING btree(code);
+        ALTER TABLE {schema}.{gmes} CLUSTER ON {gmes}_geom_idx;
+        """
         for gmes in self.gmes:
 
             self.run_query(sql.format(schema=self.schema,
-                                      gmes=gmes), conn=self.conn1)
+                                      gmes=gmes), conn=self.conn)
             self.tables2cluster.append('{schema}.{gmes}'.format(
                 schema=self.schema,
                 gmes=gmes))
@@ -271,13 +258,13 @@ st_intersects(c.geom, tb.source_geom)
     def create_index_oceans(self):
         """Oceans Index"""
         sql = """
-    -- oceans
-    ALTER TABLE {schema}.oceans ADD PRIMARY KEY (gid);
-    CREATE INDEX oceans_geom_idx
-    ON {schema}.oceans
-    USING gist(geom);
-    """
-        self.run_query(sql.format(schema=self.schema), conn=self.conn1)
+        -- oceans
+        ALTER TABLE {schema}.oceans ADD PRIMARY KEY (gid);
+        CREATE INDEX oceans_geom_idx
+        ON {schema}.oceans
+        USING gist(geom);
+        """
+        self.run_query(sql.format(schema=self.schema), conn=self.conn)
 
     def create_corine_raster_index(self):
         """

@@ -127,7 +127,6 @@ class Extract(DBApp):
                 self.conn.commit()
                 self.further_stuff()
         except Exception as e:
-            self.conn.rollback()
             raise(e)
         finally:
             with Connection(login=self.login) as conn:
@@ -205,21 +204,22 @@ class Extract(DBApp):
         """
         extracts a single table
         """
-        wkt = self.get_target_boundary(name=boundary_name)
+
+        wkt = self.get_target_boundary(name=boundary_name or self.boundary_name)
         geometrytype = self.get_geometrytype(tn, geom)
         cols = self.conn.get_column_dict(tn, self.temp)
         cols_without_geom = ('t."{}"'.format(c) for c in cols if c != geom)
         col_str = ', '.join(cols_without_geom)
 
-        sql = SQL(f"""
+        sql = f"""
 SELECT {col_str}, st_transform(t.{geom}, {srid})::geometry({geometrytype}, {self.target_srid}) as geom
 INTO {self.schema}.{tn}
 FROM {self.temp}.{tn} t,
-(SELECT ST_GeomFromEWKT('SRID={source_srid};{wkt}') AS source_geom) tb
+(SELECT ST_GeomFromEWKT('SRID={self.srid};{wkt}') AS source_geom) tb
 WHERE
 st_intersects(t.{geom}, tb.source_geom)
-        """).format(area_name=Literal(boundary_name))
-        self.run_query(sql, conn=self.conn, source_srid=self.srid)
+        """
+        self.run_query(sql, conn=self.conn)
 
     def get_geometrytype(self, tn, geom):
         sql = """

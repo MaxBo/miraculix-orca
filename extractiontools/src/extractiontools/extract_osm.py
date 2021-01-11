@@ -160,6 +160,9 @@ class ExtractOSM(Extract):
             self.run_query(sql, conn=self.conn)
 
     def set_session(self):
+        '''
+        set session geometry
+        '''
         self.wkt = self.get_target_boundary()
         self.temp_meta = 'meta_temp'
         self.create_foreign_schema(foreign_schema='meta',
@@ -172,6 +175,9 @@ class ExtractOSM(Extract):
         self.run_query(sql, conn=self.conn)
 
     def remove_session(self):
+        '''
+        remove session geometry
+        '''
         sql = f'''
         DELETE FROM {self.temp_meta}.session_boundary
         WHERE session_id='{self.session_id}'
