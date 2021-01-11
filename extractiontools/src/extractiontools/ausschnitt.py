@@ -120,7 +120,7 @@ class Extract(DBApp):
                 self.create_foreign_schema()
                 self.conn.commit()
                 for tn, geom in self.tables.items():
-                    self.extract_table(tn, geom)
+                    self.extract_table(tn, geom=geom)
                 self.additional_stuff()
                 self.conn.commit()
                 self.final_stuff()
@@ -200,7 +200,7 @@ class Extract(DBApp):
         To be defined in the subclass
         """
 
-    def extract_table(self, tn, boundary_name=None, geom='geom'):
+    def extract_table(self, tn, geom='geom', boundary_name=None):
         """
         extracts a single table
         """
@@ -212,7 +212,7 @@ class Extract(DBApp):
         col_str = ', '.join(cols_without_geom)
 
         sql = f"""
-SELECT {col_str}, st_transform(t.{geom}, {srid})::geometry({geometrytype}, {self.target_srid}) as geom
+SELECT {col_str}, st_transform(t.{geom}, {self.target_srid})::geometry({geometrytype}, {self.target_srid}) as geom
 INTO {self.schema}.{tn}
 FROM {self.temp}.{tn} t,
 (SELECT ST_GeomFromEWKT('SRID={self.srid};{wkt}') AS source_geom) tb
@@ -395,7 +395,7 @@ FROM (SELECT catalog_name, schema_name
         """
         sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
             temp=schema or self.temp)
-        self.run_query(sql, conn=conn or self.conn)
+        self.run_query(sql, conn=conn or self.conn, verbose=False)
 
     def vacuum(self, schema=None,  tables=[]):
         """
