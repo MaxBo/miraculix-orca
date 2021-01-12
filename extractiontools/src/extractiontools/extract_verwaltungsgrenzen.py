@@ -3,6 +3,7 @@
 
 from argparse import ArgumentParser
 
+from extractiontools.connection import Connection
 from extractiontools.ausschnitt import Extract
 
 
@@ -15,25 +16,28 @@ class ExtractVerwaltungsgrenzen(Extract):
     role = 'group_osm'
 
     def final_stuff(self):
-        for tn, geom in self.tables.items():
-            self.add_geom_index(tn, geom)
-            pkey = self.get_primary_key(self.schema, tn, conn=self.conn0)
-            if pkey:
-                self.add_pkey(tn, pkey)
-            else:
-                self.add_pkey(tn, 'ags')
+        # foreign tables seem not to pass the pkeys
+        # so the pkeys are retrieved from the foreign server directly
+        with Connection(login=self.foreign_login) as conn:
+            for tn, geom in self.tables.items():
+                self.add_geom_index(tn, geom)
+                pkey = self.get_primary_key(self.schema, tn, conn=conn)
+                if pkey:
+                    self.add_pkey(tn, pkey)
+                else:
+                    self.add_pkey(tn, 'ags')
 
     def add_pkey(self, tn, pkey):
         sql = """
-ALTER TABLE {sn}.{tn} ADD PRIMARY KEY ({pkey});
+        ALTER TABLE {sn}.{tn} ADD PRIMARY KEY ({pkey});
         """.format(sn=self.schema, tn=tn, pkey=pkey)
-        self.run_query(sql, conn=self.conn1)
+        self.run_query(sql, conn=self.conn)
 
     def add_geom_index(self, tn, geom):
         sql = """
-CREATE INDEX {tn}_geom_idx ON {sn}.{tn} USING gist({geom});
+        CREATE INDEX {tn}_geom_idx ON {sn}.{tn} USING gist({geom});
         """.format(sn=self.schema, tn=tn, geom=geom)
-        self.run_query(sql, conn=self.conn1)
+        self.run_query(sql, conn=self.conn)
 
 
 if __name__ == '__main__':

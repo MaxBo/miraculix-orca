@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 # coding:utf-8
-
-
 import time
 from argparse import ArgumentParser
 import random
@@ -28,8 +26,8 @@ class ScrapeStops(Extract):
 
     def get_session_id(self):
         """get a session_id"""
-        url = 'http://mobile.bahn.de/bin/mobil/query.exe/dox?'\
-            'country=DEU&rt=1&use_realtime_filter=1&stationNear=1)'
+        url = ('http://mobile.bahn.de/bin/mobil/query.exe/dox?'
+               'country=DEU&rt=1&use_realtime_filter=1&stationNear=1)')
         r = requests.get(url)
         tree = html.fromstring(r.content)
         elems = tree.xpath('/html/body/div/div[2]/div/div/div/form')
@@ -68,7 +66,8 @@ class ScrapeStops(Extract):
         """
         """
         self.extract_table('haltestellen')
-        self.copy_route_types()
+        self.copy_tables_to_target_db(self.schema, tables=['route_types'],
+                                      conn=self.conn)
 
     def final_stuff(self):
         """"""
@@ -78,31 +77,13 @@ class ScrapeStops(Extract):
         """
         CREATE INDEX
         """
-        sql = """
-ALTER TABLE {schema}.haltestellen ADD PRIMARY KEY ("H_ID");
-CREATE INDEX idx_haltestellen_geom
-ON {schema}.haltestellen USING gist(geom);
-ALTER TABLE {schema}.route_types ADD PRIMARY KEY (typ);
-            """.format(schema=self.schema)
-        self.run_query(sql, self.conn1)
-
-    def copy_route_types(self):
-        """"""
-        sql = """
-
-CREATE TABLE {temp}.route_types
-(
-  route_type integer NOT NULL,
-  name text,
-  typ text NOT NULL
-);
-
-INSERT INTO {temp}.route_types
-SELECT *
-FROM {schema}.route_types;
+        sql = f"""
+        ALTER TABLE {self.schema}.haltestellen ADD PRIMARY KEY ("H_ID");
+        CREATE INDEX idx_haltestellen_geom
+        ON {self.schema}.haltestellen USING gist(geom);
+        ALTER TABLE {self.schema}.route_types ADD PRIMARY KEY (typ);
         """
-        self.run_query(sql.format(temp=self.temp, schema=self.schema),
-                       conn=self.conn0)
+        self.run_query(sql, self.conn)
 
     def get_cursor(self):
         """erzeuge Datenbankverbindung1 und Cursor"""
@@ -116,24 +97,24 @@ FROM {schema}.route_types;
         cursor = self.get_cursor()
 
         sql_update = """
-    UPDATE haltestellen h
-    SET "H_Name" = %s,
-    geom = st_transform(st_setsrid(st_makepoint( %s, %s), 4326 ), %s::integer),
-    in_area=True::boolean
-    WHERE h."H_ID" = %s;
-                                """
+        UPDATE haltestellen h
+        SET "H_Name" = %s,
+        geom = st_transform(st_setsrid(st_makepoint( %s, %s), 4326 ), %s::integer),
+        in_area=True::boolean
+        WHERE h."H_ID" = %s;
+        """
 
         sql_insert = """
-    INSERT INTO haltestellen
-    ("H_Name", "H_ID", geom, in_area)
-    SELECT
-      %s,
-      %s,
-      st_transform(st_setsrid(st_makepoint( %s, %s), 4326 ),
-      %s::integer),
-      True::boolean
-    WHERE NOT EXISTS (SELECT 1 FROM haltestellen h WHERE h."H_ID" = %s);
-                                """
+        INSERT INTO haltestellen
+        ("H_Name", "H_ID", geom, in_area)
+        SELECT
+          %s,
+          %s,
+          st_transform(st_setsrid(st_makepoint( %s, %s), 4326 ),
+          %s::integer),
+          True::boolean
+        WHERE NOT EXISTS (SELECT 1 FROM haltestellen h WHERE h."H_ID" = %s);
+        """
         lon0, lon1, lat0, lat1 = self.bbox.rounded()
         stops_found = 0
         stops_inserted = 0

@@ -129,7 +129,7 @@ def tbl_kreise() -> str:
 
 @meta(group='Public Transport', order=4, required=scrape_timetables)
 @orca.step()
-def timetables_to_gtfs(database: str,
+def timetables_gtfs(database: str,
                        date_timetable: str,
                        gtfs_only_one_day: bool,
                        base_path: str,
@@ -164,8 +164,8 @@ def otp_networks() -> Dict[str, str]:
 
 @meta(group='Export', required=[build_network_car, build_network_fr])
 @orca.step()
-def copy_network_to_pbf(database: str,
-                        otp_networks: Dict[str, str]):
+def copy_network_pbf(database: str,
+                     otp_networks: Dict[str, str]):
     """copy the osm networkdata to a pbf file"""
     for network_schema, subfolder_pbf in otp_networks.items():
         copy2pbf = CopyNetwork2Pbf(database,
@@ -177,8 +177,8 @@ def copy_network_to_pbf(database: str,
 
 @meta(group='Export', required=[build_network_car, build_network_fr])
 @orca.step()
-def copy_network_to_pbf_and_xml(database: str,
-                                otp_networks: Dict[str, str]):
+def copy_network_pbf_xml(database: str,
+                         otp_networks: Dict[str, str]):
     """copy the osm networkdata to a pbf and .xml.bz file"""
     for network_schema, subfolder_pbf in otp_networks.items():
         copy2pbf = CopyNetwork2Pbf(database,
@@ -191,8 +191,8 @@ def copy_network_to_pbf_and_xml(database: str,
 
 @meta(group='Export', required=[build_network_car, build_network_fr])
 @orca.step()
-def copy_tagged_network_to_pbf_and_xml(database: str,
-                                       otp_networks: Dict[str, str]):
+def copy_tagged_nw_pbf_xml(database: str,
+                           otp_networks: Dict[str, str]):
     """copy the osm networkdata to a pbf and .xml.bz file"""
     for network_schema, subfolder_pbf in otp_networks.items():
         copy2pbf = CopyNetwork2PbfTagged(database,
@@ -308,9 +308,9 @@ def gdbname(database) -> str:
 
 @meta(group='Export', required=build_network_car)
 @orca.step()
-def copy_network_to_fgdb(database: str,
+def copy_network_car_fgdb(database: str,
                          network_layers: Dict[str, str]):
-    """copy network to a file-gdb"""
+    """copy car network to a file-gdb"""
     copy2fgdb = Copy2FGDB(database,
                           layers=network_layers,
                           gdbname='network_car.gdb',
@@ -320,9 +320,9 @@ def copy_network_to_fgdb(database: str,
 
 @meta(group='Export', required=build_network_fr)
 @orca.step()
-def copy_network_fr_to_fgdb(database: str,
+def copy_network_fr_fgdb(database: str,
                             network_fr_layers: Dict[str, str]):
-    """copy network to a file-gdb"""
+    """copy walk and cycle network to a file-gdb"""
     copy2fgdb = Copy2FGDB(database, layers=network_fr_layers,
                           gdbname='network_fr.gdb',
                           schema='network_fr', logger=orca.logger)

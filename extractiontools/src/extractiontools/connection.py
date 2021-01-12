@@ -64,7 +64,6 @@ class Connection(object):
         self.conn.get_dict_cursor = self.get_dict_cursor
         self.conn.get_column_dict = self.get_column_dict
         self.set_copy_command_format()
-        self.set_vacuum_analyze_command()
         return conn
 
     def __exit__(self, t, value, traceback):
@@ -86,21 +85,6 @@ class Connection(object):
         '''.format(data_format=data_format, quote=quote,
                    delimiter=delimiter)
         self.conn.copy_sql = '''COPY "{tn}" TO STDOUT ''' + strWith
-
-    def set_vacuum_analyze_command(self):
-        """
-        run vacuum analze on a table with the according transaction isolation
-        """
-
-        def vacuum_analyze(self, table):
-            old_isolation_level = self.isolation_level
-            self.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-            cursor = self.cursor()
-            cursor.execute('VACUUM ANALYZE {table};'.format(table=table))
-            self.set_isolation_level(old_isolation_level)
-
-        self.conn.vacuum_analyze = MethodType(vacuum_analyze,
-                                              self.conn)
 
     def get_dict_cursor(self):
         return self.conn.cursor(cursor_factory=DictCursor)
@@ -160,8 +144,6 @@ class DBApp(object):
         self.schema = schema
         self.logger = logger or logging.getLogger(__name__)
         self.conn = conn
-        self.conn1 = conn
-        self.conn2 = conn
 
     def set_login(self, host: str=None, port: int=None, user: str=None,
                   password: str=None, database: str=None):
@@ -172,6 +154,13 @@ class DBApp(object):
             password or os.environ.get('DB_PASS', ''),
             database
         )
+
+    def create_schema(self, schema, conn=None, replace=False):
+        if replace:
+            sql = f'DROP SCHEMA IF EXISTS {schema} CASCADE;'
+            self.run_query(sql, conn=conn or self.conn)
+        sql = f'CREATE SCHEMA IF NOT EXISTS {schema};'
+        self.run_query(sql, conn=conn or self.conn)
 
     def check_platform(self):
         """
@@ -194,7 +183,7 @@ class DBApp(object):
             os.makedirs(folder)
 
     def run_query(self, sql: Union[str, Composed], conn=None,
-                  split=True):
+                  split=True, verbose=True):
         """
         runs an sql query log the statusmessage of each query
 
@@ -212,7 +201,8 @@ class DBApp(object):
         cur = conn.cursor()
 
         def execute(query):
-            self.logger.info(query)
+            if verbose:
+                self.logger.info(query)
             cur.execute(query)
 
         if split:
@@ -312,7 +302,7 @@ DROP DATABASE IF EXISTS {db};
         """
         if schema is None:
             raise ValueError('please define schema')
-        conn = conn or self.conn1
+        conn = conn or self.conn
         sql = """
 CREATE INDEX idx_{tn}_geom ON {schema}.{tn} USING gist(st_convexhull({rast}));
 SELECT AddRasterConstraints('{schema}', '{tn}', '{rast}', TRUE, TRUE, TRUE, TRUE,
@@ -326,7 +316,7 @@ SELECT AddRasterConstraints('{schema}', '{tn}', '{rast}', TRUE, TRUE, TRUE, TRUE
         """
         Add an index to all given overview rasters for the given raster table
         """
-        conn = conn or self.conn1
+        conn = conn or self.conn
         for ov in overviews:
             ov_tn = 'o_{ov}_{tn}'.format(ov=ov, tn=tablename)
             sql = '''
@@ -344,7 +334,7 @@ SELECT AddOverviewConstraints('{schema}', '{ov_tn}', '{rast}',
 
     def add_raster_index_and_overviews(self, overviews, schema, tablename,
                                        raster_column='rast', conn=None):
-        conn = conn or self.conn1
+        conn = conn or self.conn
         self.add_raster_index(schema, tablename, raster_column, conn)
         self.add_overview_index(
             overviews, schema, tablename, raster_column, conn)
@@ -353,7 +343,7 @@ SELECT AddOverviewConstraints('{schema}', '{ov_tn}', '{rast}',
         """
         Return the primary key columns of schema.tablename as string
         """
-        conn = conn or self.conn1
+        conn = conn or self.conn
         sql = """
 SELECT a.attname
 FROM   pg_index i
