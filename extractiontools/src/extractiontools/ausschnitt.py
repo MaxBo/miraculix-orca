@@ -117,7 +117,7 @@ class Extract(DBApp):
                     self.set_target_boundary(self.boundary,
                                              name=self.boundary_name)
                 self.update_boundaries()
-                self.create_schema(self.schema, conn=conn)
+                self.create_schema(self.schema, conn=conn, replace=True)
                 self.create_foreign_schema()
                 self.conn.commit()
                 for tn, geom in self.tables.items():
