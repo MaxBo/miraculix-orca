@@ -22,7 +22,7 @@ default_login = Login(
     password=os.environ.get('DB_PASS', '')
 )
 
-@meta(group='(3) Networks', required='extract_osm')
+@meta(group='(3) Networks', required=['extract_osm', 'extract_landuse'])
 @orca.step()
 def build_network_car(database: str,
                       chunksize: int,
@@ -42,7 +42,7 @@ def build_network_car(database: str,
     build_network.build()
 
 
-@meta(group='(3) Networks', required='extract_osm')
+@meta(group='(3) Networks', required=['extract_osm', 'extract_landuse'])
 @orca.step()
 def build_network_fr(database: str,
                      chunksize: int,
