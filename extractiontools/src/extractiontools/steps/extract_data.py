@@ -90,14 +90,15 @@ def extract_laea_raster(source_db: str, database: str, target_srid: int,
 @orca.step()
 def zensus2raster(database: str, subfolder_tiffs: str):
     """
-    create views on the zensus data in a raster grid
+    create views on the zensus data in a raster grid and export them to
+    raster-TIFF files
     """
     z2r = Zensus2Raster(db=database, subfolder=subfolder_tiffs,
                         logger=orca.logger)
     z2r.run()
 
 
-@meta(group='(2) Extract Data', order=2, required=extract_osm)
+@meta(group='(2) Extract Data', order=2, required=create_polygons_from_osm)
 @orca.step()
 def create_osm_views(database: str):
     """

@@ -187,8 +187,8 @@ class Extract(DBApp):
         );
         '''
         self.logger.info('Adding extensions')
-        with Connection(login=self.foreign_login) as conn0:
-            self.run_query(sql, conn=conn0)
+        with Connection(login=self.foreign_login) as conn:
+            self.run_query(sql, conn=conn)
 
     def final_stuff(self):
         """
