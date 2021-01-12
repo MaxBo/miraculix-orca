@@ -117,6 +117,7 @@ class Extract(DBApp):
                     self.set_target_boundary(self.boundary,
                                              name=self.boundary_name)
                 self.update_boundaries()
+                self.create_schema(self.schema, conn=conn)
                 self.create_foreign_schema()
                 self.conn.commit()
                 for tn, geom in self.tables.items():
@@ -238,11 +239,6 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         conn = conn or self.conn
         foreign_schema = foreign_schema or self.foreign_schema or self.schema
         target_schema = target_schema or self.temp
-        sql = f'''
-        DROP SCHEMA IF EXISTS {self.schema} CASCADE;
-        CREATE SCHEMA {self.schema};
-        '''
-        self.run_query(sql, conn=self.conn)
         sql = f"""
         DROP SCHEMA IF EXISTS {target_schema} CASCADE;
         CREATE SCHEMA {target_schema};
@@ -282,10 +278,10 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
             with Connection(login=self.login) as conn:
                 cur = conn.cursor()
                 sql = """
-    SELECT
-        st_srid(a.geom) AS srid
-    FROM meta.boundary a;
-    """
+                SELECT
+                    st_srid(a.geom) AS srid
+                FROM meta.boundary a;
+                """
                 cur.execute(sql)
                 row = cur.fetchone()
                 srid = row.srid
@@ -367,12 +363,12 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
             #conn.commit()
 
         sql = """
-SELECT 'drop schema if exists "' || schema_name || '" cascade;' AS sql
-FROM (SELECT catalog_name, schema_name
-      FROM information_schema.schemata
-      WHERE schema_name not like 'pg_%' AND
-      schema_name not IN ('information_schema', 'public',
-                          'topology', 'repack')) s;
+        SELECT 'drop schema if exists "' || schema_name || '" cascade;' AS sql
+        FROM (SELECT catalog_name, schema_name
+        FROM information_schema.schemata
+        WHERE schema_name not like 'pg_%' AND
+        schema_name not IN ('information_schema', 'public',
+                            'topology', 'repack')) s;
         """
         with Connection(login=self.login) as conn:
             cursor2 = conn.cursor()
@@ -423,6 +419,7 @@ FROM (SELECT catalog_name, schema_name
         schema = schema or self.schema
         conn = conn or self.conn
         temp_schema = f'class_temp'
+        self.create_schema(schema, conn=conn)
         self.create_foreign_schema(foreign_schema=schema,
                                    target_schema=temp_schema, conn=conn)
 
@@ -441,6 +438,7 @@ FROM (SELECT catalog_name, schema_name
         self.run_query(sql, conn=self.conn)
         for table in tables:
             sql = f'''
+            DROP TABLE IF EXISTS {schema}.{table};
             CREATE TABLE {schema}.{table} (LIKE {temp_schema}.{table}
             INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING DEFAULTS);
             INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};

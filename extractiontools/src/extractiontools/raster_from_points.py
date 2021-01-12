@@ -53,7 +53,7 @@ class Points2Raster(DBApp):
     def __init__(self,
                  db: str = 'extract',
                  subfolder: str = 'tiffs', **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(schema=self.schema, **kwargs)
         self.destination_db = self.db = db
         self.set_login(database=db)
         self.check_platform()
@@ -65,10 +65,8 @@ class Points2Raster(DBApp):
         with Connection(login=self.login) as conn:
             # preparation
             self.conn = conn
-            self.set_session_authorization(self.conn)
             self.do_stuff()
             self.conn.commit()
-            self.reset_authorization(self.conn)
 
     def do_stuff(self):
         raise NotImplementedError('Do be defined in the subclass')

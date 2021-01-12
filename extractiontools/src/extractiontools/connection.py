@@ -155,6 +155,13 @@ class DBApp(object):
             database
         )
 
+    def create_schema(self, schema, conn=None):
+        sql = f'''
+        DROP SCHEMA IF EXISTS {schema} CASCADE;
+        CREATE SCHEMA IF NOT EXISTS {schema};
+        '''
+        self.run_query(sql, conn=conn or self.conn)
+
     def check_platform(self):
         """
         check the platform
