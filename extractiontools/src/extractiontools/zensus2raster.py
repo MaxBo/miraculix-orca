@@ -15,11 +15,6 @@ class Zensus2Raster(Points2Raster):
         self.ew2hectar()
         self.zensus2km2()
         self.geostat2km2()
-        self.export2tiff('ew_ha_raster')
-        self.export2tiff('einwohner_km2_raster')
-        self.export2tiff('hhgroesse_d_km2_raster')
-        self.export2tiff('wohnfl_wohnung_km2_raster')
-        self.export2tiff('geostat_einwohner_km2_raster')
 
     def ew2hectar(self):
         """convert Einwohner to Raster"""
@@ -145,6 +140,20 @@ WHERE v.cellcode = z.id;
             band=1,
             noData=noData,
             overwrite=True)
+
+
+class ExportZensus(Points2Raster):
+
+    def do_stuff(self):
+        """
+        define here, what to execute
+        """
+        self.export2tiff('ew_ha_raster')
+        self.export2tiff('einwohner_km2_raster')
+        self.export2tiff('hhgroesse_d_km2_raster')
+        self.export2tiff('wohnfl_wohnung_km2_raster')
+        self.export2tiff('geostat_einwohner_km2_raster')
+
 
 
 if __name__ == '__main__':
