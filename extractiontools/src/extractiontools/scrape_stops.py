@@ -56,17 +56,33 @@ class ScrapeStops(Extract):
 
         point_distance = 14000
         search_radius = 10000
+
+        cursor = self.conn.cursor()
         sql = f'''
-        CREATE TABLE IF NOT EXISTS {self.schema}.haltestellen (
-        "H_Name" TEXT NOT NULL,
-        "H_ID" INTEGER NOT NULL,
-        kreis TEXT,
-        found BOOLEAN DEFAULT false NOT NULL,
-        geom public.geometry,
-        in_area BOOLEAN DEFAULT false
+        SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE  table_schema = '{self.schema}'
+        AND    table_name   = 'haltestellen'
         );
         '''
-        self.run_query(sql)
+        cursor.execute(sql)
+        row = cursor.fetchone()
+        exists = row[0]
+
+        if not exists:
+            sql = f'''
+            CREATE TABLE {self.schema}.haltestellen (
+            "H_Name" TEXT NOT NULL,
+            "H_ID" INTEGER PRIMARY KEY,
+            kreis TEXT,
+            found BOOLEAN DEFAULT false NOT NULL,
+            geom public.geometry,
+            in_area BOOLEAN DEFAULT false
+            );
+            CREATE INDEX idx_haltestellen_geom
+            ON {self.schema}.haltestellen USING gist(geom);
+            '''
+            self.run_query(sql)
 
         sql = f'''
         SELECT
@@ -75,62 +91,63 @@ class ScrapeStops(Extract):
         FROM ( SELECT (ST_HexagonGrid({point_distance}, ST_Transform(geom, 3857))).*
         FROM meta.boundary WHERE name='{self.boundary_name}') a ) b
         '''
-        cursor = self.conn.cursor()
         self.logger.info(sql)
         cursor.execute(sql)
         points = cursor.fetchall()
 
-        stops_found = 0
-        stops_inserted = 0
         db_query = BahnQuery(timeout=0.5)
+
         for x, y in points:
             self.logger.debug(f'search at {x}, {y}')
-            stops_found_in_tile = 0
-            stops_inserted_in_tile = 0
 
             time.sleep(0.5)
 
             self.logger.info(f'Querying stations at {x}, {y}')
 
             stops = db_query.stops_near((x, y), max_distance=search_radius)
+            if not stops:
+                continue
+            temp_table = 'temp_stations'
+            sql = f'''
+            DROP TABLE IF EXISTS {self.schema}.{temp_table};
+            CREATE TABLE IF NOT EXISTS {self.schema}.{temp_table} (
+            LIKE {self.schema}.haltestellen INCLUDING CONSTRAINTS INCLUDING DEFAULTS);
+            '''
+            self.run_query(sql, verbose=False)
             for stop in stops:
                 sql = f"""
-                INSERT INTO {self.schema}.haltestellen
+                INSERT INTO {self.schema}.{temp_table}
                 ("H_Name", "H_ID", geom, in_area)
-                SELECT
-                  '{stop['name']}', {stop['id']},
-                  st_transform(st_setsrid(st_makepoint( {stop['x']}, {stop['y']}), 4326 ),
-                              {self.target_srid}::integer),
-                  True::boolean
-                WHERE NOT EXISTS (SELECT 1 FROM {self.schema}.haltestellen h WHERE h."H_ID" = {stop['id']});
+                VALUES
+                ('{stop['name']}', {stop['id']},
+                st_transform(st_setsrid(st_makepoint( {stop['x']}, {stop['y']}), 4326 ),
+                            {self.target_srid}::integer),
+                True::boolean)
                 """
-                self.logger.info(sql)
                 cursor.execute(sql)
-                stops_found += 1
-                stops_found_in_tile += 1
-                stops_inserted += cursor.rowcount
-                stops_inserted_in_tile += cursor.rowcount
-                if not cursor.rowcount:
-                    # update name and geom if stop is already in db
-                    sql = f"""
-                    UPDATE {self.schema}.haltestellen h
-                    SET "H_Name" = '{stop['name']}',
-                    geom = st_transform(st_setsrid(st_makepoint( {stop['x']}, {stop['y']}), 4326 ),
-                                        {self.target_srid}::integer),
-                    in_area=True::boolean
-                    WHERE h."H_ID" = {stop['id']};
-                    """
-                    self.logger.info(sql)
-                    cursor.execute(sql)
 
-                if not stops_found % 1000:
-                    self.conn.commit()
+            sql = f'''
+            DELETE FROM {self.schema}.{temp_table} a
+            USING meta.boundary b
+            WHERE st_disjoint(a.geom, st_transform(b.source_geom, {self.target_srid}))
+            AND b.name='{self.boundary_name}';
+            '''
+            cursor.execute(sql)
 
-            self.logger.info(f' found {stops_inserted_in_tile} new stops')
+            sql = f"""
+            INSERT INTO {self.schema}.haltestellen
+            SELECT *
+            FROM {self.schema}.{temp_table} tt
+            ON CONFLICT ("H_ID") DO UPDATE
+            SET geom=excluded.geom, "H_Name"=excluded."H_Name", in_area=True::boolean;
+            """
+            self.logger.info(sql)
+            cursor.execute(sql)
+
+            self.logger.info(f'inserted or updated {cursor.rowcount} stops')
             self.conn.commit()
-
-        self.logger.info(f'{stops_inserted} stops found and inserted')
-
+        sql = f'DROP TABLE IF EXISTS {self.schema}.{temp_table};'
+        self.run_query(sql, verbose=False)
 
 if __name__ == '__main__':
 

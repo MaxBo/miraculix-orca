@@ -213,12 +213,12 @@ class Extract(DBApp):
         col_str = ', '.join(cols_without_geom)
 
         sql = f"""
-SELECT {col_str}, st_transform(t.{geom}, {self.target_srid})::geometry({geometrytype}, {self.target_srid}) as geom
-INTO {self.schema}.{tn}
-FROM {self.temp}.{tn} t,
-(SELECT ST_GeomFromEWKT('SRID={self.srid};{wkt}') AS source_geom) tb
-WHERE
-st_intersects(t.{geom}, tb.source_geom)
+        SELECT {col_str}, st_transform(t.{geom}, {self.target_srid})::geometry({geometrytype}, {self.target_srid}) as geom
+        INTO {self.schema}.{tn}
+        FROM {self.temp}.{tn} t,
+        (SELECT ST_GeomFromEWKT('SRID={self.srid};{wkt}') AS source_geom) tb
+        WHERE
+        st_intersects(t.{geom}, tb.source_geom)
         """
         self.run_query(sql, conn=self.conn)
 
