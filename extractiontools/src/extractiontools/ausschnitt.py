@@ -206,7 +206,7 @@ class Extract(DBApp):
         extracts a single table
         """
 
-        wkt = self.get_target_boundary(name=boundary_name or self.boundary_name)
+        wkt = self.get_target_boundary(boundary_name=boundary_name or self.boundary_name)
         geometrytype = self.get_geometrytype(tn, geom)
         cols = self.conn.get_column_dict(tn, self.temp)
         cols_without_geom = ('t."{}"'.format(c) for c in cols if c != geom)
@@ -252,7 +252,7 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
 
         self.run_query(sql, self.conn)
 
-    def get_target_boundary(self, name=None):
+    def get_target_boundary(self, boundary_name=None):
         """
         get the target boundary from the destination database
         """
@@ -260,7 +260,7 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
             cur = conn.cursor()
             sql = f"""
             SELECT ST_AsText(source_geom) as wkt FROM meta.boundary
-            WHERE name='{name or self.boundary_name}';
+            WHERE name='{boundary_name or self.boundary_name}';
             """
             cur.execute(sql)
             row = cur.fetchone()
