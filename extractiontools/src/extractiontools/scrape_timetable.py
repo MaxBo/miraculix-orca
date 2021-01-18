@@ -3,7 +3,7 @@
 
 from argparse import ArgumentParser
 
-import time
+import datetime
 import requests
 from lxml import html
 from extractiontools.scrape_stops import ScrapeStops, Connection
@@ -12,11 +12,13 @@ from extractiontools.utils.bahn_query import BahnQuery
 
 class ScrapeTimetable(ScrapeStops):
 
-    sql_timestamp_format = '%Y-%m-%d %H:%M'
+    sql_date_format = '%Y-%m-%d'
+    sql_time_format = '%H:%M'
+    sql_timestamp_format = f'{sql_date_format} {sql_time_format}'
 
     def __init__(self,
                  destination_db: str,
-                 date: str,
+                 date: datetime.datetime,
                  source_db: str,
                  recreate_tables: bool = True,
                  logger=None):
@@ -48,7 +50,7 @@ class ScrapeTimetable(ScrapeStops):
           "Fahrt_URL" text,
           "Fahrt_Name" text,
           "Fahrt_Abfahrt" timestamp(0) with time zone,
-          "query_date" timestamp(0) with time zone,
+          "suchdatum" timestamp(0) with time zone,
           "H_ID" integer,
           abfahrt_id BIGSERIAL PRIMARY KEY,
           "Fahrt_Ziel" text,
@@ -134,19 +136,19 @@ class ScrapeTimetable(ScrapeStops):
         sql = f'''
         DELETE FROM {self.schema}.abfahrten
         WHERE "H_ID"={stop_id}
-        AND query_date='{self.date}';
+        AND suchdatum='{self.date}';
         '''
         self.run_query(sql,verbose=False)
 
     def add_journey(self, journey, route):
-        #dt_txt = journey['departure'].strftime(self.sql_timestamp_format)
+        #dt_txt = journey['departure'].strftime('%H:%M')
         dt_txt = route[0]['departure'].strftime(self.sql_timestamp_format)
         sql = f'''
         INSERT INTO abfahrten
         ("Fahrt_URL", "Fahrt_Name",
         "Fahrt_Abfahrt", "H_ID",
         "Fahrt_Ziel", "Fahrt_Nr",
-        query_date)
+        suchdatum)
         VALUES (
         '{journey['url']}', '{journey['name']}',
         '{dt_txt}', NULL,
@@ -160,10 +162,12 @@ class ScrapeTimetable(ScrapeStops):
         j_id = cur.fetchone()
 
         for i, section in enumerate(route):
-            at = (f"'{section['arrival'].strftime(self.sql_timestamp_format)}'"
-                  if section['arrival'] else 'NULL')
-            dt = (f"'{section['departure'].strftime(self.sql_timestamp_format)}'"
-                  if section['departure'] else 'NULL')
+            arr_time = section.get('arrival')
+            at = (f"'{arr_time.strftime(self.sql_timestamp_format)}'"
+                  if arr_time else 'NULL')
+            dep_time = section.get('departure')
+            dt = (f"'{dep_time.strftime(self.sql_timestamp_format)}'"
+                  if dep_time else 'NULL')
             sql = f"""
             INSERT INTO fahrten
             (abfahrt_id, "Fahrt_Name", fahrt_index,
@@ -178,13 +182,12 @@ class ScrapeTimetable(ScrapeStops):
     def check_journey(self, journey):
         departure = journey['departure'].strftime(self.sql_time_format)
         search_date = self.date.strftime(self.sql_date_format)
-        # match search date and start time (wo date), scraping the routes
-        # might decrease the start time to previous day
         sql = f"""
         SELECT 1 AS id
         FROM {self.schema}.abfahrten AS a, {self.schema}.fahrten AS f
-        WHERE a.abfahrt_id = f.abfahrt_id AND a.query_date::date = '{search_date}'
-        AND a."Fahrt_Name" =' {journey['name']}' AND f."H_Name" = '{journey['start']}'
+        WHERE a.abfahrt_id = f.abfahrt_id
+        AND a.suchdatum::date = '{search_date}'
+        AND a."Fahrt_Name" = '{journey['name']}' AND f."H_Name" = '{journey['start']}'
         AND f."H_Abfahrt"::time = '{departure}' AND a."Fahrt_Ziel" = '{journey['destination']}'"""
         cursor = self.conn.cursor()
         cursor.execute(sql)

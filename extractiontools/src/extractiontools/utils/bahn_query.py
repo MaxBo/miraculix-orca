@@ -320,7 +320,7 @@ class BahnQuery(object):
             # rest of string is the name of the train
             train_name = train_txt.replace(train_nr_b, '')
             # remove line returns and white spaces
-            j_attrs['name'] = ' '.join(train_name.split())
+            j_attrs['name'] = ' '.join(train_name.split()).strip()
             j_attrs['number'] = train_nr_b.replace('(', '').replace(')', '')
             # url is relative
             j_attrs['url'] = self.base_url + train.find('a').attrib['href']
@@ -332,25 +332,19 @@ class BahnQuery(object):
         r = requests.get(url)
         root = html.fromstring(r.content)
         content = root.xpath('//div[@id="content"]')[0]
-        dt_div = content.find_class('trainroute')[0]
-        date_txt = re.findall(r'\d{1,2}.\d{1,2}.\d{2,4}', dt_div.text)[0]
-        date = datetime.datetime.strptime(date_txt, '%d.%m.%y').date()
+        #dt_div = content.find_class('trainroute')[0]
+        #date_txt = re.findall(r'\d{1,2}.\d{1,2}.\d{2,4}', dt_div.text)[0]
+        #date = datetime.datetime.strptime(date_txt, '%d.%m.%y').date()
 
         table = content.xpath('.//table[contains(@class, "result")]')[0]
         rows = table.findall('tr')
-        prev_time = datetime.time(hour=0)
 
-        def res_to_date(t):
-            if not t:
+        def parse_time(div):
+            txt = re.findall(r'\d{1,2}:\d{1,2}', div.text)
+            if not txt:
                 return
-            nonlocal date
-            nonlocal prev_time
-            t = datetime.datetime.strptime(t[0], self.time_format).time()
-            if t < prev_time:
-                date += datetime.timedelta(days=1)
-            dt = datetime.datetime.combine(date, t)
-            prev_time = t
-            return dt
+            t = datetime.datetime.strptime(txt[0], self.time_format).time()
+            return t
 
         for row in rows:
             cls = row.get('class')
@@ -359,13 +353,23 @@ class BahnQuery(object):
             section = {}
             station = row.find_class('station')[0].find('a')
             section['station'] = station.text
-            regex_t = r'\d{1,2}:\d{1,2}'
-            arrival = row.find_class('arrival')[0]
-            arrival_txt = re.findall(regex_t, arrival.text)
-            departure = row.find_class('departure')[0]
-            departure_txt = re.findall(regex_t, departure.text)
-            section['arrival'] = res_to_date(arrival_txt)
-            section['departure'] = res_to_date(departure_txt)
+
+            # arrival date (resp. departure date, if no arrival time) can be
+            # retrieved from station url
+            station_url = station.attrib['href']
+            date_txt = re.findall('date=([0-9\.]+)', station_url)[0]
+            date = datetime.datetime.strptime(date_txt, '%d.%m.%y').date()
+
+            arr_time = parse_time(row.find_class('arrival')[0])
+            dep_time = parse_time(row.find_class('departure')[0])
+
+            if arr_time:
+                section['arrival'] = datetime.datetime.combine(date, arr_time)
+            if dep_time:
+                # departure is next day
+                if arr_time and arr_time > dep_time:
+                    date += datetime.timedelta(days=1)
+                section['departure'] = datetime.datetime.combine(date, dep_time)
             route.append(section)
         return route
 
