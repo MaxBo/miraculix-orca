@@ -3,7 +3,7 @@
 from typing import Dict
 import os
 import orca
-import copy
+from datetime import date
 from orcadjango.decorators import meta
 from extractiontools.connection import Login
 from extractiontools.build_network_car import BuildNetwork
@@ -86,9 +86,9 @@ def scrape_stops(database: str):
 
 @meta(group='Public Transport')
 @orca.injectable()
-def date_timetable() -> str:
+def date_timetable() -> date:
     """date for the timetable"""
-    return '02.05.2019'
+    return date.today()
 
 
 @meta(group='Public Transport')
@@ -101,14 +101,14 @@ def recreate_timetable_tables() -> bool:
 @meta(group='Public Transport', order=3,
       required='scrape_stops or extract_stops')
 @orca.step()
-def scrape_timetables(database: str,
+def scrape_timetables(database: str, source_db: str,
                       date_timetable: str,
                       recreate_timetable_tables: bool):
     """
     Scrape timetables from Deutsche Bahn
     """
-    scrape = ScrapeTimetable(destination_db=database,
-                             date=date_timetable,
+    scrape = ScrapeTimetable(destination_db=database, logger=orca.logger,
+                             date=date_timetable, source_db=source_db,
                              recreate_tables=recreate_timetable_tables)
     scrape.scrape()
 
@@ -130,11 +130,11 @@ def tbl_kreise() -> str:
 @meta(group='Public Transport', order=4, required=scrape_timetables)
 @orca.step()
 def timetables_gtfs(database: str,
-                       date_timetable: str,
-                       gtfs_only_one_day: bool,
-                       base_path: str,
-                       subfolder_otp: str,
-                       tbl_kreise: str):
+                    date_timetable: str,
+                    gtfs_only_one_day: bool,
+                    base_path: str,
+                    subfolder_otp: str,
+                    tbl_kreise: str):
     """
     Export Timetables as GTFS-file
     """

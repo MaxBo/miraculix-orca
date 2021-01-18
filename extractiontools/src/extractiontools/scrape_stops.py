@@ -57,32 +57,19 @@ class ScrapeStops(Extract):
         point_distance = 14000
         search_radius = 10000
 
-        cursor = self.conn.cursor()
         sql = f'''
-        SELECT EXISTS (
-        SELECT FROM information_schema.tables
-        WHERE  table_schema = '{self.schema}'
-        AND    table_name   = 'haltestellen'
+        CREATE TABLE IF NOT EXISTS {self.schema}.haltestellen (
+        "H_Name" TEXT NOT NULL,
+        "H_ID" INTEGER PRIMARY KEY,
+        kreis TEXT,
+        found BOOLEAN DEFAULT false NOT NULL,
+        geom public.geometry,
+        in_area BOOLEAN DEFAULT false
         );
+        CREATE INDEX IF NOT EXISTS idx_haltestellen_geom
+        ON {self.schema}.haltestellen USING gist(geom);
         '''
-        cursor.execute(sql)
-        row = cursor.fetchone()
-        exists = row[0]
-
-        if not exists:
-            sql = f'''
-            CREATE TABLE {self.schema}.haltestellen (
-            "H_Name" TEXT NOT NULL,
-            "H_ID" INTEGER PRIMARY KEY,
-            kreis TEXT,
-            found BOOLEAN DEFAULT false NOT NULL,
-            geom public.geometry,
-            in_area BOOLEAN DEFAULT false
-            );
-            CREATE INDEX idx_haltestellen_geom
-            ON {self.schema}.haltestellen USING gist(geom);
-            '''
-            self.run_query(sql)
+        self.run_query(sql)
 
         sql = f'''
         SELECT
