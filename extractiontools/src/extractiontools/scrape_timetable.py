@@ -3,9 +3,8 @@
 
 from argparse import ArgumentParser
 
+import time
 import datetime
-import requests
-from lxml import html
 from extractiontools.scrape_stops import ScrapeStops, Connection
 from extractiontools.utils.bahn_query import BahnQuery
 
@@ -15,6 +14,7 @@ class ScrapeTimetable(ScrapeStops):
     sql_date_format = '%Y-%m-%d'
     sql_time_format = '%H:%M'
     sql_timestamp_format = f'{sql_date_format} {sql_time_format}'
+    max_retries = 10
 
     def __init__(self,
                  destination_db: str,
@@ -113,17 +113,26 @@ class ScrapeTimetable(ScrapeStops):
             stop_id = row[0]
             #self.clear_journeys(stop_id)
             db_query = BahnQuery(dt=self.date, timeout=0)
-            journeys = db_query.scrape_journeys(stop_id)
+            retries = 0
+            journeys = []
+            while retries < self.max_retries:
+                try:
+                    journeys = db_query.scrape_journeys(stop_id)
+                    break
+                except ConnectionError as e:
+                    self.logger.warning(f'{str(e)} Retrying...')
+                time.sleep(15)
+                retries += 1
             i = 0
             for journey in journeys:
                 already_in = self.check_journey(journey)
-                if already_in:
-                    continue
-                route = db_query.scrape_route(journey['url'])
                 self.logger.info(
                     f"Route {journey['departure'].strftime('%H:%M')} "
                     f"{journey['start']} -> {journey['destination']} added. "
                     f"({i}/{len(journeys)})")
+                if already_in:
+                    self.logger.info('Route bereits vorhanden. Skippe...')
+                route = db_query.scrape_route(journey['url'])
                 self.add_journey(journey, route)
                 i += 1
             if i == 0:
@@ -193,20 +202,6 @@ class ScrapeTimetable(ScrapeStops):
         cursor.execute(sql)
         row = cursor.fetchone()
         return row is not None
-
-    def wait_and_retry(self, bhftafel_url: str, waittime: int = 15):
-        # if not successful,
-        # try to get the page MAX_TRIES times
-        self.logger.info(f'wait {waittime} secs and try again {self.t} '
-                    f'for url {bhftafel_url}')
-        time.sleep(waittime)
-        r = requests.get(bhftafel_url)
-        tree = html.fromstring(r.content)
-
-        self.errCode = tree.xpath(
-            '//div[@class="hafasContent error"]/text()')
-        self.t += 1
-        return tree
 
     def add_missing_stops(self):
         """Add missing stops from master database to local database"""

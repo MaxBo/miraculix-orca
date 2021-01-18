@@ -280,10 +280,10 @@ class BahnQuery(object):
         rows = root.xpath('//tr')
         journeys = [row for row in rows
                     if row.get('id') and 'journeyRow_' in row.get('id')]
-        errCode = root.xpath(
-            '//div[@class="hafasContent error"]/text()')
-        if errCode:
-            print(errCode)
+        error = root.xpath('//div[contains(@class, "error")]')
+        if error and error.text:
+            raise ConnectionError(
+                f'Error while querying DB-site: "{error.text}"')
         res = []
         for journey in journeys:
             j_attrs = {}
