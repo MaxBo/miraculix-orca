@@ -83,6 +83,8 @@ class ExtractOSM(Extract):
         cur.execute(sql)
         rows = cur.fetchall()
         ids = [row[0] for row in rows]
+        if len(ids) == 0:
+            return
         chunksize = 1000
         for i in range(0, len(ids), chunksize):
             cur_ids = ids[i: i + chunksize]
@@ -147,6 +149,8 @@ class ExtractOSM(Extract):
         cur.execute(sql)
         rows = cur.fetchall()
         ids = [row[0] for row in rows]
+        if len(ids) == 0:
+            return
         chunksize = 1000
         for i in range(0, len(ids), chunksize):
             cur_ids = ids[i: i + chunksize]

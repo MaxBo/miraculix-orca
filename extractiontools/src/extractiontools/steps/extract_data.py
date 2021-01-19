@@ -8,7 +8,7 @@ from extractiontools.osm2polygons import CreatePolygons
 from extractiontools.extract_landuse import ExtractLanduse
 from extractiontools.extract_verwaltungsgrenzen import ExtractVerwaltungsgrenzen
 from extractiontools.laea_raster import ExtractLAEA
-from extractiontools.zensus2raster import Zensus2Raster
+from extractiontools.zensus2raster import Zensus2Raster, ExportZensus
 from extractiontools.copy_osm2fgdb import CopyOSM2FGDB
 import ogr
 
@@ -79,24 +79,13 @@ def extract_verwaltungsgrenzen(source_db: str, database: str,
 def extract_laea_raster(source_db: str, database: str, target_srid: int,
                         project_area: ogr.Geometry):
     """
-    extract laea raster in the area
+    extract laea and zensus raster in the area
     """
     extract = ExtractLAEA(source_db=source_db, destination_db=database,
                           logger=orca.logger, boundary=project_area)
     extract.extract()
-
-
-@meta(group='(2) Extract Data', order=6, required=extract_laea_raster)
-@orca.step()
-def zensus2raster(database: str, subfolder_tiffs: str):
-    """
-    create views on the zensus data in a raster grid and export them to
-    raster-TIFF files
-    """
-    z2r = Zensus2Raster(db=database, subfolder=subfolder_tiffs,
-                        logger=orca.logger)
+    z2r = Zensus2Raster(db=database, logger=orca.logger)
     z2r.run()
-
 
 @meta(group='(2) Extract Data', order=2, required=create_polygons_from_osm)
 @orca.step()
@@ -146,3 +135,12 @@ def copy_osm_to_fgdb(database: str, osm_layers: Dict[str, str]):
     copy2fgdb.copy_layers()
 
 
+@meta(group='Export', required=extract_laea_raster)
+@orca.step()
+def copy_zensus_to_tiff(database: str, subfolder_tiffs: str):
+    """
+    export zensus to raster-TIFF files
+    """
+    z2r = ExportZensus(db=database, subfolder=subfolder_tiffs,
+                       logger=orca.logger)
+    z2r.run()

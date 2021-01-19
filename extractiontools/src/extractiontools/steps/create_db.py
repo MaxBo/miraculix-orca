@@ -13,7 +13,7 @@ __parent_modules__ = [
 @orca.step()
 def create_db(target_srid: str, project_area: ogr.Geometry, database: str):
     """
-    (re)-create the target database
+    (re)create the target database
     and copy the selected files
     """
 
