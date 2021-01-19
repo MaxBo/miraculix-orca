@@ -291,16 +291,8 @@ class BahnQuery(object):
             route = journey.find_class('route')[0]
             destination = route.find('.//a').text.replace('\n', '')
             j_attrs['destination'] = destination.strip()
-            # remove destination from text (appears first)
-            route_txt = route.text_content().replace(destination, '')
-            ## start point is first appearance of letters before a time
-            #stations = re.findall(r'([0-9A-Za-züöäÜÖÄ, \.,\(\)ß]+)[ ]+\d{2}:\d{2}',
-                                  #route_txt.replace('\n', ''))
-            sections = route_txt.replace('\n', '').split('-')
-            start = re.findall(r'(.*)\d{2}:\d{2}', sections[0])[0]
-            j_attrs['start'] = start.strip()
-            route_times = re.findall( r'\d{1,2}:\d{1,2}', route_txt)
-            dt_txt = route_times[1]
+            route_times = re.findall( r'\d{1,2}:\d{1,2}', route.text_content())
+            dt_txt = route_times[0]
             dt = datetime.datetime.strptime(dt_txt, self.time_format).time()
             j_attrs['departure'] = datetime.datetime.combine(self.date, dt)
             at_txt = route_times[-1]
@@ -352,11 +344,12 @@ class BahnQuery(object):
                 continue
             section = {}
             station = row.find_class('station')[0].find('a')
-            section['station'] = station.text
-
+            section['station_name'] = station.text
+            station_url = station.attrib['href']
+            section['station_id'] = re.findall('input=.*%23([0-9]+)',
+                                               station_url)[0]
             # arrival date (resp. departure date, if no arrival time) can be
             # retrieved from station url
-            station_url = station.attrib['href']
             date_txt = re.findall('date=([0-9\.]+)', station_url)[0]
             date = datetime.datetime.strptime(date_txt, '%d.%m.%y').date()
 

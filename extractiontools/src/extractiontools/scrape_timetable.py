@@ -51,8 +51,9 @@ class ScrapeTimetable(ScrapeStops):
           "Fahrt_Name" text,
           "Fahrt_Abfahrt" timestamp(0) with time zone,
           "suchdatum" timestamp(0) with time zone,
-          "H_ID" integer,
           abfahrt_id BIGSERIAL PRIMARY KEY,
+          "H_ID" integer,
+          "Fahrt_Start" text,
           "Fahrt_Ziel" text,
           "Fahrt_Nr" text,
           CONSTRAINT abfahrten_fk FOREIGN KEY ("H_ID")
@@ -107,9 +108,10 @@ class ScrapeTimetable(ScrapeStops):
         cursor = self.get_cursor()
         cursor.execute(sql)
         rows = cursor.fetchall()
-        for row in rows:
+        for r, row in enumerate(rows):
             self.logger.info(
-                f'Looking for Routes at stop "{row[1]}"...')
+                f'Looking for Routes at stop "{row[1]}"... '
+                f'({r+1}/{len(rows)})')
             stop_id = row[0]
             #self.clear_journeys(stop_id)
             db_query = BahnQuery(dt=self.date, timeout=0)
@@ -124,16 +126,21 @@ class ScrapeTimetable(ScrapeStops):
                 time.sleep(15)
                 retries += 1
             i = 0
-            for journey in journeys:
-                already_in = self.check_journey(journey)
-                self.logger.info(
-                    f"Route {journey['departure'].strftime('%H:%M')} "
-                    f"{journey['start']} -> {journey['destination']} added. "
-                    f"({i}/{len(journeys)})")
+            for j, journey in enumerate(journeys):
+                already_in = self.check_journey(journey, stop_id)
                 if already_in:
-                    self.logger.info('Route bereits vorhanden. Skippe...')
+                    self.logger.info(f"Route \"{journey['name']}\" to "
+                                     f"{journey['destination']} already in "
+                                     "database. Skipping... "
+                                     f"({j+1}/{len(journeys)})")
+                    continue
                 route = db_query.scrape_route(journey['url'])
-                self.add_journey(journey, route)
+                self.add_journey(journey, route, stop_id)
+                self.logger.info(
+                    f"Route {route[0]['departure'].strftime('%H:%M')} "
+                    f"\"{journey['name']}\" {journey['number']} "
+                    f"{route[0]['station_name']} -> {journey['destination']} added "
+                    f"({j+1}/{len(journeys)})")
                 i += 1
             if i == 0:
                 continue
@@ -149,19 +156,19 @@ class ScrapeTimetable(ScrapeStops):
         '''
         self.run_query(sql,verbose=False)
 
-    def add_journey(self, journey, route):
-        #dt_txt = journey['departure'].strftime('%H:%M')
+    def add_journey(self, journey, route, stop_id):
+        # dt_txt = journey['departure'].strftime('%H:%M')
         dt_txt = route[0]['departure'].strftime(self.sql_timestamp_format)
         sql = f'''
         INSERT INTO abfahrten
         ("Fahrt_URL", "Fahrt_Name",
-        "Fahrt_Abfahrt", "H_ID",
-        "Fahrt_Ziel", "Fahrt_Nr",
+        "Fahrt_Abfahrt", "Fahrt_Start", "Fahrt_Ziel",
+        "Fahrt_Nr", "H_ID",
         suchdatum)
         VALUES (
         '{journey['url']}', '{journey['name']}',
-        '{dt_txt}', NULL,
-        '{journey['destination']}', {journey['number'] or 'NULL'},
+        '{dt_txt}', '{route[0]['station_name']}', '{journey['destination']}',
+        {journey['number'] or 'NULL'}, {stop_id},
         '{self.date.strftime(self.sql_date_format)}'
         )
         RETURNING "abfahrt_id";
@@ -183,21 +190,22 @@ class ScrapeTimetable(ScrapeStops):
             "H_Name", "H_Ankunft", "H_Abfahrt", "H_ID")
             VALUES (
             {j_id[0]}, '{journey['name']}', {i+1},
-            '{section['station']}', {at}, {dt},
-            NULL
+            '{section['station_name']}', {at}, {dt},
+            '{section['station_id']}'
             );"""
             cur.execute(sql)
 
-    def check_journey(self, journey):
+    def check_journey(self, journey, stop_id):
         departure = journey['departure'].strftime(self.sql_time_format)
-        search_date = self.date.strftime(self.sql_date_format)
         sql = f"""
         SELECT 1 AS id
         FROM {self.schema}.abfahrten AS a, {self.schema}.fahrten AS f
         WHERE a.abfahrt_id = f.abfahrt_id
-        AND a.suchdatum::date = '{search_date}'
-        AND a."Fahrt_Name" = '{journey['name']}' AND f."H_Name" = '{journey['start']}'
-        AND f."H_Abfahrt"::time = '{departure}' AND a."Fahrt_Ziel" = '{journey['destination']}'"""
+        AND a."Fahrt_Name" = '{journey['name']}'
+        AND f."H_ID" = {stop_id}
+        AND f."H_Abfahrt"::time = '{departure}'
+        AND a."Fahrt_Ziel" = '{journey['destination']}'
+        """
         cursor = self.conn.cursor()
         cursor.execute(sql)
         row = cursor.fetchone()
@@ -205,32 +213,35 @@ class ScrapeTimetable(ScrapeStops):
 
     def add_missing_stops(self):
         """Add missing stops from master database to local database"""
-        cur = self.conn.cursor()
+        cursor = self.conn.cursor()
 
-        sql = """
-        SELECT dblink_connect_u('conn', 'dbname={sd}');
-        -- füge fehlende Haltestelle aus der Deutschland-Tabelle hinzu
-        INSERT INTO {s}.haltestellen
-        ("H_ID", "H_Name", geom, kreis)
-        SELECT "H_ID", "H_Name", st_transform(geom, {srid}) AS geom, kreis
-        FROM dblink('conn',
-        'SELECT h."H_ID", h."H_Name", h.geom, h.kreis
-        FROM {s}.haltestellen AS h') AS hd(
-        "H_ID" integer,
-        "H_Name" text,
-        geom geometry,
-        kreis text)
-        WHERE hd."H_ID" NOT IN (SELECT DISTINCT h."H_ID" FROM {s}.haltestellen h)
-        AND hd."H_Name" IN (SELECT DISTINCT f."H_Name" FROM {s}.fahrten AS f);
+        sql = f"""
+        SELECT DISTINCT("H_ID") FROM {self.schema}.fahrten
+        WHERE "H_ID" NOT IN (
+        SELECT DISTINCT "H_ID" FROM {self.schema}.haltestellen)
         """
-        # ToDo: Bahn query instead
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        ids = [row[0] for row in rows]
+        if len(ids) == 0:
+            return
+        self.create_foreign_schema()
+        self.logger.info(f'Adding {len(ids)} missing stop(s) '
+                         f'from database "{self.source_db}"...')
+        chunksize = 1000
+        for i in range(0, len(ids), chunksize):
+            cur_ids = ids[i: i + chunksize]
+            arr = ','.join([str(ci) for ci in cur_ids])
+            sql = f"""
+            INSERT INTO {self.schema}.haltestellen
+            ("H_ID", "H_Name", geom, kreis)
+            SELECT "H_ID", "H_Name", st_transform(geom, {self.target_srid}) AS geom, kreis
+            FROM {self.temp}.haltestellen
+            WHERE "H_ID" = ANY(ARRAY[{arr}]);
+            """
+            self.run_query(sql, conn=self.conn)
+        self.cleanup()
 
-        query = sql.format(srid=self.target_srid,
-                           sd=self.source_db,
-                           s=self.schema)
-        self.logger.info(query)
-        cur.execute(query)
-        self.logger.info(f'{cur.statusmessage}')
 
 if __name__ == '__main__':
 

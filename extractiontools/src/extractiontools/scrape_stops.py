@@ -79,6 +79,7 @@ class ScrapeStops(Extract):
         FROM meta.boundary WHERE name='{self.boundary_name}') a ) b
         '''
         self.logger.info(sql)
+        cursor = self.conn.cursor()
         cursor.execute(sql)
         points = cursor.fetchall()
 

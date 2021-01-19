@@ -8,7 +8,7 @@ import os
 import subprocess
 import time
 import ogr
-from psycopg2.sql import Identifier, SQL, Literal
+from psycopg2.sql import Identifier, SQL
 from psycopg2 import errors
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from copy import deepcopy
