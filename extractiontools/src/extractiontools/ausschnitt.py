@@ -94,7 +94,6 @@ class Extract(DBApp):
                             or 25832)
 
     def recreate_db(self):
-        self.set_pg_path()
         exists = self.check_if_database_exists(self.destination_db)
         if exists:
             self.logger.info(f'Truncate Database {self.destination_db}')
@@ -103,8 +102,8 @@ class Extract(DBApp):
             self.logger.info(f'Create Database {self.destination_db}')
             self.create_target_db(self.login)
             self.logger.info(f'Create Database {self.destination_db}')
-        self.create_meta()
         self.create_extensions()
+        self.create_meta()
         self.create_foreign_server()
         self.create_serverside_folder()
 
@@ -187,7 +186,7 @@ class Extract(DBApp):
         );
         '''
         self.logger.info('Adding extensions')
-        with Connection(login=self.foreign_login) as conn:
+        with Connection(login=self.login) as conn:
             self.run_query(sql, conn=conn)
 
     def final_stuff(self):
