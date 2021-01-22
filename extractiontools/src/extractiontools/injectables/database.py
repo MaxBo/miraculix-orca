@@ -32,16 +32,6 @@ def database() -> str:
     return ''
 
 
-@meta(group='(1) Project')
-@orca.injectable()
-def bbox_dict() -> Dict[str, float]:
-    """The Bounding-Box of the Project"""
-    return {'left': 9.0,
-            'right': 9.1,
-            'bottom': 54.5,
-            'top': 54.6}
-
-
 @meta(group='Areas', order=1)
 @orca.injectable()
 def project_area() -> ogr.Geometry:
