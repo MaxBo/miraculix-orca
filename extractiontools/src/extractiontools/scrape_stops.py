@@ -2,6 +2,7 @@
 # coding:utf-8
 import time
 from argparse import ArgumentParser
+import numpy as np
 
 from extractiontools.ausschnitt import Extract, Connection
 from extractiontools.utils.bahn_query import BahnQuery
@@ -56,9 +57,7 @@ class ScrapeStops(Extract):
     def scrape_haltestellen(self):
         """Lies Haltestellen und füge sie in DB ein bzw. aktualisiere sie"""
 
-        point_distance = 14000
-        search_radius = 10000
-        points_with_too_many_stops = []
+        # re-create table haltestellen
 
         sql = f'''
         CREATE TABLE IF NOT EXISTS {self.schema}.haltestellen (
@@ -66,7 +65,7 @@ class ScrapeStops(Extract):
         "H_ID" INTEGER PRIMARY KEY,
         kreis TEXT,
         found BOOLEAN DEFAULT false NOT NULL,
-        geom public.geometry,
+        geom public.geometry(POINT, {self.target_srid}),
         in_area BOOLEAN DEFAULT false
         );
         CREATE INDEX IF NOT EXISTS idx_haltestellen_geom
@@ -74,13 +73,18 @@ class ScrapeStops(Extract):
         '''
         self.run_query(sql)
 
+        # create hexagon points in the boundary
+        search_radius = 10000
+
         sql = f'''
         SELECT
         st_x(b.point) x, st_y(b.point) y
         FROM (
           SELECT st_transform(st_centroid(a.geom),4326) point
           FROM (
-            SELECT (ST_HexagonGrid({point_distance}, ST_Transform(geom, 3857))).*
+            SELECT (
+              ST_HexagonGrid({search_radius},
+              ST_Transform(geom, {self.target_srid}))).*
             FROM meta.boundary
             WHERE name=%(boundary_name)s
           ) a
@@ -94,65 +98,77 @@ class ScrapeStops(Extract):
         db_query = BahnQuery(timeout=0.5)
         temp_table = 'temp_stations'
 
+        # search around all hexagon points
         for point in points:
             rowcount = self.get_stops_at_point(
                 point, search_radius, db_query, cursor, temp_table)
+            # if there are more than 1000 stops, not all have been found
             if rowcount >= 1000:
-                self.logger.info(
-                    f'found more than 1000 stops in {search_radius} m around {point}')
-                points_with_too_many_stops.append(point)
+                # so search with a smaller search radius
+                self.search_more_stops(
+                    point, search_radius, temp_table, db_query)
 
-        rel_step = 1
-        for point in points_with_too_many_stops:
-            x, y = point
-            too_many_stops_found = True
-            while too_many_stops_found:
-                too_many_stops_found = False
-                rel_step /= 2
-                new_point_distance = point_distance * rel_step
-                new_search_radius = search_radius * rel_step
-                self.logger.info(
-                    f'reduce search_radius to {search_radius} m')
-                self.logger.info(
-                    f'search more stops {new_search_radius} m around {point}')
-                sql = f'''
+        sql = f'DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";'
+        self.run_query(sql, verbose=False)
+
+    def search_more_stops(self,
+                          point: Tuple[float, float],
+                          search_radius: float,
+                          temp_table: str,
+                          db_query: str,
+                          ):
+        x, y = point
+
+        new_search_radius = search_radius / 2
+        self.logger.info(
+            f'reduce search_radius to {new_search_radius} m')
+        self.logger.info(
+            f'search more stops {new_search_radius} m around {point}')
+        sql = f'''
                 SELECT
                 st_x(b.point) x, st_y(b.point) y
                 FROM (
                   SELECT st_transform(st_centroid(a.geom),4326) point
                   FROM (
                     SELECT (ST_HexagonGrid(
-                              {new_point_distance},
-                              st_buffer(
+                              {new_search_radius},
+                              st_intersection(
+                               st_buffer(
                                 ST_Transform(
                                   st_setsrid(
                                     st_makepoint({x}, {y}),
                                     4326),
-                                  3857),
-                                {search_radius})
+                                  {self.target_srid}),
+                                {search_radius}),
+                               geom)
                               )
                             ).*
+            FROM meta.boundary
+            WHERE name=%(boundary_name)s
                   ) a
-                ) b
-                '''
-                self.logger.info(sql)
-                cursor = self.conn.cursor()
-                cursor.execute(sql)
-                new_points = cursor.fetchall()
+                ) b;
+            '''
+        self.logger.info(sql)
+        cursor = self.conn.cursor()
+        cursor.execute(sql, {'boundary_name': self.boundary_name, })
+        new_points = cursor.fetchall()
 
-                for new_point in new_points:
-                    rowcount = self.get_stops_at_point(new_point,
-                                                       new_search_radius,
-                                                       db_query,
-                                                       cursor,
-                                                       temp_table)
-                    if rowcount >= 1000:
-                        self.logger.info(
-                            f'found more than {rowcount} stops in {new_search_radius} m around {new_point}')
-                        too_many_stops_found = True
-
-        sql = f'DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";'
-        self.run_query(sql, verbose=False)
+        for new_point in new_points:
+            #  search with the smaller radius
+            n_stops = self.get_stops_at_point(new_point,
+                                              new_search_radius,
+                                              db_query,
+                                              cursor,
+                                              temp_table)
+            if n_stops >= 1000:
+                #  if there are still more than 1000 stops,
+                #  reduce search radius further
+                self.logger.info(
+                    f'found {n_stops} stops in {new_search_radius} m around {new_point}')
+                self.search_more_stops(new_point,
+                                       new_search_radius,
+                                       temp_table,
+                                       db_query)
 
     def get_stops_at_point(self,
                            point: Tuple[float, float],
@@ -161,15 +177,16 @@ class ScrapeStops(Extract):
                            cursor: NamedTupleCursor,
                            temp_table: str) -> int:
         x, y = point
-        self.logger.debug(f'search at {x}, {y}')
 
         time.sleep(0.5)
 
-        self.logger.info(f'Querying stations at {x}, {y}')
+        self.logger.info(
+            f'search stations {search_radius} m around {x}, {y}')
 
         stops = db_query.stops_near((x, y), max_distance=search_radius)
         if not stops:
             return 0
+        self.logger.info(f'found {len(stops)} stops')
         sql = f'''
             DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";
             CREATE TABLE IF NOT EXISTS "{self.schema}"."{temp_table}" (
