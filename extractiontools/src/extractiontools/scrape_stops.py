@@ -124,7 +124,7 @@ class ScrapeStops(Extract):
                                     st_makepoint({x}, {y}),
                                     4326),
                                   3857),
-                                search_radius)
+                                {search_radius})
                               )
                             ).*
                   ) a
