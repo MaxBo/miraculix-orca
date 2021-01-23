@@ -88,13 +88,14 @@ class ScrapeStops(Extract):
         '''
         self.logger.info(sql)
         cursor = self.conn.cursor()
-        cursor.execute(sql, {'boundary_name': self.boundary_name,})
+        cursor.execute(sql, {'boundary_name': self.boundary_name, })
         points = cursor.fetchall()
 
         db_query = BahnQuery(timeout=0.5)
 
         for point in points:
-            rowcount = self.get_stops_at_point(point, search_radius, db_query, cursor)
+            rowcount = self.get_stops_at_point(
+                point, search_radius, db_query, cursor)
             if rowcount >= 1000:
                 points_with_too_many_stops.append(points)
 
@@ -108,7 +109,7 @@ class ScrapeStops(Extract):
                 step = search_radius * rel_step
                 for dx in range(-search_radius, search_radius, step):
                     for dy in range(-search_radius, search_radius, step):
-                        new_point = (x+dx, y+dy)
+                        new_point = (x + dx, y + dy)
                         rowcount = self.get_stops_at_point(new_point,
                                                            search_radius,
                                                            db_query,
@@ -120,7 +121,7 @@ class ScrapeStops(Extract):
         self.run_query(sql, verbose=False)
 
     def get_stops_at_point(self,
-                           point: Tuple(float, float),
+                           point: Tuple[float, float],
                            search_radius: float,
                            db_query: str,
                            cursor: NamedTupleCursor) -> int:
@@ -166,7 +167,7 @@ class ScrapeStops(Extract):
             WHERE st_disjoint(a.geom, st_transform(b.source_geom, {self.target_srid}))
             AND b.name=%(boundary_name)s;
             '''
-        cursor.execute(sql, {'boundary_name': self.boundary_name,})
+        cursor.execute(sql, {'boundary_name': self.boundary_name, })
 
         sql = f"""
             INSERT INTO "{self.schema}".haltestellen
