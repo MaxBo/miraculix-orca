@@ -17,7 +17,7 @@ class BuildNetworkWalkCycle(BuildNetwork):
         """
 
         sql = """
-CREATE MATERIALIZED VIEW {network}.roads AS
+CREATE MATERIALIZED VIEW "{network}".roads AS
 SELECT
 id, bool_or(a.foot) AS foot, bool_or(a.bicycle) AS bicycle
 FROM
@@ -26,16 +26,16 @@ w.id,
 (lt.foot OR COALESCE(at.oeffne_walk, false)) AND NOT COALESCE(at.sperre_walk, false) AS foot,
 (lt.bicycle OR COALESCE(at.oeffne_bike, false)) AND NOT COALESCE(at.sperre_bike, false) AS bicycle
 FROM
-{network}.streets s,
+"{network}".streets s,
 classifications.linktypes lt,
-osm.ways AS w
+"{osm}".ways AS w
 LEFT JOIN classifications.access_walk_cycle AS at ON w.tags @> at.tags
 WHERE s.id = w.id
 AND s.linktype_id = lt.id
 ) a
 GROUP BY a.id
 HAVING bool_or(a.foot) or bool_or(a.bicycle);
-""".format(network=self.network)
+""".format(network=self.network, osm=self.schema)
         self.run_query(sql)
 
     def create_links(self):
@@ -43,8 +43,8 @@ HAVING bool_or(a.foot) or bool_or(a.bicycle);
         create links
         """
         sql = """
-DROP TABLE IF EXISTS {network}.links;
-CREATE TABLE {network}.links
+DROP TABLE IF EXISTS "{network}".links;
+CREATE TABLE "{network}".links
 (
   fromnode bigint,
   tonode bigint,
@@ -80,9 +80,9 @@ WITH (
 
         """
         sql = """
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET oneway = TRUE
-FROM osm.ways w
+FROM "{osm}".ways w
 WHERE
 (  w.tags -> 'oneway' = 'motor_vehicle' OR
   w.tags -> 'oneway' = 'true' OR
@@ -92,36 +92,36 @@ WHERE
 AND w.id = l.wayid
 ;
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET oneway = FALSE
-FROM osm.ways w
+FROM "{osm}".ways w
 WHERE
   w.tags -> 'oneway' = 'no'
 AND w.id = l.wayid
 ;
 
 -- drehe links mit oneway = -1 und setze oneway auf True
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET oneway = TRUE,
     fromnode = tonode,
     tonode = fromnode,
     geom = st_reverse(geom)
-FROM osm.ways w
+FROM "{osm}".ways w
 WHERE
   w.tags -> 'oneway' = '-1'
 AND w.id = l.wayid
 ;
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET oneway = FALSE
-FROM osm.ways w,
+FROM "{osm}".ways w,
 classifications.cycling_attributes ca
 WHERE ca.opposite = true
 AND l.wayid = w.id
 AND w.tags @> ca.tags
 ;
 
-        """.format(network=self.network)
+        """.format(network=self.network, osm=self.schema)
         self.run_query(sql)
 
     def update_speed(self):
@@ -129,7 +129,7 @@ AND w.tags @> ca.tags
         """
         sql = """
 
-CREATE OR REPLACE FUNCTION {network}.calc_v_rad (slope double precision)
+CREATE OR REPLACE FUNCTION "{network}".calc_v_rad (slope double precision)
 RETURNS double precision
 ---berechne Geschwindigkeit in Abhängigkeit von Hin und Rückrichtung, vRad ist gedeckelt auf 30 km/h
 AS $$
@@ -145,7 +145,7 @@ else:
 return v
 $$ LANGUAGE plpython3u;
 
-CREATE OR REPLACE FUNCTION {network}.calc_v_fuss (slope double precision)
+CREATE OR REPLACE FUNCTION "{network}".calc_v_fuss (slope double precision)
 RETURNS double precision
 ---berechne Geschwindigkeit in Abhängigkeit von Hin und Rückrichtung, vFuss ist gedeckelt auf 7 km/h
 ---bei Gefälle steigt die Geschwindigkeit zunächst bis auf 7 km/h und nimmt dann aber wieder ab bis auf 3.5 km/h, da man berab auch nicht so schnell gehen kann
@@ -164,16 +164,16 @@ $$ LANGUAGE plpython3u;
         self.run_query(sql)
 
         sql = """
-DROP AGGREGATE IF EXISTS {network}.mul(double precision) CASCADE;
-CREATE AGGREGATE {network}.mul(double precision)
+DROP AGGREGATE IF EXISTS "{network}".mul(double precision) CASCADE;
+CREATE AGGREGATE "{network}".mul(double precision)
 ( SFUNC = float8mul, STYPE=double precision);
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET
-v_foot_hin = {network}.calc_v_fuss(l.slope),
-v_foot_rueck = {network}.calc_v_fuss(-l.slope),
-v_bicycle_hin = {network}.calc_v_rad(l.slope) * bf.factor,
-v_bicycle_rueck = {network}.calc_v_rad(-l.slope) * bf.factor
+v_foot_hin = "{network}".calc_v_fuss(l.slope),
+v_foot_rueck = "{network}".calc_v_fuss(-l.slope),
+v_bicycle_hin = "{network}".calc_v_rad(l.slope) * bf.factor,
+v_bicycle_rueck = "{network}".calc_v_rad(-l.slope) * bf.factor
 FROM
 (
 SELECT
@@ -182,15 +182,15 @@ l.segment,
 lt.surroundingfactor * COALESCE(ls.factor, 1) AS factor
 FROM
 classifications.linktypes lt,
-{network}.links l LEFT JOIN
+"{network}".links l LEFT JOIN
 (SELECT
-wayid, segment, {network}.mul(factor) AS factor
+wayid, segment, "{network}".mul(factor) AS factor
 FROM (
 SELECT
 l.wayid, l.segment, ca.factor
 FROM
-osm.ways w,
-{network}.links l,
+"{osm}".ways w,
+"{network}".links l,
 classifications.cycling_attributes ca
 WHERE l.wayid = w.id
 AND w.tags @> ca.tags
@@ -200,7 +200,7 @@ GROUP BY wayid, segment
 WHERE l.linktype = lt.id) bf
 WHERE bf.wayid = l.wayid AND bf.segment = l.segment
 ;
-        """.format(network=self.network)
+        """.format(network=self.network, osm=self.schema)
         self.run_query(sql)
 
     def update_time(self):
@@ -208,7 +208,7 @@ WHERE bf.wayid = l.wayid AND bf.segment = l.segment
 
         """
         sql = """
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET
   t_foot_hin = st_length(l.geom) / l.v_foot_hin * 3.6 / 60,
   t_foot_rueck = st_length(l.geom) / l.v_foot_rueck * 3.6 / 60,
@@ -232,14 +232,14 @@ FROM
     substring(w.tags -> 'duration', '[-+]?\d*\.\d+|\d+')::double precision AS duration,
     row_number() OVER (PARTITION BY l.wayid ORDER BY st_length(l.geom) DESC) AS rn
 FROM
- {network}.links l,
+ "{network}".links l,
  classifications.linktypes lt,
- osm.ways w
+ "{osm}".ways w
 WHERE lt.road_category = 'D'
 AND w.tags ? 'duration'
 AND l.wayid = w.id AND l.linktype = lt.id) f
 )
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET
   t_foot_hin = g.duration,
   t_foot_rueck = g.duration,
@@ -248,7 +248,7 @@ SET
 FROM
  g
 WHERE l.wayid = g.wayid AND l.segment = g.segment;
-        """.format(network=self.network)
+        """.format(network=self.network, osm=self.schema)
         self.run_query(sql)
 
     def update_lanes(self):
@@ -260,7 +260,7 @@ WHERE l.wayid = g.wayid AND l.segment = g.segment;
         Create Barriers
         """
         sql = """
-CREATE OR REPLACE VIEW {network}.barriers_foot AS
+CREATE OR REPLACE VIEW "{network}".barriers_foot AS
  SELECT b.id,
     b.geom::geometry(POINT, {srid}) AS geom,
     COALESCE(b.closed, false) AS explicitly_closed,
@@ -272,8 +272,8 @@ CREATE OR REPLACE VIEW {network}.barriers_foot AS
             bool_or(a.sperre_walk) AS closed,
             bool_or(a.oeffne_walk) AS opened,
             n.geom
-           FROM {network}.link_points lp,
-            osm.nodes n
+           FROM "{network}".link_points lp,
+            "{osm}".nodes n
              LEFT JOIN classifications.access_walk_cycle a ON n.tags @> a.tags
           WHERE n.id = lp.nodeid
           AND n.tags ? 'barrier'::text
@@ -282,7 +282,7 @@ CREATE OR REPLACE VIEW {network}.barriers_foot AS
          HAVING bool_or(a.sperre_walk) OR (bool_or(a.oeffne_walk) IS NULL)
          )b
 ;
-CREATE OR REPLACE VIEW {network}.barriers_cycle AS
+CREATE OR REPLACE VIEW "{network}".barriers_cycle AS
  SELECT b.id,
     b.geom::geometry(POINT, {srid}) AS geom,
     COALESCE(b.closed, false) AS explicitly_closed,
@@ -294,8 +294,8 @@ CREATE OR REPLACE VIEW {network}.barriers_cycle AS
             bool_or(a.sperre_bike) AS closed,
             bool_or(a.oeffne_bike) AS opened,
             n.geom
-           FROM {network}.link_points lp,
-            osm.nodes n
+           FROM "{network}".link_points lp,
+            "{osm}".nodes n
              LEFT JOIN classifications.access_walk_cycle a ON n.tags @> a.tags
           WHERE n.id = lp.nodeid
           AND n.tags ? 'barrier'::text
@@ -305,7 +305,7 @@ CREATE OR REPLACE VIEW {network}.barriers_cycle AS
          ) b
 ;
 
-CREATE OR REPLACE VIEW {network}.line_barriers_foot AS
+CREATE OR REPLACE VIEW "{network}".line_barriers_foot AS
  SELECT b.id,
     b.geom::geometry(LINESTRING, {srid}) AS geom,
     COALESCE(b.closed, false) AS explicitly_closed,
@@ -317,9 +317,9 @@ CREATE OR REPLACE VIEW {network}.line_barriers_foot AS
             bool_or(a.sperre_walk) AS closed,
             bool_or(a.oeffne_walk) AS opened,
             w.linestring AS geom
-           FROM {network}.link_points lp,
-            osm.way_nodes wn,
-            osm.ways w
+           FROM "{network}".link_points lp,
+            "{osm}".way_nodes wn,
+            "{osm}".ways w
              LEFT JOIN classifications.access_walk_cycle a ON w.tags @> a.tags
           WHERE w.id = wn.way_id AND wn.node_id = lp.nodeid
           AND w.tags ? 'barrier'::text
@@ -327,7 +327,7 @@ CREATE OR REPLACE VIEW {network}.line_barriers_foot AS
          HAVING bool_or(a.sperre_walk) OR (bool_or(a.oeffne_walk) IS NULL)
          )b
 ;
-CREATE OR REPLACE VIEW {network}.line_barriers_cycle AS
+CREATE OR REPLACE VIEW "{network}".line_barriers_cycle AS
  SELECT b.id,
     b.geom::geometry(LINESTRING, {srid}) AS geom,
     COALESCE(b.closed, false) AS explicitly_closed,
@@ -339,9 +339,9 @@ CREATE OR REPLACE VIEW {network}.line_barriers_cycle AS
             bool_or(a.sperre_bike) AS closed,
             bool_or(a.oeffne_bike) AS opened,
             w.linestring AS geom
-           FROM {network}.link_points lp,
-            osm.way_nodes wn,
-            osm.ways w
+           FROM "{network}".link_points lp,
+            "{osm}".way_nodes wn,
+            "{osm}".ways w
              LEFT JOIN classifications.access_walk_cycle a ON w.tags @> a.tags
           WHERE w.id = wn.way_id AND wn.node_id = lp.nodeid
           AND w.tags ? 'barrier'::text
@@ -350,7 +350,7 @@ CREATE OR REPLACE VIEW {network}.line_barriers_cycle AS
          ) b
 ;
 
-        """.format(network=self.network, srid=self.srid)
+        """.format(network=self.network, srid=self.srid, osm=self.schema)
         self.run_query(sql)
 
     def update_egde_table(self):
@@ -366,8 +366,8 @@ CREATE OR REPLACE VIEW {network}.line_barriers_cycle AS
 
         sql = """
 
-TRUNCATE {network}.edge_table;
-INSERT INTO {network}.edge_table (id, fromnode, tonode, geom,
+TRUNCATE "{network}".edge_table;
+INSERT INTO "{network}".edge_table (id, fromnode, tonode, geom,
 cost, reverse_cost)
 SELECT
   row_number() OVER (ORDER BY fromnode, tonode)::integer AS id,
@@ -376,7 +376,7 @@ SELECT
   l.geom,
   {cost} AS cost,
   {reverse_cost} AS reverse_cost
-FROM {network}.links l;
+FROM "{network}".links l;
         """.format(network=self.network, cost=cost, reverse_cost=reverse_cost)
         self.run_query(sql)
 
@@ -385,15 +385,15 @@ FROM {network}.links l;
         """
         sql = """
 -- erstelle View für die einzelnen Streckentypen
-CREATE OR REPLACE VIEW {network}.walk_cycle_network AS
+CREATE OR REPLACE VIEW "{network}".walk_cycle_network AS
 SELECT l.*
 FROM
-  {network}.links_reached_without_planned l;
+  "{network}".links_reached_without_planned l;
 
-CREATE OR REPLACE VIEW {network}.walk_cycle_network_only_by_planned AS
+CREATE OR REPLACE VIEW "{network}".walk_cycle_network_only_by_planned AS
 SELECT l.*
 FROM
-  {network}.links_reached_only_by_planned l;
+  "{network}".links_reached_only_by_planned l;
 """.format(network=self.network)
         self.run_query(sql)
 
