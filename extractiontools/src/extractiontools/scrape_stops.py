@@ -58,7 +58,7 @@ class ScrapeStops(Extract):
 
         point_distance = 14000
         search_radius = 10000
-        found_thousand = []
+        points_with_too_many_stops = []
 
         sql = f'''
         CREATE TABLE IF NOT EXISTS {self.schema}.haltestellen (
@@ -96,15 +96,15 @@ class ScrapeStops(Extract):
         for point in points:
             rowcount = self.get_stops_at_point(point, search_radius, db_query, cursor)
             if rowcount >= 1000:
-                found_thousand.append(points)
+                points_with_too_many_stops.append(points)
 
         rel_step = 1
-        for point in found_thousand:
+        for point in points_with_too_many_stops:
             x, y = point
             too_many_stops_found = True
             while too_many_stops_found:
                 too_many_stops_found = False
-                rel_step *= 0.5
+                rel_step /= 2
                 step = search_radius * rel_step
                 for dx in range(-search_radius, search_radius, step):
                     for dy in range(-search_radius, search_radius, step):
