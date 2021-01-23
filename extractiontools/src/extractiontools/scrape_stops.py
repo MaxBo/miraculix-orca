@@ -107,17 +107,40 @@ class ScrapeStops(Extract):
             while too_many_stops_found:
                 too_many_stops_found = False
                 rel_step /= 2
-                step = search_radius * rel_step
-                for dx in range(-search_radius, search_radius, step):
-                    for dy in range(-search_radius, search_radius, step):
-                        new_point = (x + dx, y + dy)
-                        rowcount = self.get_stops_at_point(new_point,
-                                                           search_radius,
-                                                           db_query,
-                                                           cursor,
-                                                           temp_table)
-                        if rowcount >= 1000:
-                            too_many_stops_found = True
+                new_point_distance = point_distance * rel_step
+                new_search_radius = search_radius * rel_step
+                sql = f'''
+                SELECT
+                st_x(b.point) x, st_y(b.point) y
+                FROM (
+                  SELECT st_transform(st_centroid(a.geom),4326) point
+                  FROM (
+                    SELECT (ST_HexagonGrid({new_point_distance},
+                              st_buffer(
+                                ST_Transform(
+                                  st_setsrid(
+                                    st_makepoint({x}, {y}),
+                                    4326),
+                                  3857)
+                                ),
+                              search_radius)
+                            ).*
+                  ) a
+                ) b
+                '''
+                self.logger.info(sql)
+                cursor = self.conn.cursor()
+                cursor.execute(sql)
+                new_points = cursor.fetchall()
+
+                for new_point in new_points:
+                    rowcount = self.get_stops_at_point(new_point,
+                                                       new_search_radius,
+                                                       db_query,
+                                                       cursor,
+                                                       temp_table)
+                    if rowcount >= 1000:
+                        too_many_stops_found = True
 
         sql = f'DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";'
         self.run_query(sql, verbose=False)
