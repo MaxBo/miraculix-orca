@@ -210,7 +210,7 @@ class ScrapeStops(Extract):
 
         self.logger.info(f'inserted or updated {cursor.rowcount} stops')
         self.conn.commit()
-        return cursor.rowcount
+        return len(stops)
 
 
 if __name__ == '__main__':
