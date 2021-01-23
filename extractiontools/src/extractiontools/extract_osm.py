@@ -212,8 +212,8 @@ class ExtractOSM(Extract):
         sql = """
         SELECT
           w.id, w.version, w.user_id, w.tstamp, w.changeset_id, w.tags, w.nodes,
-          st_transform(st_setsrid(Box2D(w.linestring), {source_srid}), {target_srid})::geometry(POLYGON, {target_srid}) AS bbox,
-          st_transform(w.linestring, {target_srid})::geometry('LINESTRING', {target_srid}) AS linestring
+          st_transform(st_setsrid(Box2D(w.linestring), {source_srid}), {target_srid})::geometry(GEOMETRY, {target_srid}) AS bbox,
+          st_transform(w.linestring, {target_srid})::geometry(LINESTRING, {target_srid}) AS linestring
         INTO "{schema}".ways
         FROM "{temp_meta}".osm_ways w
         WHERE w.session_id='{session_id}';

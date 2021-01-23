@@ -45,7 +45,7 @@ DROP TABLE IF EXISTS "{schema}".polygon_with_holes CASCADE;
 CREATE TABLE "{schema}".polygon_with_holes (
 relation_id bigint PRIMARY KEY,
 tags hstore,
-outerring_linestring geometry(LINESTRING, {self.target_srid}),
+outerring_linestring geometry(MULTILINESTRING, {self.target_srid}),
 outerring_array bigint[],
 innerring_linestring geometry[],
 polygon geometry(MULTIPOLYGON, {self.target_srid}),
@@ -65,7 +65,7 @@ outerring_linestring = a.geom
 FROM (
 SELECT r.relation_id,
 array_agg(rm.member_id) as arr,
-ST_LineMerge(ST_Collect(w.linestring)) AS geom
+st_multi(ST_LineMerge(ST_Collect(w.linestring))) AS geom
   FROM
   "{schema}".polygon_with_holes r,
   "{schema}".relation_members rm,
@@ -166,7 +166,7 @@ WHERE poly_type= 'valid innerring'
 and GeometryType(r.outerring_linestring) ='LINESTRING';
 """
 
-        sql_create_multipolygons = """
+        sql_create_multipolygons = f"""
 -- MULTIPOLYGONS
 DROP TABLE IF EXISTS "{schema}".multi_polygons;
 CREATE TABLE "{schema}".multi_polygons

@@ -45,7 +45,7 @@ class BuildNetwork(DBApp):
             # preparation
             self.conn = conn
             self.get_srid()
-            #self.set_session_authorization(self.conn)
+            # self.set_session_authorization(self.conn)
             self.create_views()
 
             # select roads and junctions
@@ -129,7 +129,7 @@ CREATE SCHEMA {network};
 
         sql = """
 -- selektiere alle Wege und Straßen, die in waytype2linktype definiert sind
-CREATE MATERIALIZED VIEW {network}.streets AS
+CREATE MATERIALIZED VIEW "{network}".streets AS
 SELECT
   w.id,
   min(wtl.linktype_id) linktype_id,
@@ -145,8 +145,8 @@ OR (w.tags @> wtc.tag1 AND w.tags @> wtc.tag2))
 AND wtl.linktype_id=lt.id
 AND wtc.linktype_id=lt.id
 GROUP BY w.id;
-CREATE INDEX streets_idx ON {network}.streets USING btree(id);
-ANALYZE {network}.streets;
+CREATE INDEX streets_idx ON "{network}".streets USING btree(id);
+ANALYZE "{network}".streets;
 """.format(network=self.network)
         self.run_query(sql)
 
@@ -159,7 +159,7 @@ ANALYZE {network}.streets;
         sql = """
 
 -- Ways, die enthalten sind in Relationen vom type 'route', bei denen das tag 'motorcar'='yes' gesetzt ist
-CREATE OR REPLACE VIEW {network}.carferry AS
+CREATE OR REPLACE VIEW "{network}".carferry AS
 SELECT rm.member_id AS id
 FROM
   osm.relation_members rm,
@@ -175,9 +175,9 @@ AND (rel.tags -> 'type') = 'route'
 
 -- für Pkw erst mal geschlossene Straßen (bekommen closed=true). Dies sind entweder Fähren (Annahme: Personenfähren - s.category='D')
 -- oder Straßen bei denen einer der access-tags die Straße für Pkws sperrt (bool_or(at.sperre_pkw) GROUP BY s.id)
-CREATE OR REPLACE VIEW {network}.closed_roads AS
+CREATE OR REPLACE VIEW "{network}".closed_roads AS
 SELECT DISTINCT s.id
-FROM {network}.streets s,
+FROM "{network}".streets s,
      osm.ways w,
      classifications.access_types at
      WHERE s.id = w.id
@@ -187,9 +187,9 @@ FROM {network}.streets s,
 
 -- für Pkw im- oder explizit geöffnete Straßen (bekommen closed=true):
 -- oder Straßen bei denen einer der access-tags die Straße für Pkws explizit öffnet (bool_or(at.oeffne_pkw) GROUP BY s.id)
-CREATE OR REPLACE VIEW {network}.opened_roads AS
+CREATE OR REPLACE VIEW "{network}".opened_roads AS
 SELECT DISTINCT s.id
-FROM {network}.streets s,
+FROM "{network}".streets s,
      osm.ways w,
      classifications.access_types at
      WHERE (at.oeffne_pkw = TRUE)
@@ -201,12 +201,12 @@ FROM {network}.streets s,
 -- selektiere Straßen der Kategorie A-D (Autobahn bis Fähren ohne Fusswege),
 -- Dies sind entweder Autofähren oder Autoreisezüge (carferry.carferry = true)
 -- Oder Straßen, die für Pkw nicht geschlossen sind, oder bei denen bei closed k.A. da ist oder die explizit für Pkw geöffnet wurden
-CREATE MATERIALIZED VIEW {network}.roads AS
+CREATE MATERIALIZED VIEW "{network}".roads AS
 SELECT s.id, s.linktype_id, s.category
-FROM {network}.streets s
-LEFT JOIN {network}.carferry cf ON (s.id=cf.id)
-LEFT JOIN {network}.closed_roads clr ON (s.id=clr.id)
-LEFT JOIN {network}.opened_roads opr ON (s.id=opr.id)
+FROM "{network}".streets s
+LEFT JOIN "{network}".carferry cf ON (s.id=cf.id)
+LEFT JOIN "{network}".closed_roads clr ON (s.id=clr.id)
+LEFT JOIN "{network}".opened_roads opr ON (s.id=opr.id)
 WHERE
 -- Straßen der Kategorie A-D
 s.category <= 'D' AND
@@ -223,19 +223,19 @@ OR (opr.id IS NOT NULL OR cf.id IS NOT NULL));
         """
         self.logger.info(f'Create Junctions')
         sql = """
-CREATE INDEX idx_roads_id ON {network}.roads USING btree(id);
-ANALYZE {network}.roads;
+CREATE INDEX idx_roads_id ON "{network}".roads USING btree(id);
+ANALYZE "{network}".roads;
 
 -- die wayids der roads
-CREATE MATERIALIZED VIEW {network}.wayids AS
-SELECT DISTINCT id AS wayid FROM {network}.roads;
-CREATE INDEX idx_wayids_wayid ON {network}.wayids USING btree(wayid);
+CREATE MATERIALIZED VIEW "{network}".wayids AS
+SELECT DISTINCT id AS wayid FROM "{network}".roads;
+CREATE INDEX idx_wayids_wayid ON "{network}".wayids USING btree(wayid);
 
 
 -- Selektiere die Knoten von Straßen (roadnodes),
 -- die Teil von mehr als einer Road sind
 -- (HAVING count(roadnodes.id) > 1) als junctions
-CREATE MATERIALIZED VIEW {network}.junctions AS
+CREATE MATERIALIZED VIEW "{network}".junctions AS
 SELECT
   row_number() OVER (ORDER BY a.nodeid)::integer AS id,
   a.nodeid,
@@ -244,19 +244,19 @@ SELECT
 FROM osm.nodes,
    ( SELECT roadnodes.nodeid, count(roadnodes.id) AS anzpunkte
      FROM ( SELECT wn.way_id AS id, wn.node_id AS nodeid
-            FROM osm.way_nodes wn, {network}.roads r
+            FROM osm.way_nodes wn, "{network}".roads r
             WHERE wn.way_id = r.id
           ) roadnodes
      GROUP BY roadnodes.nodeid
      HAVING count(roadnodes.id) > 1
    ) a
 WHERE a.nodeid = nodes.id;
-CReATE INDEX idx_junctions_id ON {network}.junctions USING btree(nodeid);
-CREATE INDEX idx_junctions_geom ON {network}.junctions USING gist(geom);
-ANALYZE {network}.junctions;
+CReATE INDEX idx_junctions_id ON "{network}".junctions USING btree(nodeid);
+CREATE INDEX idx_junctions_geom ON "{network}".junctions USING gist(geom);
+ANALYZE "{network}".junctions;
 
 -- Berechne Z-Koordinaten
-CREATE OR REPLACE VIEW {network}.junctions_z_interpolated AS
+CREATE OR REPLACE VIEW "{network}".junctions_z_interpolated AS
 WITH dx AS (SELECT generate_series(-1, 1) AS dx),
 dy AS (SELECT generate_series(-1, 1) AS dy),
 jr AS (
@@ -268,7 +268,7 @@ jr AS (
   ST_WorldToRasterCoordY(a.rast, j.pnt_wgs) AS rowy,
   st_height(a.rast) AS height,
   st_width(a.rast) AS width
-FROM {network}.junctions j,
+FROM "{network}".junctions j,
 landuse.aster a
 WHERE st_intersects(j.pnt_wgs, a.rast))
 
@@ -301,23 +301,23 @@ WHERE c.val IS NOT NULL
 GROUP BY c.nodeid;
 
 -- Berechne Z-Koordinaten der Junctions
-CREATE MATERIALIZED VIEW {network}.junctions_z AS
+CREATE MATERIALIZED VIEW "{network}".junctions_z AS
 SELECT
 a.nodeid,
 COALESCE(e.z, a.z) AS z
-FROM {network}.junctions_z_interpolated a
+FROM "{network}".junctions_z_interpolated a
 -- Falls Nodes eine Höhenangabe haben, nimm diese (nur Ziffern und .)
 LEFT JOIN
 (SELECT n.id,
 substring(tags -> 'ele' FROM '[-+]?\d*\.\d+|\d+')::double precision AS z
-FROM osm.nodes n, {network}.junctions AS p
+FROM osm.nodes n, "{network}".junctions AS p
 WHERE p.nodeid = n.id
 AND n.tags ? 'ele'
 AND n.tags <> ''::hstore) e
 ON a.nodeid = e.id
 ;
 
-CREATE INDEX pk_junctions_z ON {network}.junctions_z USING btree(nodeid);
+CREATE INDEX pk_junctions_z ON "{network}".junctions_z USING btree(nodeid);
 
 """
         self.run_query(sql.format(beta=-0.1,  # Gewichtungsfaktor weight = exp(beta * meter)
@@ -334,7 +334,7 @@ CREATE INDEX pk_junctions_z ON {network}.junctions_z USING btree(nodeid);
 -- in der äußeren Abfrage setze dann nur die Junctions auch wirklich auf 'isjunction'=1,
 -- die nicht am Anfang (wm.idx>0) oder am Ende (wm.idx < (wm.lastindex-1)) des Weges sind,
 -- da der Weg nur in der Mitte aufgespalten werden soll
-CREATE OR REPLACE VIEW {network}.way_marked_junctions AS
+CREATE OR REPLACE VIEW "{network}".way_marked_junctions AS
 SELECT
   wm.id,
   wm.idx,
@@ -347,26 +347,26 @@ FROM ( SELECT
           j.nodeid AS isjunction,
           count(*) OVER (PARTITION BY wn.way_id) AS lastindex
        FROM
-          osm.way_nodes wn LEFT JOIN {network}.junctions j ON wn.node_id = j.nodeid,
-          {network}.roads r
+          osm.way_nodes wn LEFT JOIN "{network}".junctions j ON wn.node_id = j.nodeid,
+          "{network}".roads r
        WHERE wn.way_id = r.id
      ) wm;
 
 -- erstelle einzelne Segmente aus den ways, in dem an nodes, die junctions sind, der Weg aufgespalten wird
 -- zähle dazu die Segmente eines Wegs (PARTITION BY id) durch, indem die Zahl der Junctions (sum(isjunction) bis zum aktuellen node (PRECEDING) aufsummiert wird
 -- dabei wird der Weg nach dem idx aufsteigend sortiert (ORDER BY idx)
-CREATE OR REPLACE VIEW {network}.ways2links AS
+CREATE OR REPLACE VIEW "{network}".ways2links AS
 SELECT
   id, idx, nodeid, isjunction,
   sum(isjunction) OVER (PARTITION BY id ORDER BY idx RANGE UNBOUNDED PRECEDING) AS segment
-FROM {network}.way_marked_junctions
+FROM "{network}".way_marked_junctions
 GROUP BY id, idx, nodeid, isjunction
 ORDER BY id, idx;
 
 
 -- erstelle Tabelle link_points
-DROP TABLE IF EXISTS {network}.link_points;
-CREATE TABLE {network}.link_points
+DROP TABLE IF EXISTS "{network}".link_points;
+CREATE TABLE "{network}".link_points
 (
   wayid bigint NOT NULL,
   segment integer NOT NULL,
@@ -376,18 +376,18 @@ CREATE TABLE {network}.link_points
 WITH (
   OIDS=FALSE
 );
-ALTER TABLE {network}.link_points ADD PRIMARY KEY (wayid, segment, idx);
-CREATE INDEX link_points_nodeid ON {network}.link_points (nodeid);
+ALTER TABLE "{network}".link_points ADD PRIMARY KEY (wayid, segment, idx);
+CREATE INDEX link_points_nodeid ON "{network}".link_points (nodeid);
 
 
 -- erstelle Spalten mit dem ersten und letzten Knoten
-CREATE MATERIALIZED VIEW {network}.link_from_to_node AS
+CREATE MATERIALIZED VIEW "{network}".link_from_to_node AS
 SELECT DISTINCT ON (wayid, segment)
   wayid,
   segment,
   first_value(nodeid) OVER (PARTITION BY wayid, segment ORDER BY idx) AS fromnode,
   last_value(nodeid) OVER (PARTITION BY wayid, segment ORDER BY idx) AS tonode
-FROM {network}.link_points
+FROM "{network}".link_points
 ORDER BY wayid, segment, idx DESC;
 
         """.format(network=self.network)
@@ -395,7 +395,7 @@ ORDER BY wayid, segment, idx DESC;
 
     def drop_temp_wayids(self):
         sql = '''
-DROP TABLE IF EXISTS {network}.temp_wayids;
+DROP TABLE IF EXISTS "{network}".temp_wayids;
         '''.format(network=self.network)
         self.run_query(sql)
 
@@ -405,21 +405,21 @@ DROP TABLE IF EXISTS {network}.temp_wayids;
         """
         sql = """
 -- fülle Tabelle link_points mit "Knoten" und lösche dazu vorher den Index
-ALTER TABLE {network}.link_points DROP CONSTRAINT link_points_pkey;
-DROP INDEX {network}.link_points_nodeid;
+ALTER TABLE "{network}".link_points DROP CONSTRAINT link_points_pkey;
+DROP INDEX "{network}".link_points_nodeid;
 
-TRUNCATE {network}.link_points;
-SELECT {network}.createlink_points(500000000,0);
-ALTER TABLE {network}.link_points ADD PRIMARY KEY (wayid, segment, idx);
-CREATE INDEX link_points_nodeid ON {network}.link_points USING btree(nodeid);
+TRUNCATE "{network}".link_points;
+SELECT "{network}".createlink_points(500000000,0);
+ALTER TABLE "{network}".link_points ADD PRIMARY KEY (wayid, segment, idx);
+CREATE INDEX link_points_nodeid ON "{network}".link_points USING btree(nodeid);
 """.format(network=self.network)
         self.run_query(sql)
         sql = """
 -- füge noch die endpoints ein
-SELECT {network}.insertendpoints(500000000,0);
+SELECT "{network}".insertendpoints(500000000,0);
 
 -- erstelle Tabelle mit Start und Endpunkten der links
-REFRESH MATERIALIZED VIEW {network}.link_from_to_node;
+REFRESH MATERIALIZED VIEW "{network}".link_from_to_node;
 
         """.format(network=self.network)
         self.run_query(sql)
@@ -430,8 +430,8 @@ REFRESH MATERIALIZED VIEW {network}.link_from_to_node;
         """
         self.logger.info(f'Create Links')
         sql = """
-DROP TABLE IF EXISTS {network}.links;
-CREATE TABLE {network}.links
+DROP TABLE IF EXISTS "{network}".links;
+CREATE TABLE "{network}".links
 (
   id SERIAL,
   fromnode bigint,
@@ -466,11 +466,11 @@ WITH (
         network = self.network
         limit = self.limit or 'NULL'
         sql = f"""
-TRUNCATE {network}.links;
-SELECT {network}.create_links({limit}, 0);
+TRUNCATE "{network}".links;
+SELECT "{network}".create_links({limit}, 0);
 
 -- lösche links ohne Geometrie
-DELETE FROM {network}.links WHERE st_NumPoints(geom) = 0;
+DELETE FROM "{network}".links WHERE st_NumPoints(geom) = 0;
         """
         self.run_query(sql)
 
@@ -478,11 +478,12 @@ DELETE FROM {network}.links WHERE st_NumPoints(geom) = 0;
         """
         Create functions to create link_points and links
         """
-        self.logger.debug(f'Create Functions to create link_points and links')
+        self.logger.debug(
+            f'Create Functions to create link_points and links')
         cur = self.conn.cursor()
         sql = '''
 
-CREATE OR REPLACE FUNCTION {network}.createlink_points(lim int, offs int)
+CREATE OR REPLACE FUNCTION "{network}".createlink_points(lim int, offs int)
   RETURNS integer AS
 $BODY$
 DECLARE
@@ -491,15 +492,15 @@ DECLARE
    toRow integer;
    maxRow integer;
 BEGIN
-SELECT max(wayid) INTO maxRow FROM {network}.wayids;
+SELECT max(wayid) INTO maxRow FROM "{network}".wayids;
 FOR fl IN
 (SELECT row_number() OVER (ORDER BY wayid) As rowid, wayid
-FROM {network}.wayids LIMIT $1 OFFSET $2)
+FROM "{network}".wayids LIMIT $1 OFFSET $2)
 LOOP
   IF mod(fl.rowid, {chunksize}) = 0 OR fl.wayid = maxRow THEN
     toRow := fl.wayid;
     RAISE NOTICE 'Erstelle link_points für way % to %', fromRow, toRow;
-    INSERT INTO {network}.link_points (wayid,segment,idx,nodeid)
+    INSERT INTO "{network}".link_points (wayid,segment,idx,nodeid)
     SELECT id,segment,idx,nodeid
     FROM
     (
@@ -526,8 +527,8 @@ LOOP
                j.nodeid AS isjunction,
                count(*) OVER (PARTITION BY wn.way_id) AS lastindex
              FROM osm.way_nodes wn
-             LEFT JOIN {network}.junctions j ON (wn.node_id = j.nodeid),
-             {network}.roads r
+             LEFT JOIN "{network}".junctions j ON (wn.node_id = j.nodeid),
+             "{network}".roads r
              WHERE wn.way_id = r.id AND r.id > fromRow AND r.id <= toRow
              ) wm
        ) way_marked_junctions
@@ -556,7 +557,7 @@ $BODY$
 -- Startpunkt des nächsten Segments ist auch letzter Punkt des vorhergenenden Segments eines ways
 -- erstmal in temporäre Tabelle schreiben
 
-CREATE OR REPLACE FUNCTION {network}.insertendpoints(lim int, offs int)
+CREATE OR REPLACE FUNCTION "{network}".insertendpoints(lim int, offs int)
   RETURNS integer AS
 $BODY$
 DECLARE
@@ -566,16 +567,16 @@ DECLARE
    maxRow integer;
 BEGIN
   SELECT max(wayid) INTO maxRow
-  FROM {network}.wayids LIMIT $1 OFFSET $2;
+  FROM "{network}".wayids LIMIT $1 OFFSET $2;
   FOR fl IN
   (SELECT row_number() OVER (ORDER BY wayid) As rowid, wayid
-   FROM {network}.wayids LIMIT $1 OFFSET $2)
+   FROM "{network}".wayids LIMIT $1 OFFSET $2)
 LOOP
 IF mod(fl.rowid,10000) = 0 OR fl.wayid = maxRow THEN
     toRow := fl.wayid;
     RAISE NOTICE 'Erstelle Endpunkte für way % bis %', fromRow, toRow;
 
-INSERT INTO {network}.link_points
+INSERT INTO "{network}".link_points
 SELECT a.wayid, a.segment, a.idx, a.nodeid
 FROM
 (SELECT
@@ -586,7 +587,7 @@ FROM
   max(idx) OVER(PARTITION BY wayid ) AS lastindex,
   (j.nodeid is not null) As junct
 FROM
-  {network}.link_points lp LEFT JOIN {network}.junctions j ON (lp.nodeid=j.nodeid)
+  "{network}".link_points lp LEFT JOIN "{network}".junctions j ON (lp.nodeid=j.nodeid)
   WHERE wayid > fromRow AND wayid <= toRow
 ) a
 WHERE
@@ -612,7 +613,7 @@ $BODY$
 -- und gruppiere dann die Knoten
 
 
-CREATE OR REPLACE FUNCTION {network}.create_links(lim int, offs int)
+CREATE OR REPLACE FUNCTION "{network}".create_links(lim int, offs int)
   RETURNS integer AS
 $BODY$
 DECLARE
@@ -621,9 +622,9 @@ BEGIN
   FOR fl IN
   (SELECT row_number() OVER (ORDER BY id desc)* {chunksize} AS todo,
           COALESCE(lag(id,1) OVER(ORDER BY id),-1) AS rowidfrom,
-          id AS rowidto FROM {network}.wayid_chunk LIMIT $1 OFFSET $2)
+          id AS rowidto FROM "{network}".wayid_chunk LIMIT $1 OFFSET $2)
   LOOP
-	INSERT INTO {network}.links (fromnode, tonode, wayid, segment, geom,
+	INSERT INTO "{network}".links (fromnode, tonode, wayid, segment, geom,
                                linkname, linkref)
     SELECT l.fromnode, l.tonode, l.wayid, l.segment, l.geom,
     w.tags -> 'name' AS linkname, w.tags -> 'ref' AS linkref
@@ -638,8 +639,8 @@ BEGIN
 		 n.geom AS geom,
 		 lp.idx idx
 	  FROM
-	    {network}.link_points lp,
-	    {network}.link_from_to_node AS ft,
+	    "{network}".link_points lp,
+	    "{network}".link_from_to_node AS ft,
 	    osm.nodes n
 	  WHERE
 	    lp.wayid = ft.wayid and lp.segment = ft.segment
@@ -669,28 +670,28 @@ COMMIT;
             'Update the Linktypes by spatial intersection with urban area')
         corine = self.corine[0]
         sql = """
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET linktype = s.linktype_id
-FROM {network}.streets s
+FROM "{network}".streets s
 WHERE l.wayid = s.id;
 
-CREATE INDEX idx_links_geom ON {network}.links USING gist (geom);
-ANALYZE {network}.links;
+CREATE INDEX idx_links_geom ON "{network}".links USING gist (geom);
+ANALYZE "{network}".links;
 
 WITH urban AS
 (SELECT c.geom
 FROM landuse.{corine} c
 WHERE c.code IN (SELECT code FROM classifications.corine_urban))
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET io = TRUE
 FROM urban
 WHERE st_intersects(urban.geom, l.geom);
 
 
-CREATE INDEX idx_links_linktype ON {network}.links USING btree (linktype, io);
+CREATE INDEX idx_links_linktype ON "{network}".links USING btree (linktype, io);
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET
   planned = TRUE,
   linktype = lt.linktype_id
@@ -700,7 +701,7 @@ AND w.tags ? 'proposed'
 AND w.tags @> lt.tag1
 AND w.tags @> lt.tag2;
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET
   construction = TRUE,
   linktype = lt.linktype_id
@@ -720,33 +721,33 @@ AND w.tags @> lt.tag2;
 
         sql = """
 -- erzeuge speed_zulaessig
-ALTER TABLE {network}.links
+ALTER TABLE "{network}".links
   ADD COLUMN speed_zulaessig INTEGER;
-ALTER TABLE {network}.links
+ALTER TABLE "{network}".links
   ALTER COLUMN speed_zulaessig SET DEFAULT 50;
 
 -- setze maxspeed aus tags
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET maxspeed = substring(w.tags -> 'maxspeed' FROM '[-+]?\d*\.\d+|\d+')::float,
     speed_zulaessig = substring(w.tags -> 'maxspeed' FROM '[-+]?\d*\.\d+|\d+')::float::integer
 FROM osm.ways w
 WHERE l.wayid=w.id and w.tags ? 'maxspeed';
 
 -- setze maxspeed auf 120 für BAB-Abschnitte mit Wechselanzeigen
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET maxspeed = 120,
     speed_zulaessig = 120
 FROM osm.ways w
 WHERE l.wayid=w.id and w.tags -> 'maxspeed' = 'signals';
 
 -- setze maxspeed auf 150 für BAB-Abschnitte ohne Geschwindigkeitsbegrenzung
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET maxspeed = 150,
     speed_zulaessig = 150
 FROM osm.ways w
 WHERE l.wayid=w.id and w.tags -> 'maxspeed' = 'none';
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET maxspeed = ld.v_kfz,
     speed_zulaessig = ld.v_kfz_zulaessig
 FROM classifications.link_defaults ld, classifications.linktypes lt
@@ -755,7 +756,7 @@ ld.linktype_number = lt.id AND
 ld.linktype_number = l.linktype AND ld.innerorts = l.io
 AND l.maxspeed IS NULL;
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET maxspeed = ld.v_kfz
 FROM classifications.link_defaults ld, classifications.linktypes lt
 WHERE
@@ -771,7 +772,7 @@ AND ld.v_kfz < l.maxspeed and lt.road_category >'A';
         """
         self.logger.debug('Update Oneway Streets')
         sql = """
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET oneway = TRUE
 FROM osm.ways w
 WHERE
@@ -783,7 +784,7 @@ WHERE
 AND w.id = l.wayid
 ;
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET oneway = FALSE
 FROM osm.ways w
 WHERE
@@ -792,7 +793,7 @@ AND w.id = l.wayid
 ;
 
 -- drehe links mit oneway = -1 und setze oneway auf True
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET oneway = TRUE,
     fromnode = tonode,
     tonode = fromnode,
@@ -812,7 +813,7 @@ AND w.id = l.wayid
         self.logger.debug('Update travel times for links')
 
         sql = """
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET
   t_kfz = CASE
     WHEN l.maxspeed = 0
@@ -821,7 +822,7 @@ SET
     END;
 
 -- Ferries
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET
   t_kfz = g.duration
 FROM
@@ -840,7 +841,7 @@ FROM
     substring(w.tags -> 'duration', '[-+]?\d*\.\d+|\d+')::double precision AS duration,
     row_number() OVER (PARTITION BY l.wayid ORDER BY st_length(l.geom) DESC) AS rn
 FROM
- {network}.links l,
+ "{network}".links l,
  classifications.linktypes lt,
  osm.ways w
 WHERE lt.road_category = 'D'
@@ -856,28 +857,28 @@ WHERE l.wayid = g.wayid AND l.segment = g.segment;
         """
         self.logger.debug('Update number of lanes')
         sql = """
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET lanes = 1
 WHERE l.oneway;
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET lanes = substring(w.tags->'lanes' FROM '[0-9]+')::integer
 FROM osm.ways w
 WHERE l.wayid=w.id AND w.tags ? 'lanes';
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET bridge_tunnel = 'b'
 FROM osm.ways w
 WHERE l.wayid=w.id AND w.tags ? 'bridge' AND w.tags->'bridge' <> 'no';
 ;
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET bridge_tunnel = 't'
 FROM osm.ways w
 WHERE l.wayid=w.id AND w.tags ? 'tunnel' AND w.tags->'tunnel' <> 'no';
 ;
 
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET linkname = linkref
 WHERE linkname IS NULL AND linkref IS NOT NULL;
         """.format(network=self.network)
@@ -888,15 +889,15 @@ WHERE linkname IS NULL AND linkref IS NOT NULL;
         """
         self.logger.debug('calculate slope of links')
         sql = """
-UPDATE {network}.links l
+UPDATE "{network}".links l
 SET slope = CASE
             WHEN st_length(l.geom)=0
             THEN 0
             ELSE (tn.z-fn.z) / st_length(l.geom)
             END
 FROM
-{network}.junctions_z fn,
-{network}.junctions_z tn
+"{network}".junctions_z fn,
+"{network}".junctions_z tn
 WHERE fn.nodeid = l.fromnode
 AND tn.nodeid = l.tonode
 AND bridge_tunnel = '';
@@ -908,16 +909,16 @@ AND bridge_tunnel = '';
         sql = """
 -- erzeuge Tabelle mit jeder 1.000sten wayid, um die links in Häppchen (chunks) zu erzeugen
 
-DROP TABLE IF EXISTS {network}.wayid_chunk;
-SELECT DISTINCT w.wayid AS id INTO {network}.wayid_chunk
+DROP TABLE IF EXISTS "{network}".wayid_chunk;
+SELECT DISTINCT w.wayid AS id INTO "{network}".wayid_chunk
 FROM
   (SELECT wayid, row_number() OVER(ORDER BY ws.wayid,ws.segment) rn
    FROM
-     (SELECT DISTINCT wayid,segment FROM {network}.link_points) ws
+     (SELECT DISTINCT wayid,segment FROM "{network}".link_points) ws
    ) w
 WHERE mod(w.rn, {chunksize}) = 0;
-INSERT INTO {network}.wayid_chunk SELECT max(wayid) AS id FROM {network}.link_points;
-ALTER TABLE {network}.wayid_chunk ADD PRIMARY KEY(id);
+INSERT INTO "{network}".wayid_chunk SELECT max(wayid) AS id FROM "{network}".link_points;
+ALTER TABLE "{network}".wayid_chunk ADD PRIMARY KEY(id);
 COMMIT;
 
         """.format(chunksize=self.chunksize, network=self.network)
@@ -929,7 +930,7 @@ COMMIT;
         """
         self.logger.debug('Create Barriers')
         sql = """
-CREATE OR REPLACE VIEW {network}.barriers_car AS
+CREATE OR REPLACE VIEW "{network}".barriers_car AS
  SELECT b.id,
     b.geom::geometry(POINT, {srid}) AS geom,
     COALESCE(b.closed, false) AS explicitly_closed,
@@ -941,7 +942,7 @@ CREATE OR REPLACE VIEW {network}.barriers_car AS
             bool_or(a.sperre_pkw) AS closed,
             bool_or(a.oeffne_pkw) AS opened,
             n.geom
-           FROM {network}.link_points lp,
+           FROM "{network}".link_points lp,
             osm.nodes n
              LEFT JOIN classifications.access_types a ON n.tags @> a.tags
           WHERE n.id = lp.nodeid
@@ -952,7 +953,7 @@ CREATE OR REPLACE VIEW {network}.barriers_car AS
          )b
 ;
 
-CREATE OR REPLACE VIEW {network}.line_barriers_car AS
+CREATE OR REPLACE VIEW "{network}".line_barriers_car AS
  SELECT b.id,
     b.geom::geometry(LINESTRING, {srid}) AS geom,
     COALESCE(b.closed, false) AS explicitly_closed,
@@ -964,7 +965,7 @@ CREATE OR REPLACE VIEW {network}.line_barriers_car AS
             bool_or(a.sperre_pkw) AS closed,
             bool_or(a.oeffne_pkw) AS opened,
             w.linestring AS geom
-           FROM {network}.link_points lp,
+           FROM "{network}".link_points lp,
             osm.way_nodes wn,
             osm.ways w
              LEFT JOIN classifications.access_types a ON w.tags @> a.tags
@@ -982,15 +983,15 @@ CREATE OR REPLACE VIEW {network}.line_barriers_car AS
         """
         self.logger.info('Create Indices')
         sql = """
-ALTER TABLE {network}.links ADD PRIMARY KEY (wayid, segment);
-CREATE INDEX idx_links_oneway ON {network}.links USING btree (oneway) WHERE oneway = TRUE;
-CREATE INDEX idx_links_planned ON {network}.links USING btree (planned) WHERE planned = TRUE;
-CREATE INDEX idx_links_construction ON {network}.links USING btree (construction) WHERE construction = TRUE;
-CREATE INDEX idx_links_name ON {network}.links USING btree (linkname);
-CREATE INDEX idx_links_ref ON {network}.links USING btree (linkref) WHERE linkref <> '';
-CREATE INDEX idx_links_bridge ON {network}.links USING btree (bridge_tunnel) WHERE bridge_tunnel <> '';
-CREATE INDEX idx_links_fromnode_tonode ON {network}.links USING btree (fromnode, tonode);
-CLUSTER {network}.links USING idx_links_geom;
+ALTER TABLE "{network}".links ADD PRIMARY KEY (wayid, segment);
+CREATE INDEX idx_links_oneway ON "{network}".links USING btree (oneway) WHERE oneway = TRUE;
+CREATE INDEX idx_links_planned ON "{network}".links USING btree (planned) WHERE planned = TRUE;
+CREATE INDEX idx_links_construction ON "{network}".links USING btree (construction) WHERE construction = TRUE;
+CREATE INDEX idx_links_name ON "{network}".links USING btree (linkname);
+CREATE INDEX idx_links_ref ON "{network}".links USING btree (linkref) WHERE linkref <> '';
+CREATE INDEX idx_links_bridge ON "{network}".links USING btree (bridge_tunnel) WHERE bridge_tunnel <> '';
+CREATE INDEX idx_links_fromnode_tonode ON "{network}".links USING btree (fromnode, tonode);
+CLUSTER "{network}".links USING idx_links_geom;
         """.format(network=self.network)
         self.run_query(sql)
 
@@ -1000,32 +1001,32 @@ CLUSTER {network}.links USING idx_links_geom;
         """
         self.logger.info('Create View with accessible links')
         sql = """
-CREATE OR REPLACE VIEW {network}.links_reached_without_planned AS
+CREATE OR REPLACE VIEW "{network}".links_reached_without_planned AS
 SELECT l.*, lt.road_category
 FROM
-  {network}.links l,
+  "{network}".links l,
   classifications.linktypes lt,
-  {network}.edges_reached e
+  "{network}".edges_reached e
 WHERE l.fromnode=e.fromnode AND l.tonode=e.tonode
 AND l.linktype = lt.id;
 
-CREATE OR REPLACE VIEW {network}.links_reached_only_by_planned AS
+CREATE OR REPLACE VIEW "{network}".links_reached_only_by_planned AS
 SELECT l.*, lt.road_category
 FROM
-  {network}.links l,
+  "{network}".links l,
   classifications.linktypes lt,
-  {network}.edges_reached_with_planned ep
-  LEFT JOIN {network}.edges_reached e ON ep.id = e.id
+  "{network}".edges_reached_with_planned ep
+  LEFT JOIN "{network}".edges_reached e ON ep.id = e.id
 WHERE l.fromnode=ep.fromnode AND l.tonode=ep.tonode
 AND e.id IS NULL
 AND l.linktype = lt.id;
 
-CREATE OR REPLACE VIEW {network}.unaccessible_links AS
+CREATE OR REPLACE VIEW "{network}".unaccessible_links AS
 SELECT lt.road_category, l.*
 FROM
   classifications.linktypes lt,
-  {network}.links l LEFT JOIN
-  {network}.edges_reached_with_planned e
+  "{network}".links l LEFT JOIN
+  "{network}".edges_reached_with_planned e
   ON l.fromnode=e.fromnode AND l.tonode=e.tonode
 WHERE e.id IS NULL
 AND l.linktype=lt.id;
@@ -1038,52 +1039,52 @@ AND l.linktype=lt.id;
         self.logger.info('Create Views with different roadtypes')
         sql = """
 -- erstelle View für die einzelnen Streckentypen
-CREATE OR REPLACE VIEW {network}.autobahn AS
+CREATE OR REPLACE VIEW "{network}".autobahn AS
 SELECT l.*
 FROM
-  {network}.links_reached_without_planned l
+  "{network}".links_reached_without_planned l
   WHERE road_category='A';
 
-CREATE OR REPLACE VIEW {network}.hauptstr AS
+CREATE OR REPLACE VIEW "{network}".hauptstr AS
 SELECT l.*
 FROM
-  {network}.links_reached_without_planned l
+  "{network}".links_reached_without_planned l
   WHERE road_category='B';
 
-CREATE OR REPLACE VIEW {network}.nebennetz AS
+CREATE OR REPLACE VIEW "{network}".nebennetz AS
 SELECT l.*
 FROM
-  {network}.links_reached_without_planned l
+  "{network}".links_reached_without_planned l
   WHERE road_category='C';
 
-CREATE OR REPLACE VIEW {network}.faehren AS
+CREATE OR REPLACE VIEW "{network}".faehren AS
 SELECT l.*
 FROM
-  {network}.links_reached_without_planned l
+  "{network}".links_reached_without_planned l
   WHERE road_category='D';
 
-CREATE OR REPLACE VIEW {network}.autobahn_accessible_only_by_planned AS
+CREATE OR REPLACE VIEW "{network}".autobahn_accessible_only_by_planned AS
 SELECT l.*
 FROM
-  {network}.links_reached_only_by_planned l
+  "{network}".links_reached_only_by_planned l
   WHERE road_category='A';
 
-CREATE OR REPLACE VIEW {network}.hauptstr_accessible_by_planned AS
+CREATE OR REPLACE VIEW "{network}".hauptstr_accessible_by_planned AS
 SELECT l.*
 FROM
-  {network}.links_reached_only_by_planned l
+  "{network}".links_reached_only_by_planned l
   WHERE road_category='B';
 
-CREATE OR REPLACE VIEW {network}.nebennetz_accessible_by_planned AS
+CREATE OR REPLACE VIEW "{network}".nebennetz_accessible_by_planned AS
 SELECT l.*
 FROM
-  {network}.links_reached_only_by_planned l
+  "{network}".links_reached_only_by_planned l
   WHERE road_category='C';
 
-CREATE OR REPLACE VIEW {network}.faehren_accessible_by_planned AS
+CREATE OR REPLACE VIEW "{network}".faehren_accessible_by_planned AS
 SELECT l.*
 FROM
-  {network}.links_reached_only_by_planned l
+  "{network}".links_reached_only_by_planned l
   WHERE road_category='D';
 
         """.format(network=self.network)
@@ -1093,9 +1094,10 @@ FROM
         """
         Create a pg_routing network from the links-table
         """
-        self.logger.info('Create routable network to check network connectivity')
+        self.logger.info(
+            'Create routable network to check network connectivity')
         sql = """
-CREATE TABLE {network}.edge_table (
+CREATE TABLE "{network}".edge_table (
 id INTEGER PRIMARY KEY,
 fromnode bigint,
 tonode bigint,
@@ -1106,11 +1108,11 @@ geom geometry(LineString,{srid}),
 cost float,
 reverse_cost float);
 
-CREATE INDEX edge_table_geom_idx ON {network}.edge_table USING gist(geom);
-CREATE INDEX edge_table_ft_idx ON {network}.edge_table USING btree(fromnode, tonode);
-CREATE INDEX edge_table_link_idx ON {network}.edge_table USING btree(linkid);
-CREATE INDEX edge_table_source_idx ON {network}.edge_table USING btree("source");
-CREATE INDEX edge_table_target_idx ON {network}.edge_table USING btree("target");
+CREATE INDEX edge_table_geom_idx ON "{network}".edge_table USING gist(geom);
+CREATE INDEX edge_table_ft_idx ON "{network}".edge_table USING btree(fromnode, tonode);
+CREATE INDEX edge_table_link_idx ON "{network}".edge_table USING btree(linkid);
+CREATE INDEX edge_table_source_idx ON "{network}".edge_table USING btree("source");
+CREATE INDEX edge_table_target_idx ON "{network}".edge_table USING btree("target");
 """.format(srid=self.srid, network=self.network)
         self.run_query(sql)
 
@@ -1120,9 +1122,9 @@ CREATE INDEX edge_table_target_idx ON {network}.edge_table USING btree("target")
         """
         self.logger.info('Update edge table with constructions')
         sql = """
-UPDATE {network}.edge_table e
+UPDATE "{network}".edge_table e
 SET cost = -1, reverse_cost = -1
-FROM {network}.links l
+FROM "{network}".links l
 WHERE
 e.fromnode=l.fromnode AND e.tonode=l.tonode AND
 (l.planned OR l.construction);
@@ -1136,8 +1138,8 @@ e.fromnode=l.fromnode AND e.tonode=l.tonode AND
         self.logger.info('Update Edge Table')
         sql = """
 
-TRUNCATE {network}.edge_table;
-INSERT INTO {network}.edge_table (id, fromnode, tonode, linkid, geom,
+TRUNCATE "{network}".edge_table;
+INSERT INTO "{network}".edge_table (id, fromnode, tonode, linkid, geom,
 cost, reverse_cost)
 SELECT
   row_number() OVER (ORDER BY fromnode, tonode)::integer AS id,
@@ -1147,7 +1149,7 @@ SELECT
   l.geom,
   l.t_kfz AS cost,
   CASE WHEN l.oneway THEN -1 ELSE l.t_kfz END AS reverse_cost
-FROM {network}.links l;
+FROM "{network}".links l;
         """.format(network=self.network)
         self.run_query(sql)
 
@@ -1159,7 +1161,7 @@ FROM {network}.links l;
 
         chunksize = 50000
         cursor = self.conn.cursor()
-        sql = 'SELECT max(e.id) FROM {network}.edge_table e;'
+        sql = 'SELECT max(e.id) FROM "{network}".edge_table e;'
         cursor.execute(sql.format(network=self.network))
         n_edges = cursor.fetchone()[0]
 
@@ -1198,51 +1200,51 @@ SELECT pgr_analyzeGraph('{network}.edge_table',{tolerance},
         self.update_pgr_driving_distance()
         # create queries
         sql = """
-CREATE MATERIALIZED VIEW {network}.reached_from_mat AS
-SELECT * FROM {network}.reached_from
+CREATE MATERIALIZED VIEW "{network}".reached_from_mat AS
+SELECT * FROM "{network}".reached_from
 WITH NO DATA;
 
-CREATE MATERIALIZED VIEW {network}.reached_to_mat AS
-SELECT * FROM {network}.reached_to
+CREATE MATERIALIZED VIEW "{network}".reached_to_mat AS
+SELECT * FROM "{network}".reached_to
 WITH NO DATA;
 
-CREATE INDEX idx_node_reached_from ON {network}.reached_from_mat
+CREATE INDEX idx_node_reached_from ON "{network}".reached_from_mat
 USING btree(node);
-CREATE INDEX idx_node_reached_to ON {network}.reached_to_mat
+CREATE INDEX idx_node_reached_to ON "{network}".reached_to_mat
 USING btree(node);
 
-CREATE MATERIALIZED VIEW {network}.edges_reached AS
+CREATE MATERIALIZED VIEW "{network}".edges_reached AS
 -- edges reached in both directions
 SELECT e.id, e.fromnode, e.tonode
 FROM
-    {network}.edge_table e,
-    {network}.reached_from_mat h,
-    {network}.reached_to_mat r
+    "{network}".edge_table e,
+    "{network}".reached_from_mat h,
+    "{network}".reached_to_mat r
 WHERE
     e."source" = h.node AND
     e."target" = r.node
 WITH NO DATA;
 
-CREATE INDEX idx_id_edges_reached ON {network}.edges_reached
+CREATE INDEX idx_id_edges_reached ON "{network}".edges_reached
 USING btree(id);
-CREATE INDEX idx_nodes_edges_reached ON {network}.edges_reached
+CREATE INDEX idx_nodes_edges_reached ON "{network}".edges_reached
 USING btree(fromnode, tonode);
 
-DROP TABLE IF EXISTS {network}.edges_reached_with_planned CASCADE;
-CREATE TABLE {network}.edges_reached_with_planned
+DROP TABLE IF EXISTS "{network}".edges_reached_with_planned CASCADE;
+CREATE TABLE "{network}".edges_reached_with_planned
 (id integer primary key,
 fromnode bigint,
 tonode bigint);
 CREATE INDEX idx_nodes_edges_reached_with_planned
-ON {network}.edges_reached_with_planned
+ON "{network}".edges_reached_with_planned
 USING btree(fromnode, tonode);
 
-CREATE OR REPLACE VIEW {network}.vertexes_reached AS
+CREATE OR REPLACE VIEW "{network}".vertexes_reached AS
 -- vertexes reached in both directions
 SELECT h.node
 FROM
-  {network}.reached_from_mat h,
-  {network}.reached_to_mat r
+  "{network}".reached_from_mat h,
+  "{network}".reached_to_mat r
 WHERE h.node = r.node;
         """.format(network=self.network)
         self.run_query(sql)
@@ -1275,7 +1277,7 @@ FROM (
     cl.s,
     kmeans(ARRAY[ST_X(j.the_geom), ST_Y(j.the_geom)], cl.s) OVER (PARTITION BY cl.s),
     j.the_geom AS geom
-  FROM {network}.edge_table_vertices_pgr j,
+  FROM "{network}".edge_table_vertices_pgr j,
   (SELECT generate_series(1, {k}) s) cl
 ) AS k
 GROUP BY k.s, k.kmeans) c
@@ -1286,7 +1288,7 @@ FROM (
 SELECT v.id , v.the_geom AS geom,
 cluster.s,
 row_number() OVER (PARTITION BY cluster.s ORDER BY v.the_geom <-> cluster.geom) AS rn
-FROM {network}.edge_table_vertices_pgr v, cluster) e
+FROM "{network}".edge_table_vertices_pgr v, cluster) e
 ORDER BY e.rn, e.s
 LIMIT {n};
         """.format(n=n, k=k, network=self.network)
@@ -1295,7 +1297,7 @@ LIMIT {n};
         vertices = cursor.fetchall()
 
         sql = """
-SELECT count(*) FROM {network}.links;
+SELECT count(*) FROM "{network}".links;
         """.format(network=self.network)
         cursor.execute(sql)
         row = cursor.fetchone()
@@ -1303,10 +1305,10 @@ SELECT count(*) FROM {network}.links;
         self.logger.info('{n} links in total'.format(n=self.n_links))
 
         sql_count_result = """
-REFRESH MATERIALIZED VIEW {network}.reached_from_mat;
-REFRESH MATERIALIZED VIEW {network}.reached_to_mat;
-REFRESH MATERIALIZED VIEW {network}.edges_reached;
-SELECT count(*) FROM {network}.edges_reached;
+REFRESH MATERIALIZED VIEW "{network}".reached_from_mat;
+REFRESH MATERIALIZED VIEW "{network}".reached_to_mat;
+REFRESH MATERIALIZED VIEW "{network}".edges_reached;
+SELECT count(*) FROM "{network}".edges_reached;
         """.format(network=self.network)
 
         i = 0
@@ -1323,9 +1325,10 @@ SELECT count(*) FROM {network}.edges_reached;
             row = cursor.fetchone()
             links_reached = float(row.count)
             msg2 = '{f} out of {n} edges reached'
-            self.logger.info(msg2.format(f=int(links_reached), n=self.n_links))
+            self.logger.info(msg2.format(
+                f=int(links_reached), n=self.n_links))
             if links_reached > self.n_links * self.links_to_find:
-                sql = 'ANALYZE {network}.edges_reached;'.format(
+                sql = 'ANALYZE "{network}".edges_reached;'.format(
                     network=self.network)
                 self.run_query(sql)
                 return
@@ -1339,7 +1342,7 @@ SELECT count(*) FROM {network}.edges_reached;
         """
         sql = """
 
-CREATE OR REPLACE VIEW {network}.reached_from AS
+CREATE OR REPLACE VIEW "{network}".reached_from AS
 -- Knoten, die in Hinrichtung erreicht werden
 SELECT seq, node::integer, agg_cost AS cost
 FROM pgr_drivingDistance(
@@ -1348,7 +1351,7 @@ FROM {network}.edge_table',
 {startvertex}, {maxcosts}, true
 );
 
-CREATE OR REPLACE VIEW {network}.reached_to AS
+CREATE OR REPLACE VIEW "{network}".reached_to AS
 -- Knoten, die in Hinrichtung erreicht werden
 SELECT seq, node::integer, agg_cost AS cost
 FROM pgr_drivingDistance(
@@ -1367,10 +1370,10 @@ FROM pgr_drivingDistance(
             'Save edges reached with planned roads to table edges_reached')
 
         sql = """
-TRUNCATE {network}.edges_reached_with_planned;
-INSERT INTO {network}.edges_reached_with_planned (id, fromnode, tonode)
+TRUNCATE "{network}".edges_reached_with_planned;
+INSERT INTO "{network}".edges_reached_with_planned (id, fromnode, tonode)
 SELECT e.id, e.fromnode, e.tonode
-FROM {network}.edges_reached e;
+FROM "{network}".edges_reached e;
             """.format(network=self.network)
         self.run_query(sql)
 
