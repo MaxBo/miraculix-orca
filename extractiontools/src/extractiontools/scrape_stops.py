@@ -98,7 +98,7 @@ class ScrapeStops(Extract):
             rowcount = self.get_stops_at_point(
                 point, search_radius, db_query, cursor, temp_table)
             if rowcount >= 1000:
-                points_with_too_many_stops.append(points)
+                points_with_too_many_stops.append(point)
 
         rel_step = 1
         for point in points_with_too_many_stops:
