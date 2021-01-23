@@ -92,10 +92,11 @@ class ScrapeStops(Extract):
         points = cursor.fetchall()
 
         db_query = BahnQuery(timeout=0.5)
+        temp_table = 'temp_stations'
 
         for point in points:
             rowcount = self.get_stops_at_point(
-                point, search_radius, db_query, cursor)
+                point, search_radius, db_query, cursor, temp_table)
             if rowcount >= 1000:
                 points_with_too_many_stops.append(points)
 
@@ -113,7 +114,8 @@ class ScrapeStops(Extract):
                         rowcount = self.get_stops_at_point(new_point,
                                                            search_radius,
                                                            db_query,
-                                                           cursor)
+                                                           cursor,
+                                                           temp_table)
                         if rowcount >= 1000:
                             too_many_stops_found = True
 
@@ -124,7 +126,8 @@ class ScrapeStops(Extract):
                            point: Tuple[float, float],
                            search_radius: float,
                            db_query: str,
-                           cursor: NamedTupleCursor) -> int:
+                           cursor: NamedTupleCursor,
+                           temp_table: str) -> int:
         x, y = point
         self.logger.debug(f'search at {x}, {y}')
 
@@ -135,7 +138,6 @@ class ScrapeStops(Extract):
         stops = db_query.stops_near((x, y), max_distance=search_radius)
         if not stops:
             return 0
-        temp_table = 'temp_stations'
         sql = f'''
             DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";
             CREATE TABLE IF NOT EXISTS "{self.schema}"."{temp_table}" (
