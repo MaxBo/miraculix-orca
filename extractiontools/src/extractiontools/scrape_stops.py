@@ -116,15 +116,16 @@ class ScrapeStops(Extract):
                 FROM (
                   SELECT st_transform(st_centroid(a.geom),4326) point
                   FROM (
-                    SELECT (ST_HexagonGrid({new_point_distance},
+                    SELECT (ST_HexagonGrid(
+                              {new_point_distance},
                               st_buffer(
                                 ST_Transform(
                                   st_setsrid(
                                     st_makepoint({x}, {y}),
                                     4326),
-                                  3857)
-                                ),
-                              search_radius)
+                                  3857),
+                                search_radius)
+                              )
                             ).*
                   ) a
                 ) b
