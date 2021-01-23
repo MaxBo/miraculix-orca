@@ -98,18 +98,23 @@ class ScrapeStops(Extract):
             rowcount = self.get_stops_at_point(
                 point, search_radius, db_query, cursor, temp_table)
             if rowcount >= 1000:
+                self.logger.info(
+                    f'found more than 1000 stops in {search_radius} m around {point}')
                 points_with_too_many_stops.append(point)
 
         rel_step = 1
         for point in points_with_too_many_stops:
             x, y = point
             too_many_stops_found = True
-            self.logger.info(f'search more stops around {point}')
             while too_many_stops_found:
                 too_many_stops_found = False
                 rel_step /= 2
                 new_point_distance = point_distance * rel_step
                 new_search_radius = search_radius * rel_step
+                self.logger.info(
+                    f'reduce search_radius to {search_radius} m')
+                self.logger.info(
+                    f'search more stops {new_search_radius} m around {point}')
                 sql = f'''
                 SELECT
                 st_x(b.point) x, st_y(b.point) y
@@ -142,6 +147,8 @@ class ScrapeStops(Extract):
                                                        cursor,
                                                        temp_table)
                     if rowcount >= 1000:
+                        self.logger.info(
+                            f'found more than {rowcount} stops in {new_search_radius} m around {new_point}')
                         too_many_stops_found = True
 
         sql = f'DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";'
