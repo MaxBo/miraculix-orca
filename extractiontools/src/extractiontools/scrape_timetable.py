@@ -45,7 +45,7 @@ class ScrapeTimetable(ScrapeStops):
     def create_timetable_tables(self):
         """(Re-Create the timetable tables)"""
         sql = f"""
-        CREATE TABLE IF NOT EXISTS {self.schema}.abfahrten
+        CREATE TABLE IF NOT EXISTS "{self.schema}".abfahrten
         (
           "Fahrt_URL" text,
           "Fahrt_Name" text,
@@ -62,11 +62,11 @@ class ScrapeTimetable(ScrapeStops):
         );
 
         CREATE INDEX IF NOT EXISTS abfahrten_sh_idx
-          ON {self.schema}.abfahrten
+          ON "{self.schema}".abfahrten
           USING btree
           ("Fahrt_Name", "Fahrt_Ziel");
 
-        CREATE TABLE IF NOT EXISTS {self.schema}.fahrten
+        CREATE TABLE IF NOT EXISTS "{self.schema}".fahrten
         (
           "Fahrt_Name" text,
           "H_Ankunft" timestamp(0) with time zone,
@@ -92,8 +92,8 @@ class ScrapeTimetable(ScrapeStops):
     def truncate_timetables(self):
         """Truncate the timetables"""
         sql = f"""
-        TRUNCATE {self.schema}.abfahrten CASCADE;
-        TRUNCATE {self.schema}.fahrten;
+        TRUNCATE "{self.schema}".abfahrten CASCADE;
+        TRUNCATE "{self.schema}".fahrten;
         """
         cursor = self.get_cursor()
         cursor.execute(sql)
@@ -102,7 +102,7 @@ class ScrapeTimetable(ScrapeStops):
         """get the stops in the area"""
         sql = f"""
         SELECT "H_ID", "H_Name"
-        FROM {self.schema}.haltestellen
+        FROM "{self.schema}".haltestellen
         WHERE in_area;
         """
         cursor = self.get_cursor()
@@ -150,11 +150,12 @@ class ScrapeTimetable(ScrapeStops):
 
     def clear_journeys(self, stop_id):
         sql = f'''
-        DELETE FROM {self.schema}.abfahrten
-        WHERE "H_ID"={stop_id}
-        AND suchdatum='{self.date}';
+        DELETE FROM "{self.schema}".abfahrten
+        WHERE "H_ID"=%(stop_id)s
+        AND suchdatum=%(date)s;
         '''
-        self.run_query(sql,verbose=False)
+        self.run_query(sql,verbose=False, vars={'stop_id': stop_id,
+                                                'date': self.date,})
 
     def add_journey(self, journey, route, stop_id):
         # dt_txt = journey['departure'].strftime('%H:%M')
@@ -165,16 +166,24 @@ class ScrapeTimetable(ScrapeStops):
         "Fahrt_Abfahrt", "Fahrt_Start", "Fahrt_Ziel",
         "Fahrt_Nr", "H_ID",
         suchdatum)
-        VALUES (
-        '{journey['url']}', '{journey['name']}',
-        '{dt_txt}', '{route[0]['station_name']}', '{journey['destination']}',
-        {journey['number'] or 'NULL'}, {stop_id},
-        '{self.date.strftime(self.sql_date_format)}'
-        )
+        VALUES
+          (%(url)s, %(journey_name)s, %(dt_text)s, %(station_name)s, %(dest)s,
+           %(journey_number)s, %(stop_id)s, %(time)s)
         RETURNING "abfahrt_id";
         '''
         cur = self.conn.cursor()
-        cur.execute(sql)
+        cur.execute(sql,
+                    dict(
+            url=journey['url'],
+            journey_name=journey['name'],
+            dt_text=dt_text,
+            station_name=route[0]['station_name'],
+            dest=journey['destination'],
+            journey_number=journey['number'] or 'NULL',
+            stop_id=stop_id,
+            time=self.date.strftime(self.sql_date_format),
+                    )
+                )
         j_id = cur.fetchone()
 
         for i, section in enumerate(route):
@@ -188,26 +197,37 @@ class ScrapeTimetable(ScrapeStops):
             INSERT INTO fahrten
             (abfahrt_id, "Fahrt_Name", fahrt_index,
             "H_Name", "H_Ankunft", "H_Abfahrt", "H_ID")
-            VALUES (
-            {j_id[0]}, '{journey['name']}', {i+1},
-            '{section['station_name']}', {at}, {dt},
-            '{section['station_id']}'
-            );"""
-            cur.execute(sql)
+            VALUES (%(journey_id)s, %(journey_name)s, %(index)s, %(station_name)s,
+                    %(at)s, %(dt)s, %(station_id)s);
+            """
+
+            cur.execute(sql, vars=dict(
+                journey_id=j_id[0],
+                journey_name=journey['name'],
+                index=i+1,
+                station_name=section['station_name'],
+                at=at,
+                dt=dt,
+                station_id=section['station_id'],
+            ))
 
     def check_journey(self, journey, stop_id):
         departure = journey['departure'].strftime(self.sql_time_format)
         sql = f"""
         SELECT 1 AS id
-        FROM {self.schema}.abfahrten AS a, {self.schema}.fahrten AS f
+        FROM "{self.schema}".abfahrten AS a, {self.schema}.fahrten AS f
         WHERE a.abfahrt_id = f.abfahrt_id
-        AND a."Fahrt_Name" = '{journey['name']}'
-        AND f."H_ID" = {stop_id}
-        AND f."H_Abfahrt"::time = '{departure}'
-        AND a."Fahrt_Ziel" = '{journey['destination']}'
+        AND a."Fahrt_Name" = %(journey_name)s
+        AND f."H_ID" = %(stop_id)s
+        AND f."H_Abfahrt"::time = %(departure)s
+        AND a."Fahrt_Ziel" = %(journey_dest)s
         """
         cursor = self.conn.cursor()
-        cursor.execute(sql)
+        cursor.execute(sql, vars=dict(journey_name=journey['name'],
+                                        stop_id=stop_id,
+                                        departure=departure,
+                                        journey_dest=journey['destination'],
+                                        ))
         row = cursor.fetchone()
         return row is not None
 
@@ -216,9 +236,9 @@ class ScrapeTimetable(ScrapeStops):
         cursor = self.conn.cursor()
 
         sql = f"""
-        SELECT DISTINCT("H_ID") FROM {self.schema}.fahrten
+        SELECT DISTINCT("H_ID") FROM "{self.schema}".fahrten
         WHERE "H_ID" NOT IN (
-        SELECT DISTINCT "H_ID" FROM {self.schema}.haltestellen)
+        SELECT DISTINCT "H_ID" FROM "{self.schema}".haltestellen)
         """
         cursor.execute(sql)
         rows = cursor.fetchall()
@@ -233,10 +253,10 @@ class ScrapeTimetable(ScrapeStops):
             cur_ids = ids[i: i + chunksize]
             arr = ','.join([str(ci) for ci in cur_ids])
             sql = f"""
-            INSERT INTO {self.schema}.haltestellen
+            INSERT INTO "{self.schema}".haltestellen
             ("H_ID", "H_Name", geom, kreis)
             SELECT "H_ID", "H_Name", st_transform(geom, {self.target_srid}) AS geom, kreis
-            FROM {self.temp}.haltestellen
+            FROM "{self.temp}".haltestellen
             WHERE "H_ID" = ANY(ARRAY[{arr}]);
             """
             self.run_query(sql, conn=self.conn)

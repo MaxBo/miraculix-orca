@@ -58,6 +58,7 @@ class Extract(DBApp):
     foreign_schema = None
     schema = None
 
+
     def __init__(self,
                  destination_db,
                  target_srid: int=None,

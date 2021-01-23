@@ -38,10 +38,10 @@ class ScrapeStops(Extract):
         CREATE INDEX
         """
         sql = f"""
-        ALTER TABLE {self.schema}.haltestellen ADD PRIMARY KEY ("H_ID");
+        ALTER TABLE "{self.schema}".haltestellen ADD PRIMARY KEY ("H_ID");
         CREATE INDEX idx_haltestellen_geom
-        ON {self.schema}.haltestellen USING gist(geom);
-        ALTER TABLE {self.schema}.route_types ADD PRIMARY KEY (typ);
+        ON "{self.schema}".haltestellen USING gist(geom);
+        ALTER TABLE "{self.schema}".route_types ADD PRIMARY KEY (typ);
         """
         self.run_query(sql, self.conn)
 
@@ -67,20 +67,25 @@ class ScrapeStops(Extract):
         in_area BOOLEAN DEFAULT false
         );
         CREATE INDEX IF NOT EXISTS idx_haltestellen_geom
-        ON {self.schema}.haltestellen USING gist(geom);
+        ON "{self.schema}".haltestellen USING gist(geom);
         '''
         self.run_query(sql)
 
         sql = f'''
         SELECT
         st_x(b.point) x, st_y(b.point) y
-        FROM (SELECT st_transform(st_centroid(a.geom),4326) point
-        FROM ( SELECT (ST_HexagonGrid({point_distance}, ST_Transform(geom, 3857))).*
-        FROM meta.boundary WHERE name='{self.boundary_name}') a ) b
+        FROM (
+          SELECT st_transform(st_centroid(a.geom),4326) point
+          FROM (
+            SELECT (ST_HexagonGrid({point_distance}, ST_Transform(geom, 3857))).*
+            FROM meta.boundary
+            WHERE name=%(boundary_name)s
+          ) a
+        ) b
         '''
         self.logger.info(sql)
         cursor = self.conn.cursor()
-        cursor.execute(sql)
+        cursor.execute(sql, {'boundary_name': self.boundary_name,})
         points = cursor.fetchall()
 
         db_query = BahnQuery(timeout=0.5)
@@ -97,44 +102,53 @@ class ScrapeStops(Extract):
                 continue
             temp_table = 'temp_stations'
             sql = f'''
-            DROP TABLE IF EXISTS {self.schema}.{temp_table};
-            CREATE TABLE IF NOT EXISTS {self.schema}.{temp_table} (
-            LIKE {self.schema}.haltestellen INCLUDING CONSTRAINTS INCLUDING DEFAULTS);
+            DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";
+            CREATE TABLE IF NOT EXISTS "{self.schema}"."{temp_table}" (
+            LIKE "{self.schema}".haltestellen INCLUDING CONSTRAINTS INCLUDING DEFAULTS);
             '''
             self.run_query(sql, verbose=False)
             for stop in stops:
                 sql = f"""
-                INSERT INTO {self.schema}.{temp_table}
+                INSERT INTO "{self.schema}"."{temp_table}"
                 ("H_Name", "H_ID", geom, in_area)
                 VALUES
-                ('{stop['name']}', {stop['id']},
-                st_transform(st_setsrid(st_makepoint( {stop['x']}, {stop['y']}), 4326 ),
-                            {self.target_srid}::integer),
+                (%(stop_name)s, %(stop_id)s,
+                st_transform(
+                  st_setsrid(st_makepoint( %(x)s, %(y)s), 4326 ), %(target_srid)s),
                 True::boolean)
                 """
-                cursor.execute(sql)
+                cursor.execute(sql,
+                               {'stop_name': stop['name'],
+                                'stop_id': stop['id'],
+                                'x': stop['x'],
+                                'y': stop['y'],
+                                'target_srid': self.target_srid,
+                                }
+                               )
 
             sql = f'''
-            DELETE FROM {self.schema}.{temp_table} a
+            DELETE FROM "{self.schema}"."{temp_table}" a
             USING meta.boundary b
             WHERE st_disjoint(a.geom, st_transform(b.source_geom, {self.target_srid}))
-            AND b.name='{self.boundary_name}';
+            AND b.name=%(boundary_name)s;
             '''
-            cursor.execute(sql)
+            cursor.execute(sql, {'boundary_name': self.boundary_name,})
 
             sql = f"""
-            INSERT INTO {self.schema}.haltestellen
+            INSERT INTO "{self.schema}".haltestellen
             SELECT *
-            FROM {self.schema}.{temp_table} tt
+            FROM "{self.schema}"."{temp_table}" tt
             ON CONFLICT ("H_ID") DO UPDATE
-            SET geom=excluded.geom, "H_Name"=excluded."H_Name", in_area=True::boolean;
+            SET geom=excluded.geom,
+                "H_Name"=excluded."H_Name",
+                in_area=True::boolean;
             """
             self.logger.info(sql)
             cursor.execute(sql)
 
             self.logger.info(f'inserted or updated {cursor.rowcount} stops')
             self.conn.commit()
-        sql = f'DROP TABLE IF EXISTS {self.schema}.{temp_table};'
+        sql = f'DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";'
         self.run_query(sql, verbose=False)
 
 if __name__ == '__main__':
@@ -164,7 +178,6 @@ if __name__ == '__main__':
 
     scrape = ScrapeStops(options, db=options.destination_db)
     scrape.set_login(host=options.host, port=options.port, user=options.user)
-    scrape.get_target_boundary_from_dest_db()
     if options.copy_from_source_db:
         scrape.extract()
     scrape.scrape()

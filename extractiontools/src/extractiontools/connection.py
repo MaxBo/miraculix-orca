@@ -10,14 +10,14 @@ from collections import OrderedDict
 import sqlparse
 from psycopg2.sql import SQL, Composed, Identifier, Literal
 from copy import deepcopy
-from typing import Union
+from typing import Union, Dict
 
 from types import MethodType
 import os
 import logging
 
 
-class Login(object):
+class Login:
     """
     Login-Object with the Database credentials
     """
@@ -43,7 +43,7 @@ class Login(object):
                           pw=self.password, db=self.db)
 
 
-class Connection(object):
+class Connection:
     """
     Connection object
     """
@@ -132,7 +132,7 @@ class Connection(object):
         return OrderedDict(((d.name, d) for d in descr))
 
 
-class DBApp(object):
+class DBApp:
     """
 
     """
@@ -183,7 +183,7 @@ class DBApp(object):
             os.makedirs(folder)
 
     def run_query(self, sql: Union[str, Composed], conn=None,
-                  split=True, verbose=True):
+                  split=True, verbose=True, vars: Dict[str, object]=None):
         """
         runs an sql query log the statusmessage of each query
 
@@ -196,14 +196,18 @@ class DBApp(object):
             if not given, than the default connection self.conn is taken
         split : bool (optional)
             run the sql query in seperate steps, defaults to True
+        verbose: bool(optional, default=True)
+            if true, log query
+        vars: dict(optional)
+            values to pass to the query
         """
         conn = conn or self.conn
         cur = conn.cursor()
 
-        def execute(query):
+        def execute(query, vars=None):
             if verbose:
                 self.logger.info(query)
-            cur.execute(query)
+            cur.execute(query, vars)
 
         if split:
             query_string = sql.as_string(conn) if isinstance(sql, Composed) else sql
@@ -213,11 +217,11 @@ class DBApp(object):
                         q for q in query.replace('\r', '').split('\n')
                         if not q.strip().startswith('--')])
                     if query_without_comments.strip():
-                        execute(query)
+                        execute(query, vars)
         else:
-            execute(sql)
+            execute(sql, vars)
 
-    def set_search_path(self, connstr='conn'):
+    def set_search_path(self, connstr: str='conn'):
         conn = getattr(self, connstr)
         sql = f'SET search_path TO {self.schema}, "$user", public;'
         cur = conn.cursor()
@@ -245,7 +249,7 @@ class DBApp(object):
         sql = """RESET SESSION AUTHORIZATION;"""
         self.run_query(sql, conn)
 
-    def check_if_database_exists(self, db_name):
+    def check_if_database_exists(self, db_name: str):
         """
         checks if database exists
 
@@ -268,7 +272,7 @@ class DBApp(object):
             rows = cursor.fetchall()
         return len(rows) > 0
 
-    def drop_database(self, dbname, conn=None):
+    def drop_database(self, dbname: str, conn=None):
         """
         Drop database, disconnect all connections before
 
