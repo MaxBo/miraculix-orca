@@ -104,6 +104,7 @@ class ScrapeStops(Extract):
         for point in points_with_too_many_stops:
             x, y = point
             too_many_stops_found = True
+            self.logger.info(f'search more stops around {point}')
             while too_many_stops_found:
                 too_many_stops_found = False
                 rel_step /= 2
