@@ -94,21 +94,27 @@ class ScrapeStops(Extract):
         db_query = BahnQuery(timeout=0.5)
 
         for point in points:
-            self.get_stops_at_point(point, search_radius, db_query, cursor)
-            if cursor.rowcount >= 1000:
+            rowcount = self.get_stops_at_point(point, search_radius, db_query, cursor)
+            if rowcount >= 1000:
                 found_thousand.append(points)
 
-        step = search_radius / 5
+        rel_step = 1
         for point in found_thousand:
             x, y = point
-            for dx in range(-search_radius, search_radius, step):
-                for dy in range(-search_radius, search_radius, step):
-                    new_point = (x+dx, y+dy)
-                    self.get_stops_at_point(new_point,
-                                            search_radius,
-                                            db_query,
-                                            cursor)
-
+            too_many_stops_found = True
+            while too_many_stops_found:
+                too_many_stops_found = False
+                rel_step *= 0.5
+                step = search_radius * rel_step
+                for dx in range(-search_radius, search_radius, step):
+                    for dy in range(-search_radius, search_radius, step):
+                        new_point = (x+dx, y+dy)
+                        rowcount = self.get_stops_at_point(new_point,
+                                                           search_radius,
+                                                           db_query,
+                                                           cursor)
+                        if rowcount >= 1000:
+                            too_many_stops_found = True
 
         sql = f'DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";'
         self.run_query(sql, verbose=False)
@@ -117,7 +123,7 @@ class ScrapeStops(Extract):
                            point: Tuple(float, float),
                            search_radius: float,
                            db_query: str,
-                           cursor: NamedTupleCursor):
+                           cursor: NamedTupleCursor) -> int:
         x, y = point
         self.logger.debug(f'search at {x}, {y}')
 
@@ -127,7 +133,7 @@ class ScrapeStops(Extract):
 
         stops = db_query.stops_near((x, y), max_distance=search_radius)
         if not stops:
-            continue
+            return 0
         temp_table = 'temp_stations'
         sql = f'''
             DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";
@@ -176,6 +182,8 @@ class ScrapeStops(Extract):
 
         self.logger.info(f'inserted or updated {cursor.rowcount} stops')
         self.conn.commit()
+        return cursor.rowcount
+
 
 if __name__ == '__main__':
 
