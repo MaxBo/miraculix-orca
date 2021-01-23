@@ -5,6 +5,8 @@ from argparse import ArgumentParser
 
 from extractiontools.ausschnitt import Extract, Connection
 from extractiontools.utils.bahn_query import BahnQuery
+from psycopg2.extras import NamedTupleCursor
+from typing import Tuple
 
 
 class ScrapeStops(Extract):
@@ -56,6 +58,7 @@ class ScrapeStops(Extract):
 
         point_distance = 14000
         search_radius = 10000
+        found_thousand = []
 
         sql = f'''
         CREATE TABLE IF NOT EXISTS {self.schema}.haltestellen (
@@ -90,25 +93,50 @@ class ScrapeStops(Extract):
 
         db_query = BahnQuery(timeout=0.5)
 
-        for x, y in points:
-            self.logger.debug(f'search at {x}, {y}')
+        for point in points:
+            self.get_stops_at_point(point, search_radius, db_query, cursor)
+            if cursor.rowcount >= 1000:
+                found_thousand.append(points)
 
-            time.sleep(0.5)
+        step = search_radius / 5
+        for point in found_thousand:
+            x, y = point
+            for dx in range(-search_radius, search_radius, step):
+                for dy in range(-search_radius, search_radius, step):
+                    new_point = (x+dx, y+dy)
+                    self.get_stops_at_point(new_point,
+                                            search_radius,
+                                            db_query,
+                                            cursor)
 
-            self.logger.info(f'Querying stations at {x}, {y}')
 
-            stops = db_query.stops_near((x, y), max_distance=search_radius)
-            if not stops:
-                continue
-            temp_table = 'temp_stations'
-            sql = f'''
+        sql = f'DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";'
+        self.run_query(sql, verbose=False)
+
+    def get_stops_at_point(self,
+                           point: Tuple(float, float),
+                           search_radius: float,
+                           db_query: str,
+                           cursor: NamedTupleCursor):
+        x, y = point
+        self.logger.debug(f'search at {x}, {y}')
+
+        time.sleep(0.5)
+
+        self.logger.info(f'Querying stations at {x}, {y}')
+
+        stops = db_query.stops_near((x, y), max_distance=search_radius)
+        if not stops:
+            continue
+        temp_table = 'temp_stations'
+        sql = f'''
             DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";
             CREATE TABLE IF NOT EXISTS "{self.schema}"."{temp_table}" (
             LIKE "{self.schema}".haltestellen INCLUDING CONSTRAINTS INCLUDING DEFAULTS);
             '''
-            self.run_query(sql, verbose=False)
-            for stop in stops:
-                sql = f"""
+        self.run_query(sql, verbose=False)
+        for stop in stops:
+            sql = f"""
                 INSERT INTO "{self.schema}"."{temp_table}"
                 ("H_Name", "H_ID", geom, in_area)
                 VALUES
@@ -117,24 +145,24 @@ class ScrapeStops(Extract):
                   st_setsrid(st_makepoint( %(x)s, %(y)s), 4326 ), %(target_srid)s),
                 True::boolean)
                 """
-                cursor.execute(sql,
-                               {'stop_name': stop['name'],
-                                'stop_id': stop['id'],
-                                'x': stop['x'],
-                                'y': stop['y'],
-                                'target_srid': self.target_srid,
-                                }
-                               )
+            cursor.execute(sql,
+                           {'stop_name': stop['name'],
+                            'stop_id': stop['id'],
+                            'x': stop['x'],
+                            'y': stop['y'],
+                            'target_srid': self.target_srid,
+                            }
+                           )
 
-            sql = f'''
+        sql = f'''
             DELETE FROM "{self.schema}"."{temp_table}" a
             USING meta.boundary b
             WHERE st_disjoint(a.geom, st_transform(b.source_geom, {self.target_srid}))
             AND b.name=%(boundary_name)s;
             '''
-            cursor.execute(sql, {'boundary_name': self.boundary_name,})
+        cursor.execute(sql, {'boundary_name': self.boundary_name,})
 
-            sql = f"""
+        sql = f"""
             INSERT INTO "{self.schema}".haltestellen
             SELECT *
             FROM "{self.schema}"."{temp_table}" tt
@@ -143,13 +171,11 @@ class ScrapeStops(Extract):
                 "H_Name"=excluded."H_Name",
                 in_area=True::boolean;
             """
-            self.logger.info(sql)
-            cursor.execute(sql)
+        self.logger.info(sql)
+        cursor.execute(sql)
 
-            self.logger.info(f'inserted or updated {cursor.rowcount} stops')
-            self.conn.commit()
-        sql = f'DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";'
-        self.run_query(sql, verbose=False)
+        self.logger.info(f'inserted or updated {cursor.rowcount} stops')
+        self.conn.commit()
 
 if __name__ == '__main__':
 
