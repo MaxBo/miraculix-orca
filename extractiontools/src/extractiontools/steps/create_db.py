@@ -22,6 +22,7 @@ def create_db(target_srid: str, project_area: ogr.Geometry, database: str):
                       logger=orca.logger)
     extract.recreate_db()
     extract.set_target_boundary(project_area)
+    extract.update_boundaries()
 
 
 @meta(group='(1) Project', order=1)
