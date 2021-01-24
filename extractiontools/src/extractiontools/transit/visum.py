@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 # Author:   --<>
 # Purpose:
 # Created: 13/03/2015
@@ -25,6 +25,7 @@ from extractiontools.transit.projections import Transform
 class DoubleComma(np.double):
     '''np.double for comma separated values'''
     dtype = 'f8'
+
     def __new__(cls, val):
         if isinstance(val, (bytes, str)):
             val = val.replace(',', '.')
@@ -95,6 +96,7 @@ def coord_to_wgs84(from_proj, x, y, z='0'):
 
     return transform(from_proj, wgs84, x, y, z)
 
+
 class HeaderException(Exception):
     def __init__(self, table):
         self.table = table
@@ -105,7 +107,7 @@ class Visum(Base):
 
     def __init__(self, netfile, logger=None):
         super(Visum, self).__init__()
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or logging.getLogger(self.__module__)
         self.netfile = netfile
 
     def add_tables(self):
@@ -148,7 +150,8 @@ class Visum(Base):
                         # start with new block
                         header_line = current_line.strip().split(':')
                         tablename = header_line[0].lower().lstrip('$')
-                        self.logger.debug('start reading ${}'.format(tablename))
+                        self.logger.debug(
+                            'start reading ${}'.format(tablename))
 
                         # check if real table with columns
                         if len(header_line) > 1:
@@ -191,8 +194,6 @@ class Visum(Base):
                 table.write_rows(f)
 
 
-
-
 class VisumTable(Table):
     """Base Class for a visum table"""
 
@@ -230,11 +231,12 @@ class VisumTable(Table):
                     converter = self.cols.converters[c]
                     l.append(converter(vals[c]))
             line = ';'.join([str(x) for x in l])
-            writer.write(line+os.linesep)
+            writer.write(line + os.linesep)
 
 
 class Version(VisumTable):
     """Version"""
+
     def add_columns(self):
         self.add_column('VERSNR', DoubleComma, 9)
         self.add_column('FILETYPE', np.dtype('S50'), 'Net')
@@ -243,6 +245,7 @@ class Version(VisumTable):
 
 class Verkehrstag(VisumTable):
     """Verkehrstag"""
+
     def add_columns(self):
         self.add_column('NR', int)
         self.add_column('CODE', np.dtype('U50'))
@@ -254,6 +257,7 @@ class Verkehrstag(VisumTable):
 
 class Vsys(VisumTable):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('CODE', np.dtype('U50'))
         self.add_column('NAME', np.dtype('U255'))
@@ -264,6 +268,7 @@ class Vsys(VisumTable):
 
 class Knoten(VisumTable, Transform):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('NR', np.int64)
         self.add_column('STEUERUNGSTYP', int)
@@ -275,6 +280,7 @@ class Knoten(VisumTable, Transform):
 
 class Betreiber(VisumTable):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('NR', np.int64)
         self.add_column('NAME', np.dtype('U255'))
@@ -284,6 +290,7 @@ class Betreiber(VisumTable):
 
 class Haltestelle(VisumTable, Transform):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('NR', np.int64)
         self.add_column('CODE', np.dtype('U50'))
@@ -296,6 +303,7 @@ class Haltestelle(VisumTable, Transform):
 
 class Haltestellenbereich(VisumTable, Transform):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('NR', np.int64)
         self.add_column('HSTNR', np.int64)
@@ -306,8 +314,10 @@ class Haltestellenbereich(VisumTable, Transform):
 
         self.add_pkey('NR')
 
+
 class Haltepunkt(VisumTable):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('NR', np.int64)
         self.add_column('HSTBERNR', np.int64)
@@ -324,6 +334,7 @@ class Haltepunkt(VisumTable):
 
 class Linie(VisumTable):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('NAME', np.dtype('U255'))
         self.add_column('VSYSCODE', np.dtype('U50'))
@@ -332,8 +343,10 @@ class Linie(VisumTable):
 
         self.add_pkey('NAME')
 
+
 class Linienroute(VisumTable):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('LINNAME', np.dtype('U255'))
         self.add_column('LINROUTENAME', np.dtype('U255'))
@@ -341,8 +354,10 @@ class Linienroute(VisumTable):
 
         self.add_pkey('LINNAME', 'LINROUTENAME', 'RICHTUNGCODE')
 
+
 class Linienroutenelement(VisumTable):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('LINNAME', np.dtype('U255'))
         self.add_column('LINROUTENAME', np.dtype('U255'))
@@ -355,8 +370,10 @@ class Linienroutenelement(VisumTable):
 
         self.add_pkey('LINNAME', 'LINROUTENAME', 'RICHTUNGCODE', 'INDEX')
 
+
 class Fahrzeitprofil(VisumTable):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('LINNAME', np.dtype('U255'))
         self.add_column('LINROUTENAME', np.dtype('U255'))
@@ -369,6 +386,7 @@ class Fahrzeitprofil(VisumTable):
 
 class Fahrzeitprofilelement(VisumTable):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('LINNAME', np.dtype('U255'))
         self.add_column('LINROUTENAME', np.dtype('U255'))
@@ -387,6 +405,7 @@ class Fahrzeitprofilelement(VisumTable):
 
 class Fahrplanfahrt(VisumTable):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('NR', np.int64)
         self.add_column('NAME', np.dtype('U255'))
@@ -404,6 +423,7 @@ class Fahrplanfahrt(VisumTable):
 
 class Uebergangsgehzeithstber(VisumTable):
     """Verkehrssysteme"""
+
     def add_columns(self):
         self.add_column('VONHSTBERNR', np.int64)
         self.add_column('NACHHSTBERNR', np.int64)

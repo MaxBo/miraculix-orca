@@ -58,25 +58,25 @@ class Extract(DBApp):
     foreign_schema = None
     schema = None
 
-
     def __init__(self,
                  destination_db,
-                 target_srid: int=None,
-                 temp: str=None,
-                 foreign_server: str='foreign_server',
-                 foreign_login: Login=None,
-                 tables: dict={},
-                 source_db: str=None,
+                 target_srid: int = None,
+                 temp: str = None,
+                 foreign_server: str = 'foreign_server',
+                 foreign_login: Login = None,
+                 tables: dict = {},
+                 source_db: str = None,
                  logger=None,
-                 boundary: ogr.Geometry=None,
-                 boundary_name: str='bbox',
+                 boundary: ogr.Geometry = None,
+                 boundary_name: str = 'bbox',
                  **options):
         self.srid = 4326
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or logging.getLogger(self.__module__)
         self.session_id = f'{destination_db}{round(time.time() * 100)}'
-        self.temp = temp or 'temp'# f'temp{self.session_id}'
+        self.temp = temp or 'temp'  # f'temp{self.session_id}'
         self.foreign_server = foreign_server
-        self.source_db = source_db or os.environ.get('FOREIGN_NAME', 'europe')
+        self.source_db = source_db or os.environ.get(
+            'FOREIGN_NAME', 'europe')
         self.destination_db = destination_db
         self.tables = tables
         self.tables2cluster = []
@@ -206,7 +206,8 @@ class Extract(DBApp):
         extracts a single table
         """
 
-        wkt = self.get_target_boundary(boundary_name=boundary_name or self.boundary_name)
+        wkt = self.get_target_boundary(
+            boundary_name=boundary_name or self.boundary_name)
         geometrytype = self.get_geometrytype(tn, geom)
         cols = self.conn.get_column_dict(tn, self.temp)
         cols_without_geom = ('t."{}"'.format(c) for c in cols if c != geom)
@@ -355,12 +356,12 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
 
     def truncate_db(self):
         """Truncate the database"""
-        #sql = """
-#SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
-        #""".format(db=self.destination_db)
-        #with Connection(login=self.login) as conn:
-            #self.run_query(sql, conn=conn)
-            #conn.commit()
+        # sql = """
+# SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
+        # """.format(db=self.destination_db)
+        # with Connection(login=self.login) as conn:
+        #self.run_query(sql, conn=conn)
+        # conn.commit()
 
         sql = """
         SELECT 'drop schema if exists "' || schema_name || '" cascade;' AS sql
@@ -378,12 +379,12 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
                 cursor2.execute(row.sql)
             conn.commit()
 
-        #sql = """
-#update pg_database set datallowconn = 'True' where datname = '{db}';
-        #""".format(db=self.destination_db)
-        #with Connection(login=self.login) as conn:
+        # sql = """
+# update pg_database set datallowconn = 'True' where datname = '{db}';
+        # """.format(db=self.destination_db)
+        # with Connection(login=self.login) as conn:
             #self.run_query(sql, conn=conn)
-            #conn.commit()
+            # conn.commit()
 
     def cleanup(self, schema=None, conn=None):
         """
@@ -393,7 +394,7 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
             temp=schema or self.temp)
         self.run_query(sql, conn=conn or self.conn, verbose=False)
 
-    def vacuum(self, schema=None,  tables=[]):
+    def vacuum(self, schema=None, tables=[]):
         """
         """
         login = self.login
@@ -414,7 +415,7 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         folder = os.path.join(self.folder, 'projekte', self.destination_db)
         self.make_folder(folder)
 
-    def copy_tables_to_target_db(self, schema: str=None, tables: list=None,
+    def copy_tables_to_target_db(self, schema: str = None, tables: list = None,
                                  conn=None):
         schema = schema or self.schema
         conn = conn or self.conn
@@ -446,6 +447,7 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
             self.run_query(sql, conn=conn)
 
         self.cleanup(schema=temp_schema, conn=conn)
+
 
 if __name__ == '__main__':
 

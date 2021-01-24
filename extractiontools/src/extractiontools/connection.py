@@ -142,11 +142,11 @@ class DBApp:
         """
         """
         self.schema = schema
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or logging.getLogger(self.__module__)
         self.conn = conn
 
-    def set_login(self, host: str=None, port: int=None, user: str=None,
-                  password: str=None, database: str=None):
+    def set_login(self, host: str = None, port: int = None, user: str = None,
+                  password: str = None, database: str = None):
         self.login = Login(
             host or os.environ.get('DB_HOST', 'localhost'),
             port or os.environ.get('DB_PORT', 5432),
@@ -183,7 +183,7 @@ class DBApp:
             os.makedirs(folder)
 
     def run_query(self, sql: Union[str, Composed], conn=None,
-                  split=True, verbose=True, vars: Dict[str, object]=None):
+                  split=True, verbose=True, vars: Dict[str, object] = None):
         """
         runs an sql query log the statusmessage of each query
 
@@ -210,7 +210,8 @@ class DBApp:
             cur.execute(query, vars)
 
         if split:
-            query_string = sql.as_string(conn) if isinstance(sql, Composed) else sql
+            query_string = sql.as_string(
+                conn) if isinstance(sql, Composed) else sql
             for query in sqlparse.split(query_string):
                 if query.strip().rstrip(';'):
                     query_without_comments = '\n'.join([
@@ -221,7 +222,7 @@ class DBApp:
         else:
             execute(sql, vars)
 
-    def set_search_path(self, connstr: str='conn'):
+    def set_search_path(self, connstr: str = 'conn'):
         conn = getattr(self, connstr)
         sql = f'SET search_path TO {self.schema}, "$user", public;'
         cur = conn.cursor()
