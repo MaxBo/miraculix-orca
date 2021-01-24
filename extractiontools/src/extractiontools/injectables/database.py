@@ -7,6 +7,7 @@ import re
 from extractiontools.connection import Login, Connection
 from orcadjango.decorators import meta
 
+
 def get_foreign_tables(database, schema):
     login = Login(
         host=os.environ.get('FOREIGN_HOST', 'localhost'),
@@ -24,6 +25,7 @@ def get_foreign_tables(database, schema):
         cursor.execute(sql)
         rows = cursor.fetchall()
     return sorted([row.table_name for row in rows])
+
 
 @meta(group='(1) Project')
 @orca.injectable()
@@ -130,6 +132,24 @@ def subfolder_tiffs() -> str:
 def subfolder_otp() -> str:
     """subfolder for the OpenTripPlanner"""
     return 'otp'
+
+
+@meta(group='Network')
+@orca.injectable()
+def network_schema() -> str:
+    """
+    The network-schema in the database
+    """
+    return 'network'
+
+
+@meta(group='Network')
+@orca.injectable()
+def network_fr_schema() -> str:
+    """
+    The network-schema for walk/cycling in the database
+    """
+    return 'network_fr'
 
 
 @meta(group='Network')

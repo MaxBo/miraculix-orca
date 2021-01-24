@@ -22,18 +22,20 @@ default_login = Login(
     password=os.environ.get('DB_PASS', '')
 )
 
+
 @meta(group='(3) Networks', required=['extract_osm', 'extract_landuse'])
 @orca.step()
 def build_network_car(database: str,
                       chunksize: int,
                       limit4links: int,
                       links_to_find: float,
-                      corine: str):
+                      corine: str,
+                      network_schema: str):
     """
     build a car network
     """
     build_network = BuildNetwork(db=database,
-                                 network_schema='network',
+                                 network_schema=network_schema,
                                  limit=limit4links,
                                  chunksize=chunksize,
                                  links_to_find=links_to_find,
@@ -49,12 +51,13 @@ def build_network_fr(database: str,
                      limit4links: int,
                      links_to_find: float,
                      corine: str,
-                     routing_walk: bool):
+                     routing_walk: bool,
+                     network_fr_schema: str):
     """
     build a walk and cycle network
     """
     build_network = BuildNetworkWalkCycle(db=database,
-                                          network_schema='network_fr',
+                                          network_schema=network_fr_schema,
                                           limit=limit4links,
                                           chunksize=chunksize,
                                           links_to_find=links_to_find,
@@ -309,7 +312,7 @@ def gdbname(database) -> str:
 @meta(group='Export', required=build_network_car)
 @orca.step()
 def copy_network_car_fgdb(database: str,
-                         network_layers: Dict[str, str]):
+                          network_layers: Dict[str, str]):
     """copy car network to a file-gdb"""
     copy2fgdb = Copy2FGDB(database,
                           layers=network_layers,
@@ -321,7 +324,7 @@ def copy_network_car_fgdb(database: str,
 @meta(group='Export', required=build_network_fr)
 @orca.step()
 def copy_network_fr_fgdb(database: str,
-                            network_fr_layers: Dict[str, str]):
+                         network_fr_layers: Dict[str, str]):
     """copy walk and cycle network to a file-gdb"""
     copy2fgdb = Copy2FGDB(database, layers=network_fr_layers,
                           gdbname='network_fr.gdb',

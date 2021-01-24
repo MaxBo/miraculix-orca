@@ -122,8 +122,8 @@ SELECT st_srid(geom) AS srid FROM meta.boundary LIMIT 1;
         """
         self.logger.info(f'Create Views')
         sql = """
-DROP SCHEMA IF EXISTS {network} CASCADE;
-CREATE SCHEMA {network};
+DROP SCHEMA IF EXISTS "{network}" CASCADE;
+CREATE SCHEMA "{network}";
         """.format(network=self.network)
         self.run_query(sql)
 
@@ -1168,7 +1168,7 @@ FROM "{network}".links l;
         for fromrow in range(0, n_edges, chunksize):
             torow = fromrow + chunksize
             sql = """
-SELECT pgr_createTopology('{network}.edge_table',
+SELECT pgr_createTopology(E'{network}.edge_table',
     {tolerance},
     'geom',
     'id',
@@ -1184,7 +1184,7 @@ COMMIT;
             self.run_query(sql)
 
         sql = """
-SELECT pgr_analyzeGraph('{network}.edge_table',{tolerance},
+SELECT pgr_analyzeGraph(E'{network}.edge_table',{tolerance},
 'geom','id','source','target');
         """.format(tolerance=0.000001, network=self.network)
         self.logger.info('Analyze Graph')
@@ -1346,8 +1346,8 @@ CREATE OR REPLACE VIEW "{network}".reached_from AS
 -- Knoten, die in Hinrichtung erreicht werden
 SELECT seq, node::integer, agg_cost AS cost
 FROM pgr_drivingDistance(
-'SELECT id, source, target, cost, reverse_cost
-FROM {network}.edge_table',
+E'SELECT id, source, target, cost, reverse_cost
+FROM "{network}".edge_table',
 {startvertex}, {maxcosts}, true
 );
 
@@ -1355,8 +1355,8 @@ CREATE OR REPLACE VIEW "{network}".reached_to AS
 -- Knoten, die in Hinrichtung erreicht werden
 SELECT seq, node::integer, agg_cost AS cost
 FROM pgr_drivingDistance(
-'SELECT id, source, target, reverse_cost as cost, cost as reverse_cost
- FROM {network}.edge_table',
+E'SELECT id, source, target, reverse_cost as cost, cost as reverse_cost
+ FROM "{network}".edge_table',
 {startvertex}, {maxcosts}, true
 );
 """.format(startvertex=startvertex, maxcosts=maxcosts, network=self.network)
