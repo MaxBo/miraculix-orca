@@ -113,7 +113,7 @@ class ScrapeTimetable(ScrapeStops):
                 f'Looking for Routes at stop "{row[1]}"... '
                 f'({r+1}/{len(rows)})')
             stop_id = row[0]
-            #self.clear_journeys(stop_id)
+
             db_query = BahnQuery(dt=self.date, timeout=0)
             retries = 0
             journeys = []
@@ -154,8 +154,8 @@ class ScrapeTimetable(ScrapeStops):
         WHERE "H_ID"=%(stop_id)s
         AND suchdatum=%(date)s;
         '''
-        self.run_query(sql,verbose=False, vars={'stop_id': stop_id,
-                                                'date': self.date,})
+        self.run_query(sql, verbose=False, vars={'stop_id': stop_id,
+                                                 'date': self.date, })
 
     def add_journey(self, journey, route, stop_id):
         # dt_txt = journey['departure'].strftime('%H:%M')
@@ -167,32 +167,32 @@ class ScrapeTimetable(ScrapeStops):
         "Fahrt_Nr", "H_ID",
         suchdatum)
         VALUES
-          (%(url)s, %(journey_name)s, %(dt_text)s, %(station_name)s, %(dest)s,
+          (%(url)s, %(journey_name)s, %(dt_txt)s, %(station_name)s, %(dest)s,
            %(journey_number)s, %(stop_id)s, %(time)s)
         RETURNING "abfahrt_id";
         '''
         cur = self.conn.cursor()
         cur.execute(sql,
                     dict(
-            url=journey['url'],
-            journey_name=journey['name'],
-            dt_text=dt_text,
-            station_name=route[0]['station_name'],
-            dest=journey['destination'],
-            journey_number=journey['number'] or 'NULL',
-            stop_id=stop_id,
-            time=self.date.strftime(self.sql_date_format),
+                        url=journey['url'],
+                        journey_name=journey['name'],
+                        dt_txt=dt_txt,
+                        station_name=route[0]['station_name'],
+                        dest=journey['destination'],
+                        journey_number=journey['number'] or None,
+                        stop_id=stop_id,
+                        time=self.date.strftime(self.sql_date_format),
                     )
-                )
+                    )
         j_id = cur.fetchone()
 
         for i, section in enumerate(route):
             arr_time = section.get('arrival')
             at = (f"'{arr_time.strftime(self.sql_timestamp_format)}'"
-                  if arr_time else 'NULL')
+                  if arr_time else None)
             dep_time = section.get('departure')
             dt = (f"'{dep_time.strftime(self.sql_timestamp_format)}'"
-                  if dep_time else 'NULL')
+                  if dep_time else None)
             sql = f"""
             INSERT INTO fahrten
             (abfahrt_id, "Fahrt_Name", fahrt_index,
@@ -204,7 +204,7 @@ class ScrapeTimetable(ScrapeStops):
             cur.execute(sql, vars=dict(
                 journey_id=j_id[0],
                 journey_name=journey['name'],
-                index=i+1,
+                index=i + 1,
                 station_name=section['station_name'],
                 at=at,
                 dt=dt,
@@ -224,10 +224,10 @@ class ScrapeTimetable(ScrapeStops):
         """
         cursor = self.conn.cursor()
         cursor.execute(sql, vars=dict(journey_name=journey['name'],
-                                        stop_id=stop_id,
-                                        departure=departure,
-                                        journey_dest=journey['destination'],
-                                        ))
+                                      stop_id=stop_id,
+                                      departure=departure,
+                                      journey_dest=journey['destination'],
+                                      ))
         row = cursor.fetchone()
         return row is not None
 
