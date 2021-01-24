@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 from __future__ import annotations
 import datetime
@@ -26,7 +26,7 @@ class Date(datetime.date):
             month = today.month
         if day is None:
             day = today.day
-        return super(Date, cls).__new__(cls, int(year), int(month), int(day))
+        return super().__new__(cls, int(year), int(month), int(day))
 
     def __repr__(self):
         """string representation """
@@ -49,7 +49,7 @@ class Date(datetime.date):
             msg = f'{datestring} not valid for format DD.MM.YYYY or DD/MM/YYYY'
 
             raise ValueError(msg)
-        return super(Date, cls).__new__(cls, year, month, day)
+        return super().__new__(cls, year, month, day)
 
     def get_timestamp(self, time_to_convert):
         """
@@ -65,6 +65,7 @@ class Date(datetime.date):
     @property
     def day(self):
         return self.timetuple().tm_mday
+
 
 def get_timestamp2(time_to_convert, date=None):
     """

@@ -436,7 +436,7 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
             tables = [row[0] for row in rows]
 
         sql = f'''CREATE SCHEMA IF NOT EXISTS {schema};'''
-        self.run_query(sql, conn=self.conn)
+        self.run_query(sql, conn=conn)
         for table in tables:
             sql = f'''
             DROP TABLE IF EXISTS {schema}.{table};
