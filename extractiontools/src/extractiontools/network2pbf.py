@@ -219,11 +219,7 @@ USING btree(id);
                          self.subfolder,
                          )
         )
-        exists = os.path.exists(folder)
-        self.logger.info(f'folder {folder} exists: {exists}')
         os.makedirs(folder, exist_ok=True)
-        exists = os.path.exists(folder)
-        self.logger.info(f'folder {folder} exists: {exists}')
 
         file_path = os.path.join(folder, fn)
 
@@ -274,7 +270,7 @@ CREATE OR REPLACE VIEW "{schema}".actions AS
    FROM osm.actions a;
 
 CREATE OR REPLACE VIEW "{schema}".boundary AS
- SELECT b.id,
+ SELECT b.name,
     st_transform(b.geom, {srid}) AS geom
    FROM meta.boundary b;
 

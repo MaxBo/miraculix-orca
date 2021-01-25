@@ -179,9 +179,7 @@ class DBApp:
         raise an IOError, if this fails
         """
         self.check_platform()
-        self.logger.info(f'check if folder {folder} exists ...')
         if not os.path.exists(folder):
-            self.logger.info(f'Create folder {folder} ...')
             os.makedirs(folder)
 
     def run_query(self, sql: Union[str, Composed], conn=None,
