@@ -25,7 +25,7 @@ from lxml import html
 import requests
 
 
-class BahnQuery(object):
+class BahnQuery:
     '''
     Deutsche-Bahn-scraper for connections, stops and time tables
     '''
@@ -133,7 +133,6 @@ class BahnQuery(object):
             return re.search(regex, href).group(1)
 
         stops = []
-
         for row in rows:
             name = row.text
             if not name:
@@ -153,8 +152,8 @@ class BahnQuery(object):
             }
             stops.append(stop)
 
-        # response should be sorted by distances in first place,
-        # but do it again because you can
+            # response should be sorted by distances in first place,
+            # but do it again because you can
         stops_sorted = sorted(stops, key=lambda x: x['distance'])
         if n < len(stops_sorted):
             stops = stops_sorted[:n]
@@ -239,7 +238,8 @@ class BahnQuery(object):
                 # departure
                 content = [t.text for t in row.find_class('time')]
 
-                matches = re.findall( r'\d{1,2}:\d{1,2}', ' - '.join(content))
+                matches = re.findall(
+                    r'\d{1,2}:\d{1,2}', ' - '.join(content))
                 departure = matches[0] if len(matches) > 0 else ''
 
                 # modes
@@ -254,7 +254,7 @@ class BahnQuery(object):
 
         return duration, departure, changes, mode
 
-    def scrape_journeys(self, stop_id: int, max_journeys: int=10000) -> list:
+    def scrape_journeys(self, stop_id: int, max_journeys: int = 10000) -> list:
         '''
         scrape journeys from time table for stop with given id (HAFAS)
 
@@ -281,9 +281,13 @@ class BahnQuery(object):
         journeys = [row for row in rows
                     if row.get('id') and 'journeyRow_' in row.get('id')]
         error = root.xpath('//div[contains(@class, "error")]')
-        if error and error.text:
-            raise ConnectionError(
-                f'Error while querying DB-site: "{error.text}"')
+        if error:
+            if getattr(error, 'text', None):
+                raise ConnectionError(
+                    f'Error while querying DB-site: {r.url} : "{error.text}')
+            else:
+                raise ConnectionError(
+                    f'Error while querying DB-site: {r.url}')
         res = []
         for journey in journeys:
             j_attrs = {}
@@ -291,7 +295,8 @@ class BahnQuery(object):
             route = journey.find_class('route')[0]
             destination = route.find('.//a').text.replace('\n', '')
             j_attrs['destination'] = destination.strip()
-            route_times = re.findall( r'\d{1,2}:\d{1,2}', route.text_content())
+            route_times = re.findall(
+                r'\d{1,2}:\d{1,2}', route.text_content())
             dt_txt = route_times[0]
             dt = datetime.datetime.strptime(dt_txt, self.time_format).time()
             j_attrs['departure'] = datetime.datetime.combine(self.date, dt)
@@ -357,12 +362,14 @@ class BahnQuery(object):
             dep_time = parse_time(row.find_class('departure')[0])
 
             if arr_time:
-                section['arrival'] = datetime.datetime.combine(date, arr_time)
+                section['arrival'] = datetime.datetime.combine(
+                    date, arr_time)
             if dep_time:
                 # departure is next day
                 if arr_time and arr_time > dep_time:
                     date += datetime.timedelta(days=1)
-                section['departure'] = datetime.datetime.combine(date, dep_time)
+                section['departure'] = datetime.datetime.combine(
+                    date, dep_time)
             route.append(section)
         return route
 

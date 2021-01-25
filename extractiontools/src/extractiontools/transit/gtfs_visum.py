@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 # Author:   --<>
 # Purpose:
 # Created: 13/03/2015
@@ -14,10 +14,12 @@ from simcommon.matrixio import XRecArray, XMaskedRecarray
 import os
 import logging
 
-net_types_map={'Rail': 2,
-               'Bus': 3,
-               'AST': 6,
-               'Sonstiges': 4,}
+net_types_map = {'Rail': 2,
+                 'Bus': 3,
+                 'AST': 6,
+                 'Sonstiges': 4, }
+
+
 def get_nettype(key):
     return net_types_map.get(key, -1)
 
@@ -29,7 +31,7 @@ class GTFSVISUM(object):
         """
         convert a visum netfile into a gtfs zipfile
         """
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or logging.getLogger(self.__module__)
         self.visum = Visum(netfile)
         self.gtfs = GTFS(gtfs_folder, gtfs_filename)
 
@@ -98,7 +100,8 @@ class GTFSVISUM(object):
         hp.is_angefahren = np.in1d(hp.NR, unique_hp, assume_unique=True)
 
         hp_angefahren = hp.rows[hp.is_angefahren]
-        self.logger.debug('{} of {} hp angefahren'.format(len(hp_angefahren), hp.n_rows))
+        self.logger.debug('{} of {} hp angefahren'.format(
+            len(hp_angefahren), hp.n_rows))
 
         gtfs_stops.add_rows(len(hp_angefahren))
         knoten = self.visum.knoten
@@ -106,15 +109,16 @@ class GTFSVISUM(object):
         hp_knoten_lon = knoten.get_rows_by_pkey('lon', hp_angefahren.KNOTNR)
 
         #lat, lon = visum_haltepunkt.transform_to_latlon()
-        gtfs_stops.rows.stop_id = np.array('S', dtype='U1').view(np.chararray) + hp_angefahren.NR.astype('U49')
+        gtfs_stops.rows.stop_id = np.array('S', dtype='U1').view(
+            np.chararray) + hp_angefahren.NR.astype('U49')
         gtfs_stops.rows.stop_name = hp_angefahren.NAME
         gtfs_stops.rows.stop_lat = hp_knoten_lat
         gtfs_stops.rows.stop_lon = hp_knoten_lon
         # station gets an 'S' in front of the station number
         hp_hstber = gtfs_stops.rows.parent_station
         station = (
-            np.full_like(hp_hstber, 'S') +
-            hp_angefahren.HSTBERNR.astype(hp_hstber.dtype))
+            np.full_like(hp_hstber, 'S')
+            + hp_angefahren.HSTBERNR.astype(hp_hstber.dtype))
         hp_hstber[:] = station
 
     def convert_gehzeiten(self):
@@ -130,12 +134,12 @@ class GTFSVISUM(object):
 
         vhstber = hstber_prefix + gz.VONHSTBERNR.astype('U49')
         von_hp, vh_in_stops = stops.get_dictlist_by_non_unique_key(stops.parent_station,
-                                                                  'stop_id', vhstber)
+                                                                   'stop_id', vhstber)
 
         nhstber = hstber_prefix + gz.NACHHSTBERNR.astype('U49')
-        #gz.NACHHSTBERNR.astype(dtype)
-        nach_hp,nh_in_stops = stops.get_dictlist_by_non_unique_key(stops.parent_station,
-                                                                   'stop_id', nhstber)
+        # gz.NACHHSTBERNR.astype(dtype)
+        nach_hp, nh_in_stops = stops.get_dictlist_by_non_unique_key(stops.parent_station,
+                                                                    'stop_id', nhstber)
 
         in_stops = vh_in_stops & nh_in_stops
 
@@ -154,7 +158,6 @@ class GTFSVISUM(object):
         data = XRecArray(result, dtype=tf.cols.dtype)
         unique_data = np.unique(data)
         n_rows = len(unique_data)
-
 
         tf.add_rows(n_rows)
         tf.rows[:] = unique_data
@@ -177,9 +180,10 @@ class GTFSVISUM(object):
 
         # map VSYSCODE vectorized
         line_vsyscode = visum_linie.rows.VSYSCODE
-        vsyscode =  self.visum.vsys.rows.CODE
+        vsyscode = self.visum.vsys.rows.CODE
         vsysname = self.visum.vsys.rows.NAME
         d = dict(list(zip(vsyscode, vsysname)))
+
         def get_gtfs_name(key):
             name = d.get(key, -1)
             gtfs_type = net_types_map.get(name, -1)
@@ -192,7 +196,7 @@ class GTFSVISUM(object):
         """convert linienrouten to trips, stop_times and shapes"""
         lre = self.visum.linienroutenelement
         visum_lr = self.visum.linienroute
-        lr, lr_idx, shape_id,lr_counts = np.unique(
+        lr, lr_idx, shape_id, lr_counts = np.unique(
             lre.get_columns_by_names(visum_lr.pkey_cols),
             return_index=True,
             return_counts=True,
@@ -204,7 +208,6 @@ class GTFSVISUM(object):
         visum_lr.lr_counts = lr_counts
         visum_lr.shape_id = np.arange(visum_lr.n_rows)
         lre.shape_id = shape_id
-
 
         fzpe = self.visum.fahrzeitprofilelement
         visum_fp = self.visum.fahrzeitprofil
@@ -240,29 +243,29 @@ class GTFSVISUM(object):
 
         fzpe_profil_cols = fzpe.get_columns_by_names_hashable(lr.pkey_cols)
         fzpe_rowidx_in_lre = lr.get_rows_by_pkey('lr_idx',
-                                                   fzpe_profil_cols)
+                                                 fzpe_profil_cols)
         fzpe_counts_in_lre = lr.get_rows_by_pkey('lr_counts',
-                                                   fzpe_profil_cols)
+                                                 fzpe_profil_cols)
 
-
-        fahrt_profil_cols = fahrten.get_columns_by_names_hashable(fp.pkey_cols)
+        fahrt_profil_cols = fahrten.get_columns_by_names_hashable(
+            fp.pkey_cols)
         fahrt_rowidx_in_fzpe = fp.get_rows_by_pkey('fzpe_indx',
-                                                  fahrt_profil_cols)
+                                                   fahrt_profil_cols)
         fahrt_counts_in_fzpe = fp.get_rows_by_pkey('fzpe_counts',
                                                    fahrt_profil_cols)
 
         self.logger.debug('add shapes')
         # get the unique shapes defined by lr and vonlreidx -> tolreidx
 
-        fahrt_von_fzpe_cols = fahrten.get_columns_by_names_hashable(fp.pkey_cols+
+        fahrt_von_fzpe_cols = fahrten.get_columns_by_names_hashable(fp.pkey_cols +
                                                                     ['VONFZPELEMINDEX'])
         fahrten_von_lridx = fzpe.get_rows_by_pkey('LRELEMINDEX',
-                                                   fahrt_von_fzpe_cols)
+                                                  fahrt_von_fzpe_cols)
 
-        fahrt_nach_fzpe_cols = fahrten.get_columns_by_names_hashable(fp.pkey_cols+
-                                                                    ['NACHFZPELEMINDEX'])
+        fahrt_nach_fzpe_cols = fahrten.get_columns_by_names_hashable(fp.pkey_cols +
+                                                                     ['NACHFZPELEMINDEX'])
         fahrten_nach_lridx = fzpe.get_rows_by_pkey('LRELEMINDEX',
-                                                fahrt_nach_fzpe_cols)
+                                                   fahrt_nach_fzpe_cols)
 
         fahrt_lr_cols = [getattr(fahrten, col) for col in lr.pkey_cols]
         shape_idx = XRecArray.fromarrays(
@@ -270,7 +273,7 @@ class GTFSVISUM(object):
             names=['LINNAME', 'LINROUTENAME', 'RICHTUNGCODE',
                    'VONLRIDX', 'NACHLRIDX'])
 
-        #sh, sh_idx, fahrt_shape_ids, lr_counts = np.unique(
+        # sh, sh_idx, fahrt_shape_ids, lr_counts = np.unique(
         sh, sh_idx, fahrt_shape_rows, lr_counts = np.unique(
             shape_idx,
             return_index=True,
@@ -290,7 +293,8 @@ class GTFSVISUM(object):
         lon = knoten.get_rows_by_pkey('lon', lre_knoten)
 
         shape_lr_key_col = sh[lr.pkey_cols]
-        shape_lr_key_col = shape_lr_key_col.view(dtype='S%s' %shape_lr_key_col.itemsize)
+        shape_lr_key_col = shape_lr_key_col.view(
+            dtype='S%s' % shape_lr_key_col.itemsize)
         shape_lr_idx = lr.get_rows_by_pkey(
             'lr_idx', shape_lr_key_col)
 
@@ -318,10 +322,10 @@ class GTFSVISUM(object):
 
         self.logger.debug('add stop_times')
         # stop times
-        n_rows = (fahrten.NACHFZPELEMINDEX - fahrten.VONFZPELEMINDEX + 1).sum()
+        n_rows = (fahrten.NACHFZPELEMINDEX
+                  - fahrten.VONFZPELEMINDEX + 1).sum()
 
         stoptimes.add_rows(n_rows)
-
 
         st_von_idx = 0
 
@@ -336,7 +340,7 @@ class GTFSVISUM(object):
             fahrt_st = stoptimes.rows[st_von_idx:st_nach_idx]
 
             fzp = fzpe.rows[start_idx:end_idx]
-            fahrt_fzpe = fzp[fahrt.VONFZPELEMINDEX - 1 :
+            fahrt_fzpe = fzp[fahrt.VONFZPELEMINDEX - 1:
                              fahrt.NACHFZPELEMINDEX]
 
             fahrt_lre_idx_start = fzpe_rowidx_in_lre[start_idx]
@@ -352,9 +356,11 @@ class GTFSVISUM(object):
             departure = fahrt_abfahrt + abfahrt
             fahrt_st.arrival_time = timedelta_to_HHMMSS(arrival)
             fahrt_st.departure_time = timedelta_to_HHMMSS(departure)
-            current_index = fahrt_fzpe.LRELEMINDEX + (fahrt_lre_idx_start - 1)
+            current_index = fahrt_fzpe.LRELEMINDEX + \
+                (fahrt_lre_idx_start - 1)
             fahrt_st.stop_sequence = lre.INDEX.take(current_index)
-            fahrt_st.stop_id = np.array('S', dtype='U1').view(np.chararray) + lre.HPUNKTNR.take(current_index).astype('U49')
+            fahrt_st.stop_id = np.array('S', dtype='U1').view(
+                np.chararray) + lre.HPUNKTNR.take(current_index).astype('U49')
             fahrt_st.pickup_type = (fahrt_fzpe.EIN == 0)
             fahrt_st.drop_off_type = (fahrt_fzpe.AUS == 0)
 
@@ -364,7 +370,8 @@ class GTFSVISUM(object):
 
 def main():
     from argparse import ArgumentParser
-    parser = ArgumentParser(description='convert VISUM .net-file to gfts-feed')
+    parser = ArgumentParser(
+        description='convert VISUM .net-file to gfts-feed')
     parser.add_argument("-d", "--debug", action="store_true",
                         help="print debug information",
                         dest="debug", default=False)
@@ -387,6 +394,7 @@ def main():
 
     gtfs2visum = GTFSVISUM.net2gtfs(options)
     gtfs2visum.visum2gtfs()
+
 
 if __name__ == '__main__':
     main()

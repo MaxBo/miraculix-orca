@@ -28,6 +28,7 @@ class CopyNetwork2Pbf(DBApp):
         self.network = network_schema
         self.subfolder = subfolder_pbf
         self.srid = srid
+        self.check_platform()
 
     def copy(self):
         """
@@ -48,19 +49,19 @@ class CopyNetwork2Pbf(DBApp):
 DROP SCHEMA IF EXISTS {schema} CASCADE;
 CREATE SCHEMA {schema};
 
-CREATE OR REPLACE VIEW {schema}.actions AS
+CREATE OR REPLACE VIEW "{schema}".actions AS
  SELECT a.data_type,
     a.action,
     a.id
    FROM osm.actions a;
 
-CREATE OR REPLACE VIEW {schema}.boundary AS
- SELECT b.id,
-    st_transform(b.geom, {srid}) AS geom
+CREATE OR REPLACE VIEW "{schema}".boundary AS
+ SELECT b."name",
+    b.source_geom AS geom
    FROM meta.boundary b;
 
-DROP VIEW IF EXISTS {schema}.ways CASCADE;
-CREATE MATERIALIZED VIEW {schema}.ways AS
+DROP VIEW IF EXISTS "{schema}".ways CASCADE;
+CREATE MATERIALIZED VIEW "{schema}".ways AS
  SELECT w.id,
     w.version,
     w.user_id,
@@ -72,22 +73,22 @@ CREATE MATERIALIZED VIEW {schema}.ways AS
     st_transform(w.linestring, {srid}) AS linestring
    FROM osm.ways w, {network}.links_reached_without_planned l
    WHERE w.id = l.wayid;
-CREATE INDEX way_id_idx ON {schema}.ways
+CREATE INDEX way_id_idx ON "{schema}".ways
 USING btree(id);
 
-CREATE OR REPLACE VIEW {schema}.schema_info AS
+CREATE OR REPLACE VIEW "{schema}".schema_info AS
  SELECT s.version
    FROM osm.schema_info s;
 
-CREATE OR REPLACE VIEW {schema}.way_nodes AS
+CREATE OR REPLACE VIEW "{schema}".way_nodes AS
  SELECT wn.way_id,
     wn.node_id,
     wn.sequence_id
-   FROM osm.way_nodes wn, {schema}.ways w
+   FROM osm.way_nodes wn, "{schema}".ways w
    WHERE wn.way_id = w.id;
 
-DROP VIEW IF EXISTS {schema}.nodes CASCADE;
-CREATE MATERIALIZED VIEW {schema}.nodes AS
+DROP VIEW IF EXISTS "{schema}".nodes CASCADE;
+CREATE MATERIALIZED VIEW "{schema}".nodes AS
  SELECT n.id,
     n.version,
     n.user_id,
@@ -95,41 +96,41 @@ CREATE MATERIALIZED VIEW {schema}.nodes AS
     n.changeset_id,
     n.tags,
     st_transform(n.geom, {srid}) AS geom
-   FROM osm.nodes n, (SELECT DISTINCT node_id FROM {schema}.way_nodes) wn
+   FROM osm.nodes n, (SELECT DISTINCT node_id FROM "{schema}".way_nodes) wn
    WHERE n.id = wn.node_id;
-CREATE INDEX node_id_idx ON {schema}.nodes
+CREATE INDEX node_id_idx ON "{schema}".nodes
 USING btree(id);
 
-CREATE TABLE {schema}.active_relations (id integer primary key);
+CREATE TABLE "{schema}".active_relations (id integer primary key);
 
-INSERT INTO {schema}.active_relations
+INSERT INTO "{schema}".active_relations
 SELECT DISTINCT r.id
 FROM osm.relations r,
 osm.relation_members rm,
-{schema}.nodes n
+"{schema}".nodes n
 WHERE r.id = rm.relation_id
 AND rm.member_type = 'N'
 AND rm.member_id = n.id;
 
-INSERT INTO {schema}.active_relations
+INSERT INTO "{schema}".active_relations
 SELECT DISTINCT r.id
 FROM osm.relations r,
 osm.relation_members rm,
-{schema}.ways w
+"{schema}".ways w
 WHERE r.id = rm.relation_id
 AND rm.member_type = 'W'
 AND rm.member_id = w.id
-AND NOT EXISTS (SELECT 1 FROM {schema}.active_relations ar WHERE r.id = ar.id);
+AND NOT EXISTS (SELECT 1 FROM "{schema}".active_relations ar WHERE r.id = ar.id);
 
-INSERT INTO {schema}.active_relations
+INSERT INTO "{schema}".active_relations
 SELECT DISTINCT r.id
 FROM osm.relations r,
 osm.relation_members rm,
-{schema}.active_relations ar
+"{schema}".active_relations ar
 WHERE r.id = rm.relation_id
 AND rm.member_type = 'R'
 AND rm.member_id = ar.id
-AND NOT EXISTS (SELECT 1 FROM {schema}.active_relations ar WHERE r.id = ar.id);
+AND NOT EXISTS (SELECT 1 FROM "{schema}".active_relations ar WHERE r.id = ar.id);
 
         """.format(schema=self.schema,
                    network=self.network,
@@ -137,12 +138,12 @@ AND NOT EXISTS (SELECT 1 FROM {schema}.active_relations ar WHERE r.id = ar.id);
         self.run_query(sql)
 
         sql = """
-CREATE INDEX node_user_id_idx ON {schema}.nodes
+CREATE INDEX node_user_id_idx ON "{schema}".nodes
 USING btree(user_id);
-CREATE INDEX ways_user_id_idx ON {schema}.ways
+CREATE INDEX ways_user_id_idx ON "{schema}".ways
 USING btree(user_id);
-DROP VIEW IF EXISTS {schema}.relations CASCADE;
-CREATE MATERIALIZED VIEW {schema}.relations AS
+DROP VIEW IF EXISTS "{schema}".relations CASCADE;
+CREATE MATERIALIZED VIEW "{schema}".relations AS
  SELECT r.id,
     r.version,
     r.user_id,
@@ -150,39 +151,39 @@ CREATE MATERIALIZED VIEW {schema}.relations AS
     r.changeset_id,
     r.tags
    FROM osm.relations r,
-   {schema}.active_relations ar
+   "{schema}".active_relations ar
    WHERE r.id = ar.id;
-CREATE INDEX relations_id_idx ON {schema}.relations
+CREATE INDEX relations_id_idx ON "{schema}".relations
 USING btree(id);
-ANALYZE {schema}.relations;
-ANALYZE {schema}.nodes;
-ANALYZE {schema}.ways;
+ANALYZE "{schema}".relations;
+ANALYZE "{schema}".nodes;
+ANALYZE "{schema}".ways;
 
-DROP VIEW IF EXISTS {schema}.relation_members CASCADE;
-CREATE MATERIALIZED VIEW {schema}.relation_members AS
+DROP VIEW IF EXISTS "{schema}".relation_members CASCADE;
+CREATE MATERIALIZED VIEW "{schema}".relation_members AS
  SELECT rm.relation_id,
     rm.member_id,
     rm.member_type,
     rm.member_role,
     rm.sequence_id
    FROM osm.relation_members rm,
-   {schema}.active_relations ar
+   "{schema}".active_relations ar
    WHERE rm.relation_id = ar.id;
-CREATE INDEX relation_members_id_idx ON {schema}.relation_members
+CREATE INDEX relation_members_id_idx ON "{schema}".relation_members
 USING btree(relation_id, sequence_id);
 
-DROP VIEW IF EXISTS {schema}.users CASCADE;
-CREATE MATERIALIZED VIEW {schema}.users AS
+DROP VIEW IF EXISTS "{schema}".users CASCADE;
+CREATE MATERIALIZED VIEW "{schema}".users AS
  SELECT u.id,
     u.name
    FROM osm.users u
    WHERE EXISTS
-   (SELECT 1 FROM {schema}.relations r WHERE u.id = r.user_id)
+   (SELECT 1 FROM "{schema}".relations r WHERE u.id = r.user_id)
    OR EXISTS
-   (SELECT 1 FROM {schema}.ways w WHERE u.id = w.user_id)
+   (SELECT 1 FROM "{schema}".ways w WHERE u.id = w.user_id)
    OR EXISTS
-   (SELECT 1 FROM {schema}.nodes n WHERE u.id = n.user_id);
-CREATE INDEX users_pkey ON {schema}.users
+   (SELECT 1 FROM "{schema}".nodes n WHERE u.id = n.user_id);
+CREATE INDEX users_pkey ON "{schema}".users
 USING btree(id);
 
         """.format(schema=self.schema,
@@ -201,7 +202,7 @@ USING btree(id);
             self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
         else:
             self.OSM_FOLDER = '$HOME/gis/osm'
-            self.OSMOSISPATH = os.path.join('/opt', 'osmosis', 'osmosis-0.48',
+            self.OSMOSISPATH = os.path.join('/opt', 'osmosis',
                                             'bin', 'osmosis')
         self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
 
@@ -211,12 +212,18 @@ USING btree(id);
         """
 
         fn = f'{self.login.db}_{self.network}'
-        folder = os.path.join(self.folder,
-                              'projekte',
-                              self.login.db,
-                              self.subfolder,
-                              )
-        self.make_folder(folder)
+        folder = os.path.abspath(
+            os.path.join(self.folder,
+                         'projekte',
+                         self.login.db,
+                         self.subfolder,
+                         )
+        )
+        exists = os.path.exists(folder)
+        self.logger.info(f'folder {folder} exists: {exists}')
+        os.makedirs(folder, exist_ok=True)
+        exists = os.path.exists(folder)
+        self.logger.info(f'folder {folder} exists: {exists}')
 
         file_path = os.path.join(folder, fn)
 
@@ -260,19 +267,19 @@ class CopyNetwork2PbfTagged(CopyNetwork2Pbf):
 DROP SCHEMA IF EXISTS {schema} CASCADE;
 CREATE SCHEMA {schema};
 
-CREATE OR REPLACE VIEW {schema}.actions AS
+CREATE OR REPLACE VIEW "{schema}".actions AS
  SELECT a.data_type,
     a.action,
     a.id
    FROM osm.actions a;
 
-CREATE OR REPLACE VIEW {schema}.boundary AS
+CREATE OR REPLACE VIEW "{schema}".boundary AS
  SELECT b.id,
     st_transform(b.geom, {srid}) AS geom
    FROM meta.boundary b;
 
-DROP VIEW IF EXISTS {schema}.ways CASCADE;
-CREATE MATERIALIZED VIEW {schema}.ways AS
+DROP VIEW IF EXISTS "{schema}".ways CASCADE;
+CREATE MATERIALIZED VIEW "{schema}".ways AS
  SELECT l.wayid * 1000 + l.segment AS id,
     w.version,
     w.user_id,
@@ -299,25 +306,25 @@ CREATE MATERIALIZED VIEW {schema}.ways AS
    AND l.wayid = lp.wayid
    AND l.segment = lp.segment;
 
-CREATE INDEX way_id_idx ON {schema}.ways
+CREATE INDEX way_id_idx ON "{schema}".ways
 USING btree(id);
-CREATE INDEX way_id_original_idx ON {schema}.ways
+CREATE INDEX way_id_original_idx ON "{schema}".ways
 USING btree(way_id_original);
 
-CREATE OR REPLACE VIEW {schema}.schema_info AS
+CREATE OR REPLACE VIEW "{schema}".schema_info AS
  SELECT s.version
    FROM osm.schema_info s;
 
-CREATE OR REPLACE VIEW {schema}.way_nodes AS
+CREATE OR REPLACE VIEW "{schema}".way_nodes AS
  SELECT w.id AS way_id,
     lp.nodeid AS node_id,
     row_number() OVER(PARTITION BY w.id ORDER BY lp.idx) AS sequence_id
    FROM {network}.link_points lp,
-        {schema}.ways w
+        "{schema}".ways w
    WHERE lp.wayid * 1000 + lp.segment = w.id;
 
-DROP VIEW IF EXISTS {schema}.nodes CASCADE;
-CREATE MATERIALIZED VIEW {schema}.nodes AS
+DROP VIEW IF EXISTS "{schema}".nodes CASCADE;
+CREATE MATERIALIZED VIEW "{schema}".nodes AS
  SELECT n.id,
     n.version,
     n.user_id,
@@ -330,41 +337,41 @@ CREATE MATERIALIZED VIEW {schema}.nodes AS
    FROM osm.nodes n
    LEFT JOIN {network}.junctions_z j ON (n.id = j.nodeid)
    ,
-   (SELECT DISTINCT node_id FROM {schema}.way_nodes) wn
+   (SELECT DISTINCT node_id FROM "{schema}".way_nodes) wn
    WHERE n.id = wn.node_id;
-CREATE INDEX node_id_idx ON {schema}.nodes
+CREATE INDEX node_id_idx ON "{schema}".nodes
 USING btree(id);
 
-CREATE TABLE {schema}.active_relations (id integer primary key);
+CREATE TABLE "{schema}".active_relations (id integer primary key);
 
-INSERT INTO {schema}.active_relations
+INSERT INTO "{schema}".active_relations
 SELECT DISTINCT r.id
 FROM osm.relations r,
 osm.relation_members rm,
-{schema}.nodes n
+"{schema}".nodes n
 WHERE r.id = rm.relation_id
 AND rm.member_type = 'N'
 AND rm.member_id = n.id;
 
-INSERT INTO {schema}.active_relations
+INSERT INTO "{schema}".active_relations
 SELECT DISTINCT r.id
 FROM osm.relations r,
 osm.relation_members rm,
-{schema}.ways w
+"{schema}".ways w
 WHERE r.id = rm.relation_id
 AND rm.member_type = 'W'
 AND rm.member_id = w.way_id_original
-AND NOT EXISTS (SELECT 1 FROM {schema}.active_relations ar WHERE r.id = ar.id);
+AND NOT EXISTS (SELECT 1 FROM "{schema}".active_relations ar WHERE r.id = ar.id);
 
-INSERT INTO {schema}.active_relations
+INSERT INTO "{schema}".active_relations
 SELECT DISTINCT r.id
 FROM osm.relations r,
 osm.relation_members rm,
-{schema}.active_relations ar
+"{schema}".active_relations ar
 WHERE r.id = rm.relation_id
 AND rm.member_type = 'R'
 AND rm.member_id = ar.id
-AND NOT EXISTS (SELECT 1 FROM {schema}.active_relations ar WHERE r.id = ar.id);
+AND NOT EXISTS (SELECT 1 FROM "{schema}".active_relations ar WHERE r.id = ar.id);
 
         """.format(schema=self.schema,
                    network=self.network,
@@ -372,12 +379,12 @@ AND NOT EXISTS (SELECT 1 FROM {schema}.active_relations ar WHERE r.id = ar.id);
         self.run_query(sql)
 
         sql = """
-CREATE INDEX node_user_id_idx ON {schema}.nodes
+CREATE INDEX node_user_id_idx ON "{schema}".nodes
 USING btree(user_id);
-CREATE INDEX ways_user_id_idx ON {schema}.ways
+CREATE INDEX ways_user_id_idx ON "{schema}".ways
 USING btree(user_id);
-DROP VIEW IF EXISTS {schema}.relations CASCADE;
-CREATE MATERIALIZED VIEW {schema}.relations AS
+DROP VIEW IF EXISTS "{schema}".relations CASCADE;
+CREATE MATERIALIZED VIEW "{schema}".relations AS
  SELECT r.id,
     r.version,
     r.user_id,
@@ -385,39 +392,39 @@ CREATE MATERIALIZED VIEW {schema}.relations AS
     r.changeset_id,
     r.tags
    FROM osm.relations r,
-   {schema}.active_relations ar
+   "{schema}".active_relations ar
    WHERE r.id = ar.id;
-CREATE INDEX relations_id_idx ON {schema}.relations
+CREATE INDEX relations_id_idx ON "{schema}".relations
 USING btree(id);
-ANALYZE {schema}.relations;
-ANALYZE {schema}.nodes;
-ANALYZE {schema}.ways;
+ANALYZE "{schema}".relations;
+ANALYZE "{schema}".nodes;
+ANALYZE "{schema}".ways;
 
-DROP VIEW IF EXISTS {schema}.relation_members CASCADE;
-CREATE MATERIALIZED VIEW {schema}.relation_members AS
+DROP VIEW IF EXISTS "{schema}".relation_members CASCADE;
+CREATE MATERIALIZED VIEW "{schema}".relation_members AS
  SELECT rm.relation_id,
     rm.member_id,
     rm.member_type,
     rm.member_role,
     rm.sequence_id
    FROM osm.relation_members rm,
-   {schema}.active_relations ar
+   "{schema}".active_relations ar
    WHERE rm.relation_id = ar.id;
-CREATE INDEX relation_members_id_idx ON {schema}.relation_members
+CREATE INDEX relation_members_id_idx ON "{schema}".relation_members
 USING btree(relation_id, sequence_id);
 
-DROP VIEW IF EXISTS {schema}.users CASCADE;
-CREATE MATERIALIZED VIEW {schema}.users AS
+DROP VIEW IF EXISTS "{schema}".users CASCADE;
+CREATE MATERIALIZED VIEW "{schema}".users AS
  SELECT u.id,
     u.name
    FROM osm.users u
    WHERE EXISTS
-   (SELECT 1 FROM {schema}.relations r WHERE u.id = r.user_id)
+   (SELECT 1 FROM "{schema}".relations r WHERE u.id = r.user_id)
    OR EXISTS
-   (SELECT 1 FROM {schema}.ways w WHERE u.id = w.user_id)
+   (SELECT 1 FROM "{schema}".ways w WHERE u.id = w.user_id)
    OR EXISTS
-   (SELECT 1 FROM {schema}.nodes n WHERE u.id = n.user_id);
-CREATE INDEX users_pkey ON {schema}.users
+   (SELECT 1 FROM "{schema}".nodes n WHERE u.id = n.user_id);
+CREATE INDEX users_pkey ON "{schema}".users
 USING btree(id);
 
         """.format(schema=self.schema,
