@@ -28,6 +28,7 @@ class CopyNetwork2Pbf(DBApp):
         self.network = network_schema
         self.subfolder = subfolder_pbf
         self.srid = srid
+        self.check_platform()
 
     def copy(self):
         """
@@ -201,7 +202,7 @@ USING btree(id);
             self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
         else:
             self.OSM_FOLDER = '$HOME/gis/osm'
-            self.OSMOSISPATH = os.path.join('/opt', 'osmosis', 'osmosis-0.48',
+            self.OSMOSISPATH = os.path.join('/opt', 'osmosis',
                                             'bin', 'osmosis')
         self.AUTHFILE = os.path.join(self.OSM_FOLDER, 'config', 'pwd')
 
@@ -211,12 +212,18 @@ USING btree(id);
         """
 
         fn = f'{self.login.db}_{self.network}'
-        folder = os.path.join(self.folder,
-                              'projekte',
-                              self.login.db,
-                              self.subfolder,
-                              )
-        self.make_folder(folder)
+        folder = os.path.abspath(
+            os.path.join(self.folder,
+                         'projekte',
+                         self.login.db,
+                         self.subfolder,
+                         )
+        )
+        exists = os.path.exists(folder)
+        self.logger.info(f'folder {folder} exists: {exists}')
+        os.makedirs(folder, exist_ok=True)
+        exists = os.path.exists(folder)
+        self.logger.info(f'folder {folder} exists: {exists}')
 
         file_path = os.path.join(folder, fn)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 from argparse import ArgumentParser
 from typing import Dict
@@ -16,10 +16,9 @@ class Copy2FGDB(Extract):
                  destination_db,
                  layers: Dict[str, str],
                  gdbname: str,
-                 schema: str=None,
+                 schema: str = None,
                  logger=None
                  ):
-
         """"""
         super().__init__(destination_db, logger=logger)
         self.layers = layers
@@ -37,7 +36,7 @@ class Copy2FGDB(Extract):
         cmd = '{OGR2OGR} -overwrite -geomfield geom -nln {layer} {srid_option} -lco FEATURE_DATASET="{dest_schema}" -f "FileGDB" {path} PG:"host={host} port={port} user={user} dbname={db}" "{schema}.{layer}"'
 
         if self.gdbname is None:
-            gdbname = '{db}.gdb'.format(db=self.destination_db)
+            gdbname = f'{self.destination_db}.gdb'
         else:
             gdbname = self.gdbname
         if not gdbname.endswith('.gdb'):
@@ -46,10 +45,9 @@ class Copy2FGDB(Extract):
         # get srid
         if self.target_srid is None:
             srid = self.get_target_srid()
-            srid_option = '-a_srs EPSG:{srid}'.format(srid=srid)
+            srid_option = f'-a_srs EPSG:{srid}'
         else:
-            srid_option = '-t_srs EPSG:{srid}'.format(
-                srid=self.target_srid)
+            srid_option = f'-t_srs EPSG:{self.target_srid}'
 
         folder = os.path.join(self.folder,
                               'projekte',
@@ -62,17 +60,18 @@ class Copy2FGDB(Extract):
                               layer=layer,
                               srid_option=srid_option,
                               path=path,
-                              host=self.foreign_login.host,
-                              port=self.foreign_login.port,
-                              user=self.foreign_login.user,
-                              db=self.foreign_login.db,
+                              host=self.login.host,
+                              port=self.login.port,
+                              user=self.login.user,
+                              db=self.destination_db,
                               schema=schema,
                               dest_schema=dest_schema,
                               )
         self.logger.info(full_cmd)
         ret = subprocess.call(full_cmd, shell=self.SHELL)
         if ret:
-            raise IOError('Layer {layer} could not be copied to FGDB'.format(layer=layer))
+            raise IOError(
+                f'Layer {layer} could not be copied to FGDB')
 
     def check_if_features(self, layer):
         """
@@ -114,7 +113,7 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
             self.OGR2OGRPATH = os.path.join(self.OGR_FOLDER, 'ogr2ogr.exe')
             self.OGRINFO = os.path.join(self.OGR_FOLDER, 'ogrinfo.exe')
         else:
-            self.OGR_FOLDER = '/opt/gdal-2/bin'
+            self.OGR_FOLDER = '/usr/local/bin'
             self.OGR2OGRPATH = os.path.join(self.OGR_FOLDER, 'ogr2ogr')
             self.OGRINFO = os.path.join(self.OGR_FOLDER, 'ogrinfo')
 
