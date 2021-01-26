@@ -12,35 +12,51 @@ from extractiontools.ausschnitt import Extract
 
 
 class Copy2FGDB(Extract):
+    """Copy files to gdal"""
+
+    gdal_file_extensions = {'FileGDB': 'gdb',
+                            'GPKG': 'gpkg',
+                            }
+
     def __init__(self,
                  destination_db,
                  layers: Dict[str, str],
-                 gdbname: str,
+                 filename: str,
                  schema: str = None,
                  logger=None
                  ):
         """"""
         super().__init__(destination_db, logger=logger)
         self.layers = layers
-        self.gdbname = gdbname
+        self.filename = filename
         self.schema = schema
 
-    def copy_layer(self, schema, layer, dest_schema):
+    def copy_layer(self,
+                   schema: str,
+                   layer: str,
+                   dest_schema: str = None,
+                   gdal_format: str = 'FileGDB'):
         """
         copy layer
         Parameters
         ----------
         layer : str
         """
+        if gdal_format not in self.gdal_file_extensions:
+            raise ValueError(f'{gdal_format} not implemented')
 
-        cmd = '{OGR2OGR} -overwrite -geomfield geom -nln {layer} {srid_option} -lco FEATURE_DATASET="{dest_schema}" -f "FileGDB" {path} PG:"host={host} port={port} user={user} dbname={db}" "{schema}.{layer}"'
+        ext = self.gdal_file_extensions[gdal_format]
 
-        if self.gdbname is None:
-            gdbname = f'{self.destination_db}.gdb'
+        lco = ''
+        if gdal_format == 'FileGDB':
+            lco = f' -lco FEATURE_DATASET="{dest_schema}"'
+
+        if self.filename is None:
+            filename = f'{self.destination_db}.{ext}'
         else:
-            gdbname = self.gdbname
-        if not gdbname.endswith('.gdb'):
-            gdbname += '.gdb'
+            filename = self.filename
+        if not filename.endswith(f'.{ext}'):
+            filename += f'.{ext}'
 
         # get srid
         if self.target_srid is None:
@@ -49,29 +65,25 @@ class Copy2FGDB(Extract):
         else:
             srid_option = f'-t_srs EPSG:{self.target_srid}'
 
-        folder = os.path.join(self.folder,
-                              'projekte',
-                              self.destination_db,
-                              'fgdb', )
-        self.make_folder(folder)
-        path = os.path.join(folder, gdbname)
+        folder = os.path.abspath(
+            os.path.join(self.folder,
+                         'projekte',
+                         self.destination_db,
+                         gdal_format, )
+        )
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, filename)
 
-        full_cmd = cmd.format(OGR2OGR=self.OGR2OGRPATH,
-                              layer=layer,
-                              srid_option=srid_option,
-                              path=path,
-                              host=self.login.host,
-                              port=self.login.port,
-                              user=self.login.user,
-                              db=self.destination_db,
-                              schema=schema,
-                              dest_schema=dest_schema,
-                              )
-        self.logger.info(full_cmd)
-        ret = subprocess.call(full_cmd, shell=self.SHELL)
+        cmd = f'{self.OGR2OGRPATH} -overwrite -geomfield geom -nln {layer} '\
+            f'{srid_option}{lco} -f "{gdal_format}" {path} '\
+            f'PG:"host={self.login.host} port={self.login.port} user={self.login.user} '\
+            f'dbname={self.destination_db}" "{schema}.{layer}"'
+
+        self.logger.info(cmd)
+        ret = subprocess.call(cmd, shell=self.SHELL)
         if ret:
             raise IOError(
-                f'Layer {layer} could not be copied to FGDB')
+                f'Layer {layer} could not be copied to {gdal_format}')
 
     def check_if_features(self, layer):
         """
@@ -89,7 +101,7 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
             cur.execute(sql)
             return cur.rowcount
 
-    def copy_layers(self):
+    def copy_layers(self, gdal_format: str = 'FileGDB'):
         """
         copy all layers in option.layers
         """
@@ -101,7 +113,7 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
                 layer = schema_layer[0]
             else:
                 schema, layer = schema_layer
-            self.copy_layer(schema, layer, dest_schema)
+            self.copy_layer(schema, layer, dest_schema, gdal_format)
 
     def check_platform(self):
         """
@@ -172,4 +184,4 @@ if __name__ == '__main__':
         layers[f'{options.schema}.{layer}'] = options.dest_schema
 
     copy2fgdb = Copy2FGDB(login, layers, options.gdbname)
-    copy2fgdb.copy_layers()
+    copy2fgdb.copy_layers('FileGDB')

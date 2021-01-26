@@ -87,6 +87,7 @@ def extract_laea_raster(source_db: str, database: str, target_srid: int,
     z2r = Zensus2Raster(db=database, logger=orca.logger)
     z2r.run()
 
+
 @meta(group='(2) Extract Data', order=2, required=create_polygons_from_osm)
 @orca.step()
 def create_osm_views(database: str):
@@ -96,7 +97,7 @@ def create_osm_views(database: str):
     """
     copy2fgdb = CopyOSM2FGDB(destination_db=database,
                              layers=osm_layers,
-                             gdbname='osm_layers.gdb',
+                             filename='osm_layers.gdb',
                              schema='osm_layer',
                              logger=orca.logger)
     copy2fgdb.create_views()
@@ -129,10 +130,25 @@ def copy_osm_to_fgdb(database: str, osm_layers: Dict[str, str]):
 
     copy2fgdb = CopyOSM2FGDB(destination_db=database,
                              layers=osm_layers,
-                             gdbname='osm_layers.gdb',
+                             filename='osm_layers',
                              schema='osm_layer',
                              logger=orca.logger)
-    copy2fgdb.copy_layers()
+    copy2fgdb.copy_layers('FileGDB')
+
+
+@meta(group='Export', required=create_osm_views)
+@orca.step()
+def copy_osm_to_gpkg(database: str, osm_layers: Dict[str, str]):
+    """
+    copy OSM layers and views to a Geopackage
+    """
+
+    copy2fgdb = CopyOSM2FGDB(destination_db=database,
+                             layers=osm_layers,
+                             filename='osm_layers',
+                             schema='osm_layer',
+                             logger=orca.logger)
+    copy2fgdb.copy_layers('GPKG')
 
 
 @meta(group='Export', required=extract_laea_raster)

@@ -317,9 +317,9 @@ def copy_network_car_fgdb(database: str,
     """copy car network to a file-gdb"""
     copy2fgdb = Copy2FGDB(database,
                           layers=network_layers,
-                          gdbname='network_car.gdb',
+                          filename='network_car.gdb',
                           schema='network', logger=orca.logger)
-    copy2fgdb.copy_layers()
+    copy2fgdb.copy_layers('FileGDB')
 
 
 @meta(group='Export', required=build_network_fr)
@@ -328,6 +328,6 @@ def copy_network_fr_fgdb(database: str,
                          network_fr_layers: Dict[str, str]):
     """copy walk and cycle network to a file-gdb"""
     copy2fgdb = Copy2FGDB(database, layers=network_fr_layers,
-                          gdbname='network_fr.gdb',
+                          filename='network_fr.gdb',
                           schema='network_fr', logger=orca.logger)
-    copy2fgdb.copy_layers()
+    copy2fgdb.copy_layers('FileGDB')
