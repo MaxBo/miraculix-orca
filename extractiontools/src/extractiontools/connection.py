@@ -1,18 +1,15 @@
 #!/usr/bin/env python
 # coding:utf-8
 
-import subprocess
 import sys
 import psycopg2
 from psycopg2.extras import NamedTupleConnection, DictCursor
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from collections import OrderedDict
 import sqlparse
-from psycopg2.sql import SQL, Composed, Identifier, Literal
+from psycopg2.sql import SQL, Composed,  Literal
 from copy import deepcopy
 from typing import Union, Dict
 
-from types import MethodType
 import os
 import logging
 

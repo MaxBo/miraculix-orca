@@ -4,7 +4,6 @@
 from argparse import ArgumentParser
 
 from extractiontools.ausschnitt import Extract
-from .connection import Connection
 
 
 class ExtractOSM(Extract):

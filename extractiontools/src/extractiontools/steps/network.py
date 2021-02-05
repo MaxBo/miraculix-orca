@@ -9,11 +9,13 @@ from extractiontools.connection import Login
 from extractiontools.build_network_car import BuildNetwork
 from extractiontools.build_network_walk_cycle import BuildNetworkWalkCycle
 from extractiontools.scrape_stops import ScrapeStops
+from extractiontools.bahn_routing import DBRouting
 from extractiontools.scrape_timetable import ScrapeTimetable
 from extractiontools.hafasdb2gtfs import HafasDB2GTFS
 from extractiontools.network2pbf import CopyNetwork2Pbf, CopyNetwork2PbfTagged
 from extractiontools.stop_otp_router import OTPServer
 from extractiontools.copy2fgdb import Copy2FGDB
+from typing import List
 
 default_login = Login(
     host=os.environ.get('DB_HOST', 'localhost'),
@@ -86,6 +88,56 @@ def scrape_stops(database: str):
     scrape = ScrapeStops(destination_db=database, logger=orca.logger)
     scrape.scrape()
     scrape.copy_route_types()
+
+
+@meta(group='Public Transport', order=5, required='scrape_stops or extract_stops')
+@orca.step()
+def scrape_db_fastest_routes(database: str, destinations_db_routing: str,
+                             date_db_routing: date, times_db_routing: List[int],
+                             distance_db_routing):
+    """
+    scrape fastest routes from Deutsche Bahn at given day in between all scraped
+    stops in table "haltestellen" as origins and the closest stops to the
+    destinations in given table within defined radius around each origin.
+    Results are stored in table db_<date>_<dest.-tablename> in the same schema
+    with H_ID of origin stops, primary keys of destinations, fastest times
+    in minutes and some meta info
+    """
+    routing = DBRouting(database, date_db_routing, times_db_routing,
+                        logger=orca.logger)
+    routing.scrape(destinations_db_routing, max_distance=distance_db_routing)
+
+
+@meta(group='Public Transport')
+@orca.injectable()
+def destinations_db_routing() -> str:
+    """destination table (<schema>.<tablename>) for DB routing.
+    Single(!) primary key is required to be defined in table.
+    """
+    return 'timetables.haltestellen'
+
+
+@meta(group='Public Transport')
+@orca.injectable()
+def distance_db_routing() -> int:
+    """max. distance (beelines in meters) between origin
+    and destination to route with Deutsche Bahn"""
+    return 1000000000
+
+
+@meta(group='Public Transport')
+@orca.injectable()
+def date_db_routing() -> date:
+    """date for the Deutsche Bahn routing"""
+    return date.today()
+
+
+@meta(group='Public Transport')
+@orca.injectable()
+def times_db_routing() -> List[int]:
+    """list of times (full hours) for the Deutsche Bahn routing on the day of
+    "date_db_routing" """
+    return [9, 13, 17]
 
 
 @meta(group='Public Transport')
