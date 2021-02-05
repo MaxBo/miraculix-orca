@@ -2,7 +2,6 @@
 # coding:utf-8
 import time
 from argparse import ArgumentParser
-import numpy as np
 
 from extractiontools.ausschnitt import Extract, Connection
 from extractiontools.utils.bahn_query import BahnQuery
@@ -53,12 +52,6 @@ class ScrapeStops(Extract):
         ALTER TABLE "{self.schema}".route_types ADD PRIMARY KEY (typ);
         """
         self.run_query(sql, self.conn)
-
-    def get_cursor(self):
-        """erzeuge Datenbankverbindung1 und Cursor"""
-        cursor = self.conn.cursor()
-        cursor.execute('SET search_path TO timetables, public')
-        return cursor
 
     def scrape_haltestellen(self):
         """Lies Haltestellen und füge sie in DB ein bzw. aktualisiere sie"""

@@ -2,9 +2,8 @@
 # coding:utf-8
 
 from argparse import ArgumentParser
-import os
 
-from extractiontools.connection import Connection, DBApp, Login
+from extractiontools.connection import Connection, DBApp
 
 
 class BuildNetwork(DBApp):

@@ -86,7 +86,7 @@ class ScrapeTimetable(ScrapeStops):
           USING btree
           ("H_Name", "H_Abfahrt");
         """
-        cursor = self.get_cursor()
+        cursor = self.conn.cursor()
         cursor.execute(sql)
 
     def truncate_timetables(self):
@@ -95,7 +95,7 @@ class ScrapeTimetable(ScrapeStops):
         TRUNCATE "{self.schema}".abfahrten CASCADE;
         TRUNCATE "{self.schema}".fahrten;
         """
-        cursor = self.get_cursor()
+        cursor = self.conn.cursor()
         cursor.execute(sql)
 
     def get_fahrten_for_stops(self):

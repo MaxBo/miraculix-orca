@@ -192,31 +192,30 @@ class BahnQuery:
         departure = mode = ''
         changes = 0
 
-        def request_departure_table(time):
-            params['time'] = time
+        def request_departure_table(t):
+            params['time'] = t
             r = requests.get(self.reiseauskunft_url, params=params,
                              verify=False)
             root = html.fromstring(r.content)
+            if root.xpath('//div[contains(@class, "errorMessage")]'):
+                raise ConnectionError
             try:
                 table = root.get_element_by_id('resultsOverview')
-                return table
             except KeyError:
-                pass
-            return None
+                return
+            return table
 
-        for time in times:
+        for t in times:
             retries = 0
+            table = None
             while retries <= max_retries:
-                table = request_departure_table(time)
-                # response contains departures
-                if table:
+                try:
+                    table = request_departure_table(t)
                     break
-                # no valid response -> wait and try again
-                # (may be caused by too many requests)
-                else:
+                except ConnectionError:
                     time.sleep(self.timeout)
-                print('retry')
-                retries += 1
+                    print('retry')
+                    retries += 1
 
             # still no table -> skip
             if not table:
