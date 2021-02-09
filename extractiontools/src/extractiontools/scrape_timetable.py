@@ -82,7 +82,7 @@ class ScrapeTimetable(ScrapeStops):
         );
 
         CREATE INDEX IF NOT EXISTS fahrten_idx1
-          ON {self.schema}.fahrten
+          ON "{self.schema}".fahrten
           USING btree
           ("H_Name", "H_Abfahrt");
         """
@@ -105,7 +105,7 @@ class ScrapeTimetable(ScrapeStops):
         FROM "{self.schema}".haltestellen
         WHERE in_area;
         """
-        cursor = self.get_cursor()
+        cursor = self.conn.cursor()
         cursor.execute(sql)
         rows = cursor.fetchall()
         for r, row in enumerate(rows):
@@ -161,7 +161,7 @@ class ScrapeTimetable(ScrapeStops):
         # dt_txt = journey['departure'].strftime('%H:%M')
         dt_txt = route[0]['departure'].strftime(self.sql_timestamp_format)
         sql = f'''
-        INSERT INTO abfahrten
+        INSERT INTO "{self.schema}".abfahrten
         ("Fahrt_URL", "Fahrt_Name",
         "Fahrt_Abfahrt", "Fahrt_Start", "Fahrt_Ziel",
         "Fahrt_Nr", "H_ID",
@@ -194,7 +194,7 @@ class ScrapeTimetable(ScrapeStops):
             dt = (f"'{dep_time.strftime(self.sql_timestamp_format)}'"
                   if dep_time else None)
             sql = f"""
-            INSERT INTO fahrten
+            INSERT INTO "{self.schema}".fahrten
             (abfahrt_id, "Fahrt_Name", fahrt_index,
             "H_Name", "H_Ankunft", "H_Abfahrt", "H_ID")
             VALUES (%(journey_id)s, %(journey_name)s, %(index)s, %(station_name)s,
@@ -215,7 +215,7 @@ class ScrapeTimetable(ScrapeStops):
         departure = journey['departure'].strftime(self.sql_time_format)
         sql = f"""
         SELECT 1 AS id
-        FROM "{self.schema}".abfahrten AS a, {self.schema}.fahrten AS f
+        FROM "{self.schema}".abfahrten AS a, "{self.schema}".fahrten AS f
         WHERE a.abfahrt_id = f.abfahrt_id
         AND a."Fahrt_Name" = %(journey_name)s
         AND f."H_ID" = %(stop_id)s
