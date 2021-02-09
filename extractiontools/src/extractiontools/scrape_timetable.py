@@ -129,28 +129,31 @@ class ScrapeTimetable(ScrapeStops):
                     self.logger.warning(f'{str(e)} Retrying...')
                 time.sleep(15)
                 retries += 1
-            i = 0
+            i = al_i = 0
             for j, journey in enumerate(journeys):
                 try:
                     already_in = self.check_journey(journey, stop_id)
                     if already_in:
-                        self.logger.info(f"Route \"{journey['name']}\" to "
-                                         f"{journey['destination']} already in "
-                                         "database. Skipping... "
-                                         f"({j+1}/{len(journeys)})")
+                        #self.logger.info(f"Route \"{journey['name']}\" to "
+                                         #f"{journey['destination']} already in "
+                                         #"database. Skipping... "
+                                         #f"({j+1}/{len(journeys)})")
+                        al_i += 1
                         continue
                     route = db_query.scrape_route(journey['url'])
                     self.add_journey(journey, route, stop_id)
-                    self.logger.info(
-                        f"Route {route[0]['departure'].strftime('%H:%M')} "
-                        f"\"{journey['name']}\" {journey['number']} "
-                        f"{route[0]['station_name']} -> {journey['destination']} added "
-                        f"({j+1}/{len(journeys)})")
+                    #self.logger.info(
+                        #f"Route {route[0]['departure'].strftime('%H:%M')} "
+                        #f"\"{journey['name']}\" {journey['number']} "
+                        #f"{route[0]['station_name']} -> {journey['destination']} added "
+                        #f"({j+1}/{len(journeys)})")
                 # ToDo: sometimes there is an IndexError in the journey, did
                 # not debug it yet
                 except IndexError:
                     pass
                 i += 1
+            self.logger.info(
+                f"{len(journeys)} Routes processed. {al_i} Routes were skipped (already in database)")
             if i == 0:
                 continue
             self.conn.commit()
