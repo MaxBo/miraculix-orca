@@ -108,6 +108,10 @@ class ScrapeTimetable(ScrapeStops):
         cursor = self.conn.cursor()
         cursor.execute(sql)
         rows = cursor.fetchall()
+        #for r in rows:
+            #if "Eilendorf Stapperstraße" in r[1]:
+                #break
+        #rows = [r]
         for r, row in enumerate(rows):
             self.logger.info(
                 f'Looking for Routes at stop "{row[1]}"... '
@@ -127,20 +131,25 @@ class ScrapeTimetable(ScrapeStops):
                 retries += 1
             i = 0
             for j, journey in enumerate(journeys):
-                already_in = self.check_journey(journey, stop_id)
-                if already_in:
-                    self.logger.info(f"Route \"{journey['name']}\" to "
-                                     f"{journey['destination']} already in "
-                                     "database. Skipping... "
-                                     f"({j+1}/{len(journeys)})")
-                    continue
-                route = db_query.scrape_route(journey['url'])
-                self.add_journey(journey, route, stop_id)
-                self.logger.info(
-                    f"Route {route[0]['departure'].strftime('%H:%M')} "
-                    f"\"{journey['name']}\" {journey['number']} "
-                    f"{route[0]['station_name']} -> {journey['destination']} added "
-                    f"({j+1}/{len(journeys)})")
+                try:
+                    already_in = self.check_journey(journey, stop_id)
+                    if already_in:
+                        self.logger.info(f"Route \"{journey['name']}\" to "
+                                         f"{journey['destination']} already in "
+                                         "database. Skipping... "
+                                         f"({j+1}/{len(journeys)})")
+                        continue
+                    route = db_query.scrape_route(journey['url'])
+                    self.add_journey(journey, route, stop_id)
+                    self.logger.info(
+                        f"Route {route[0]['departure'].strftime('%H:%M')} "
+                        f"\"{journey['name']}\" {journey['number']} "
+                        f"{route[0]['station_name']} -> {journey['destination']} added "
+                        f"({j+1}/{len(journeys)})")
+                # ToDo: sometimes there is an IndexError in the journey, did
+                # not debug it yet
+                except IndexError:
+                    pass
                 i += 1
             if i == 0:
                 continue
