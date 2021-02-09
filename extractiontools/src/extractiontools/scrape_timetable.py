@@ -57,7 +57,7 @@ class ScrapeTimetable(ScrapeStops):
           "Fahrt_Ziel" text,
           "Fahrt_Nr" text,
           CONSTRAINT abfahrten_fk FOREIGN KEY ("H_ID")
-              REFERENCES haltestellen ("H_ID") MATCH SIMPLE
+              REFERENCES "{self.schema}".haltestellen ("H_ID") MATCH SIMPLE
               ON UPDATE NO ACTION ON DELETE NO ACTION
         );
 
@@ -77,7 +77,7 @@ class ScrapeTimetable(ScrapeStops):
           "H_ID" integer,
           CONSTRAINT fahrten_idx PRIMARY KEY (abfahrt_id, fahrt_index),
           CONSTRAINT fahrten_fk FOREIGN KEY (abfahrt_id)
-              REFERENCES {self.schema}.abfahrten (abfahrt_id) MATCH SIMPLE
+              REFERENCES "{self.schema}".abfahrten (abfahrt_id) MATCH SIMPLE
               ON UPDATE CASCADE ON DELETE CASCADE
         );
 
