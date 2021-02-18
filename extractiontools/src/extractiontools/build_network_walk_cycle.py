@@ -368,7 +368,7 @@ CREATE OR REPLACE VIEW "{network}".line_barriers_cycle AS
 
 TRUNCATE "{network}".edge_table;
 INSERT INTO "{network}".edge_table (id, fromnode, tonode, geom,
-cost, reverse_cost, wayid)
+cost, reverse_cost, wayid, segment)
 SELECT
   row_number() OVER (ORDER BY fromnode, tonode)::integer AS id,
   fromnode,

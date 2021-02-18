@@ -4,7 +4,7 @@
 from argparse import ArgumentParser
 
 from extractiontools.connection import Connection, DBApp
-import wingdbstub
+#from . import wingdbstub
 
 
 class BuildNetwork(DBApp):
@@ -1142,7 +1142,7 @@ e.fromnode=l.fromnode AND e.tonode=l.tonode AND
 
 TRUNCATE "{network}".edge_table;
 INSERT INTO "{network}".edge_table (id, fromnode, tonode, linkid, geom,
-cost, reverse_cost, wayid)
+cost, reverse_cost, wayid, segment)
 SELECT
   row_number() OVER (ORDER BY fromnode, tonode)::integer AS id,
   fromnode,
@@ -1377,7 +1377,8 @@ E'SELECT id, source, target, reverse_cost as cost, cost as reverse_cost
 
         sql = """
 TRUNCATE "{network}".edges_reached_with_planned;
-INSERT INTO "{network}".edges_reached_with_planned (id, fromnode, tonode)
+INSERT INTO "{network}".edges_reached_with_planned
+  (id, fromnode, tonode, wayid, segment)
 SELECT e.id, e.fromnode, e.tonode, e.wayid, e.segment
 FROM "{network}".edges_reached e;
             """.format(network=self.network)

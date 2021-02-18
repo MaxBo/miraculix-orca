@@ -249,7 +249,10 @@ def copy_network_pbf_xml(database: str,
 @orca.step()
 def copy_tagged_nw_pbf_xml(database: str,
                            otp_networks: Dict[str, str]):
-    """copy the osm networkdata to a pbf and .xml.bz file"""
+    """
+    copy the osm networkdata tagged with elevation
+    to a pbf and .xml.bz file
+    """
     for network_schema, subfolder_pbf in otp_networks.items():
         copy2pbf = CopyNetwork2PbfTagged(database,
                                          network_schema=network_schema,
