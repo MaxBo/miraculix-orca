@@ -235,7 +235,13 @@ CREATE INDEX idx_wayids_wayid ON "{network}".wayids USING btree(wayid);
 -- Selektiere die Knoten von Straßen (roadnodes),
 -- die Teil von mehr als einer Road sind
 -- (HAVING count(roadnodes.id) > 1) als junctions
-CREATE MATERIALIZED VIEW "{network}".junctions AS
+CREATE TABLE "{network}".junctions
+(id SERIAL,
+nodeid bigint PRIMARY KEY,
+geom geometry(POINT, {srid}),
+pnt_wgs geometry(POINT, 4326));
+
+INSERT INTO "{network}".junctions
 SELECT
   row_number() OVER (ORDER BY a.nodeid)::integer AS id,
   a.nodeid,
@@ -251,9 +257,35 @@ FROM osm.nodes,
      HAVING count(roadnodes.id) > 1
    ) a
 WHERE a.nodeid = nodes.id;
-CReATE INDEX idx_junctions_id ON "{network}".junctions USING btree(nodeid);
+
+-- Add dangling Endnodes as junctions
+
+INSERT INTO "{network}".junctions (nodeid, geom, pnt_wgs)
+
+SELECT
+n.id AS nodeid, n.geom, st_transform(n.geom, 4326) As pnt_wgs
+FROM osm.ways w
+LEFT JOIN "{network}".junctions j ON j.nodeid = w.nodes[1],
+ "{network}".roads r,
+ osm.nodes n
+WHERE j.id IS NULL
+AND w.id = r.id
+AND w.nodes[1] = n.id
+UNION
+SELECT
+n.id AS nodeid, n.geom, st_transform(n.geom, 4326) As pnt_wgs
+FROM osm.ways w
+LEFT JOIN "{network}".junctions j ON j.nodeid = w.nodes[array_upper(w.nodes, 1)],
+ "{network}".roads r,
+ osm.nodes n
+WHERE j.id IS NULL
+AND w.id = r.id
+AND w.nodes[array_upper(w.nodes, 1)] = n.id
+;
+
 CREATE INDEX idx_junctions_geom ON "{network}".junctions USING gist(geom);
 ANALYZE "{network}".junctions;
+
 
 -- Berechne Z-Koordinaten
 CREATE OR REPLACE VIEW "{network}".junctions_z_interpolated AS
@@ -323,6 +355,7 @@ CREATE INDEX pk_junctions_z ON "{network}".junctions_z USING btree(nodeid);
         self.run_query(sql.format(beta=-0.1,  # Gewichtungsfaktor weight = exp(beta * meter)
                                   max_dist=30,  # Maximale Distanz zu benachbarten Centroiden
                                   network=self.network,
+                                  srid=self.srid,
                                   ))
 
         #
