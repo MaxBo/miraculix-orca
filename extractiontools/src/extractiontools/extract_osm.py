@@ -104,9 +104,12 @@ class ExtractOSM(Extract):
 
         sql = """
         -- copy way nodes
-        SELECT *
+        SELECT
+          wn.way_id,
+          wn.node_id,
+          wn.sequence_id
         INTO "{schema}".way_nodes
-        FROM {temp_meta}.osm_way_nodes
+        FROM {temp_meta}.osm_way_nodes wn
         WHERE session_id='{session_id}';
         """.format(temp_meta=self.temp_meta, schema=self.schema,
                    session_id=self.session_id)
