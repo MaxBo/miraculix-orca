@@ -368,14 +368,16 @@ CREATE OR REPLACE VIEW "{network}".line_barriers_cycle AS
 
 TRUNCATE "{network}".edge_table;
 INSERT INTO "{network}".edge_table (id, fromnode, tonode, geom,
-cost, reverse_cost)
+cost, reverse_cost, wayid)
 SELECT
   row_number() OVER (ORDER BY fromnode, tonode)::integer AS id,
   fromnode,
   tonode,
   l.geom,
   {cost} AS cost,
-  {reverse_cost} AS reverse_cost
+  {reverse_cost} AS reverse_cost,
+  l.wayid,
+  l.segment
 FROM "{network}".links l;
         """.format(network=self.network, cost=cost, reverse_cost=reverse_cost)
         self.run_query(sql)

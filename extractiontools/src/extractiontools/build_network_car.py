@@ -4,6 +4,7 @@
 from argparse import ArgumentParser
 
 from extractiontools.connection import Connection, DBApp
+import wingdbstub
 
 
 class BuildNetwork(DBApp):
@@ -1006,7 +1007,7 @@ FROM
   "{network}".links l,
   classifications.linktypes lt,
   "{network}".edges_reached e
-WHERE l.fromnode=e.fromnode AND l.tonode=e.tonode
+WHERE l.wayid=e.wayid AND l.segment=e.segment
 AND l.linktype = lt.id;
 
 CREATE OR REPLACE VIEW "{network}".links_reached_only_by_planned AS
@@ -1016,7 +1017,7 @@ FROM
   classifications.linktypes lt,
   "{network}".edges_reached_with_planned ep
   LEFT JOIN "{network}".edges_reached e ON ep.id = e.id
-WHERE l.fromnode=ep.fromnode AND l.tonode=ep.tonode
+WHERE l.wayid=ep.wayid AND l.segment=ep.segment
 AND e.id IS NULL
 AND l.linktype = lt.id;
 
@@ -1026,7 +1027,7 @@ FROM
   classifications.linktypes lt,
   "{network}".links l LEFT JOIN
   "{network}".edges_reached_with_planned e
-  ON l.fromnode=e.fromnode AND l.tonode=e.tonode
+  ON l.wayid=e.wayid AND l.segment=e.segment
 WHERE e.id IS NULL
 AND l.linktype=lt.id;
 """.format(network=self.network)
@@ -1105,7 +1106,9 @@ geom geometry(LineString,{srid}),
 "source" integer,
 "target" integer,
 cost float,
-reverse_cost float);
+reverse_cost float,
+wayid bigint,
+segment integer);
 
 CREATE INDEX edge_table_geom_idx ON "{network}".edge_table USING gist(geom);
 CREATE INDEX edge_table_ft_idx ON "{network}".edge_table USING btree(fromnode, tonode);
@@ -1139,7 +1142,7 @@ e.fromnode=l.fromnode AND e.tonode=l.tonode AND
 
 TRUNCATE "{network}".edge_table;
 INSERT INTO "{network}".edge_table (id, fromnode, tonode, linkid, geom,
-cost, reverse_cost)
+cost, reverse_cost, wayid)
 SELECT
   row_number() OVER (ORDER BY fromnode, tonode)::integer AS id,
   fromnode,
@@ -1147,7 +1150,9 @@ SELECT
   l.id,
   l.geom,
   l.t_kfz AS cost,
-  CASE WHEN l.oneway THEN -1 ELSE l.t_kfz END AS reverse_cost
+  CASE WHEN l.oneway THEN -1 ELSE l.t_kfz END AS reverse_cost,
+  l.wayid,
+  l.segment
 FROM "{network}".links l;
         """.format(network=self.network)
         self.run_query(sql)
@@ -1214,7 +1219,7 @@ USING btree(node);
 
 CREATE MATERIALIZED VIEW "{network}".edges_reached AS
 -- edges reached in both directions
-SELECT e.id, e.fromnode, e.tonode
+SELECT e.id, e.fromnode, e.tonode, e.wayid, e.segment
 FROM
     "{network}".edge_table e,
     "{network}".reached_from_mat h,
@@ -1233,7 +1238,9 @@ DROP TABLE IF EXISTS "{network}".edges_reached_with_planned CASCADE;
 CREATE TABLE "{network}".edges_reached_with_planned
 (id integer primary key,
 fromnode bigint,
-tonode bigint);
+tonode bigint,
+wayid bigint,
+segment integer);
 CREATE INDEX idx_nodes_edges_reached_with_planned
 ON "{network}".edges_reached_with_planned
 USING btree(fromnode, tonode);
@@ -1371,7 +1378,7 @@ E'SELECT id, source, target, reverse_cost as cost, cost as reverse_cost
         sql = """
 TRUNCATE "{network}".edges_reached_with_planned;
 INSERT INTO "{network}".edges_reached_with_planned (id, fromnode, tonode)
-SELECT e.id, e.fromnode, e.tonode
+SELECT e.id, e.fromnode, e.tonode, e.wayid, e.segment
 FROM "{network}".edges_reached e;
             """.format(network=self.network)
         self.run_query(sql)
