@@ -42,21 +42,11 @@ class Copy2FGDB(Extract):
         ----------
         layer : str
         """
-        if gdal_format not in self.gdal_file_extensions:
-            raise ValueError(f'{gdal_format} not implemented')
-
-        ext = self.gdal_file_extensions[gdal_format]
+        path = self.get_path(gdal_format)
 
         lco = ''
         if gdal_format == 'FileGDB':
             lco = f' -lco FEATURE_DATASET="{dest_schema}"'
-
-        if self.filename is None:
-            filename = f'{self.destination_db}.{ext}'
-        else:
-            filename = self.filename
-        if not filename.endswith(f'.{ext}'):
-            filename += f'.{ext}'
 
         # get srid
         if self.target_srid is None:
@@ -64,15 +54,6 @@ class Copy2FGDB(Extract):
             srid_option = f'-a_srs EPSG:{srid}'
         else:
             srid_option = f'-t_srs EPSG:{self.target_srid}'
-
-        folder = os.path.abspath(
-            os.path.join(self.folder,
-                         'projekte',
-                         self.destination_db,
-                         gdal_format, )
-        )
-        os.makedirs(folder, exist_ok=True)
-        path = os.path.join(folder, filename)
 
         cmd = f'{self.OGR2OGRPATH} -overwrite -geomfield geom -nln {layer} '\
             f'{srid_option}{lco} -f "{gdal_format}" {path} '\
@@ -84,6 +65,30 @@ class Copy2FGDB(Extract):
         if ret:
             raise IOError(
                 f'Layer {layer} could not be copied to {gdal_format}')
+
+    def get_path(self, gdal_format: str) -> str:
+        """return the path to the file to create"""
+        if gdal_format not in self.gdal_file_extensions:
+            raise ValueError(f'{gdal_format} not implemented')
+
+        ext = self.gdal_file_extensions[gdal_format]
+
+        if self.filename is None:
+            filename = f'{self.destination_db}.{ext}'
+        else:
+            filename = self.filename
+        if not filename.endswith(f'.{ext}'):
+            filename += f'.{ext}'
+
+        folder = os.path.abspath(
+            os.path.join(self.folder,
+                         'projekte',
+                         self.destination_db,
+                         gdal_format, )
+        )
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, filename)
+        return path
 
     def check_if_features(self, layer):
         """
@@ -114,6 +119,14 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
             else:
                 schema, layer = schema_layer
             self.copy_layer(schema, layer, dest_schema, gdal_format)
+
+        path = self.get_path(gdal_format)
+        cmd_zip = f'zip -r -m {path}.zip {path}'
+        self.logger.info(cmd_zip)
+        ret = subprocess.call(cmd_zip, shell=self.SHELL)
+        if ret:
+            raise IOError(
+                f'could not zip {path}')
 
     def check_platform(self):
         """
