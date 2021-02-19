@@ -274,6 +274,28 @@ CREATE OR REPLACE VIEW "{schema}".boundary AS
     st_transform(b.geom, {srid}) AS geom
    FROM meta.boundary b;
 
+CREATE OR REPLACE VIEW "{schema}".way_relations AS
+
+SELECT
+w.id,
+array_agg(r.tags -> 'network') AS networks,
+array_agg(r.tags -> 'ref') AS refs,
+array_agg(r.tags -> 'name') AS names,
+COALESCE((bool_or(r.tags -> 'network' = 'icn')
+OR bool_or(r.tags -> 'network' = 'ncn')), false)::text AS ncr,
+COALESCE(bool_or(r.tags -> 'network' = 'rcn'), false)::text AS rcr,
+COALESCE(bool_or(r.tags -> 'network' = 'lcn'), true)::text AS lcr
+
+FROM osm.relations r,
+osm.relation_members rm,
+osm.ways w
+WHERE r.tags -> 'type' = 'route'
+AND r.tags -> 'route' = 'bicycle'
+AND r.id = rm.relation_id
+AND w.id = rm.member_id
+AND rm.member_type = 'W'
+GROUP BY w.id;
+
 DROP VIEW IF EXISTS "{schema}".ways CASCADE;
 CREATE MATERIALIZED VIEW "{schema}".ways AS
  SELECT l.wayid * 1000 + l.segment AS id,
@@ -281,13 +303,19 @@ CREATE MATERIALIZED VIEW "{schema}".ways AS
     w.user_id,
     w.tstamp,
     w.changeset_id,
-    w.tags || hstore(ARRAY['innerorts', 'slope'],
-                     ARRAY[l.io::text, l.slope::text]) AS tags,
+    w.tags || (hstore(
+      ARRAY['innerorts', 'slope', 'ncr', 'rcr', 'lcr'],
+      ARRAY[l.io::text, l.slope::text, wr.ncr, wr.rcr, wr.lcr])
+      - hstore(ARRAY['ncr', 'rcr', 'lcr'], ARRAY[NULL, NULL, NULL])
+      ) AS tags,
     lp.nodes,
     (st_transform(l.geom, {srid}))::box2d::geometry AS bbox,
     st_transform(l.geom, {srid}) AS linestring,
     l.wayid AS way_id_original
-   FROM osm.ways w, {network}.links_reached_without_planned l,
+   FROM osm.ways w
+   LEFT JOIN "{schema}".way_relations wr ON w.id = wr.id
+   ,
+     {network}.links_reached_without_planned l,
    (SELECT
    l.wayid, l.segment,
    array_agg(lp.nodeid ORDER BY lp.idx) AS nodes
