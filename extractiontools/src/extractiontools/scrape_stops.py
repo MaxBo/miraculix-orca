@@ -23,6 +23,7 @@ class ScrapeStops(Extract):
             self.conn.commit()
             self.scrape_haltestellen()
             self.conn.commit()
+            self.copy_route_types()
 
     def additional_stuff(self):
         """
