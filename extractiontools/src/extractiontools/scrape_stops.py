@@ -31,11 +31,8 @@ class ScrapeStops(Extract):
         self.copy_route_types()
 
     def copy_route_types(self):
-        with Connection(login=self.login) as conn:
-            self.conn = conn
-            self.copy_tables_to_target_db(self.schema,
-                                          tables=['route_types'],
-                                          conn=conn)
+        self.copy_tables_to_target_db(self.schema,
+                                      tables=['route_types'])
 
     def final_stuff(self):
         """"""

@@ -244,14 +244,14 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         DROP SCHEMA IF EXISTS {target_schema} CASCADE;
         CREATE SCHEMA {target_schema};
         """
-        self.run_query(sql, conn=self.conn)
+        self.run_query(sql, conn=conn)
 
         sql = f"""
         IMPORT FOREIGN SCHEMA {foreign_schema}
         FROM SERVER {self.foreign_server} INTO {target_schema};
         """
 
-        self.run_query(sql, self.conn)
+        self.run_query(sql, conn=conn)
 
     def get_target_boundary(self, boundary_name=None):
         """
