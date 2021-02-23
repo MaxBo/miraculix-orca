@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List
 import ogr
 import orca
 import os
@@ -27,7 +27,11 @@ def get_foreign_tables(database, schema):
     return sorted([row.table_name for row in rows])
 
 
-@meta(group='(1) Project')
+@meta(group='(1) Project', unique=True,
+      regex="^[A-Za-z_@#]{1}[A-Za-z0-9_\-]{0,127}$",
+      regex_help="The first character can be a letter, @ , _ , or # . "
+      "The rest is letters, numbers or @ , _ , - . "
+      "No spaces or umlauts allowed. The maximum length is 128 characters.")
 @orca.injectable()
 def database() -> str:
     """The name of the database"""
