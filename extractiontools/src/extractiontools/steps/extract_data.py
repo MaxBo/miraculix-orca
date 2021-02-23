@@ -34,7 +34,7 @@ def extract_osm(source_db: str, database: str, target_srid: int,
     extract.extract()
 
 
-@meta(group='(2) Extract Data', order=3, required=extract_osm)
+@meta(group='(2) Extract Data', order=2, required=extract_osm)
 @orca.step()
 def create_polygons_from_osm(database: str):
     """
@@ -88,7 +88,7 @@ def extract_laea_raster(source_db: str, database: str, target_srid: int,
     z2r.run()
 
 
-@meta(group='(2) Extract Data', order=2, required=create_polygons_from_osm)
+@meta(group='(2) Extract Data', order=3, required=create_polygons_from_osm)
 @orca.step()
 def create_osm_views(database: str):
     """
@@ -103,7 +103,7 @@ def create_osm_views(database: str):
     copy2fgdb.create_views()
 
 
-@meta(group='Export')
+@meta(group='(5) Export')
 @orca.injectable()
 def osm_layers() -> Dict[str, str]:
     """the OSM network layers to export to the corresponding schema"""
@@ -121,7 +121,7 @@ def osm_layers() -> Dict[str, str]:
     return layers
 
 
-@meta(group='Export', required=create_osm_views)
+@meta(group='(5) Export', required=create_osm_views)
 @orca.step()
 def copy_osm_to_fgdb(database: str, osm_layers: Dict[str, str]):
     """
@@ -136,7 +136,7 @@ def copy_osm_to_fgdb(database: str, osm_layers: Dict[str, str]):
     copy2fgdb.copy_layers('FileGDB')
 
 
-@meta(group='Export', required=create_osm_views)
+@meta(group='(5) Export', required=create_osm_views)
 @orca.step()
 def copy_osm_to_gpkg(database: str, osm_layers: Dict[str, str]):
     """
@@ -151,7 +151,7 @@ def copy_osm_to_gpkg(database: str, osm_layers: Dict[str, str]):
     copy2fgdb.copy_layers('GPKG')
 
 
-@meta(group='Export', required=extract_laea_raster)
+@meta(group='(5) Export', required=extract_laea_raster)
 @orca.step()
 def copy_zensus_to_tiff(database: str, subfolder_tiffs: str):
     """

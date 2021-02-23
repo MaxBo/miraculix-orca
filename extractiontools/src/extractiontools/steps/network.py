@@ -69,7 +69,7 @@ def build_network_fr(database: str,
     build_network.build()
 
 
-@meta(group='Public Transport', order=1, required='create_db')
+@meta(group='(4) Public Transport', order=1, required='create_db')
 @orca.step()
 def extract_stops(database: str):
     """
@@ -79,7 +79,7 @@ def extract_stops(database: str):
     scrape.extract()
 
 
-@meta(group='Public Transport', order=2, required='create_db')
+@meta(group='(4) Public Transport', order=2, required='create_db')
 @orca.step()
 def scrape_stops(database: str):
     """
@@ -89,7 +89,7 @@ def scrape_stops(database: str):
     scrape.scrape()
 
 
-@meta(group='Public Transport', order=5, required='scrape_stops or extract_stops')
+@meta(group='(4) Public Transport', order=5, required='scrape_stops or extract_stops')
 @orca.step()
 def scrape_db_fastest_routes(database: str, destinations_db_routing: str,
                              date_db_routing: date, times_db_routing: List[int],
@@ -98,7 +98,7 @@ def scrape_db_fastest_routes(database: str, destinations_db_routing: str,
     scrape fastest routes from Deutsche Bahn at given day in between all scraped
     stops in table "haltestellen" as origins and the closest stops to the
     destinations in given table within defined radius around each origin.
-    Results are stored in table db_<date>_<dest.-tablename> in the same schema
+    Results are stored in table db_{date}_{dest.-tablename} in the same schema
     with H_ID of origin stops, primary keys of destinations, fastest times
     in minutes and some meta info
     """
@@ -107,7 +107,7 @@ def scrape_db_fastest_routes(database: str, destinations_db_routing: str,
     routing.scrape(destinations_db_routing, max_distance=distance_db_routing)
 
 
-@meta(group='Public Transport')
+@meta(group='(4) Public Transport')
 @orca.injectable()
 def destinations_db_routing() -> str:
     """destination table (<schema>.<tablename>) for DB routing.
@@ -116,7 +116,7 @@ def destinations_db_routing() -> str:
     return 'timetables.haltestellen'
 
 
-@meta(group='Public Transport')
+@meta(group='(4) Public Transport')
 @orca.injectable()
 def distance_db_routing() -> int:
     """max. distance (beelines in meters) between origin
@@ -124,14 +124,14 @@ def distance_db_routing() -> int:
     return 1000000000
 
 
-@meta(group='Public Transport')
+@meta(group='(4) Public Transport')
 @orca.injectable()
 def date_db_routing() -> date:
     """date for the Deutsche Bahn routing"""
     return date.today()
 
 
-@meta(group='Public Transport')
+@meta(group='(4) Public Transport')
 @orca.injectable()
 def times_db_routing() -> List[int]:
     """list of times (full hours) for the Deutsche Bahn routing on the day of
@@ -139,21 +139,21 @@ def times_db_routing() -> List[int]:
     return [9, 13, 17]
 
 
-@meta(group='Public Transport')
+@meta(group='(4) Public Transport')
 @orca.injectable()
 def date_timetable() -> date:
     """date for the timetable"""
     return date.today()
 
 
-@meta(group='Public Transport')
+@meta(group='(4) Public Transport')
 @orca.injectable()
 def recreate_timetable_tables() -> bool:
     """recreate tables for timetables"""
     return False
 
 
-@meta(group='Public Transport', order=3,
+@meta(group='(4) Public Transport', order=3,
       required='scrape_stops or extract_stops')
 @orca.step()
 def scrape_timetables(database: str, source_db: str,
@@ -168,21 +168,21 @@ def scrape_timetables(database: str, source_db: str,
     scrape.scrape()
 
 
-@meta(group='Public Transport')
+@meta(group='(4) Public Transport')
 @orca.injectable()
 def gtfs_only_one_day() -> bool:
     """gtfs valid only on the given day?"""
     return False
 
 
-@meta(group='Public Transport')
+@meta(group='(4) Public Transport')
 @orca.injectable()
 def tbl_kreise() -> str:
     """table with the county geometries"""
     return 'verwaltungsgrenzen.krs_2018_12'
 
 
-@meta(group='Public Transport', order=4, required=scrape_timetables)
+@meta(group='(4) Public Transport', order=4, required=scrape_timetables)
 @orca.step()
 def timetables_gtfs(database: str,
                     date_timetable: str,
@@ -204,7 +204,7 @@ def timetables_gtfs(database: str,
     hafas.export_gtfs()
 
 
-@meta(group='OTP')
+@meta(group='(6) OTP')
 @orca.injectable()
 def otp_networks() -> Dict[str, str]:
     """
@@ -217,7 +217,7 @@ def otp_networks() -> Dict[str, str]:
             }
 
 
-@meta(group='Export', required=[build_network_car, build_network_fr])
+@meta(group='(5) Export', required=[build_network_car, build_network_fr])
 @orca.step()
 def copy_network_pbf(database: str,
                      otp_networks: Dict[str, str]):
@@ -230,7 +230,7 @@ def copy_network_pbf(database: str,
         copy2pbf.copy()
 
 
-@meta(group='Export', required=[build_network_car, build_network_fr])
+@meta(group='(5) Export', required=[build_network_car, build_network_fr])
 @orca.step()
 def copy_network_pbf_xml(database: str,
                          otp_networks: Dict[str, str]):
@@ -244,7 +244,7 @@ def copy_network_pbf_xml(database: str,
         copy2pbf.copy()
 
 
-@meta(group='Export', required=[build_network_car, build_network_fr])
+@meta(group='(5) Export', required=[build_network_car, build_network_fr])
 @orca.step()
 def copy_tagged_nw_pbf_xml(database: str,
                            otp_networks: Dict[str, str]):
@@ -260,7 +260,7 @@ def copy_tagged_nw_pbf_xml(database: str,
         copy2pbf.copy()
 
 
-@meta(group='OTP')
+@meta(group='(6) OTP')
 @orca.injectable()
 def otp_ports() -> Dict[str, int]:
     """A dict with the OTP Ports"""
@@ -268,14 +268,14 @@ def otp_ports() -> Dict[str, int]:
             'secure_port': 7788, }
 
 
-@meta(group='OTP')
+@meta(group='(6) OTP')
 @orca.injectable()
 def otp_graph_subfolder() -> str:
     """subfolder with the otp graphs"""
     return 'otp_graphs'
 
 
-@meta(group='OTP')
+@meta(group='(6) OTP')
 @orca.injectable()
 def otp_routers(database) -> Dict[str, str]:
     """subfolder with the otp graphs"""
@@ -285,14 +285,14 @@ def otp_routers(database) -> Dict[str, str]:
     return routers
 
 
-@meta(group='OTP')
+@meta(group='(6) OTP')
 @orca.injectable()
 def start_otp_analyst() -> bool:
     """start otp router with analyst"""
     return True
 
 
-@meta(group='OTP', order=2)
+@meta(group='(6) OTP', order=2)
 @orca.step()
 def start_otp_router(otp_ports: Dict[str, int],
                      base_path: str,
@@ -309,7 +309,7 @@ def start_otp_router(otp_ports: Dict[str, int],
     otp_server.start()
 
 
-@meta(group='OTP', order=4)
+@meta(group='(6) OTP', order=4)
 @orca.step()
 def stop_otp_router(otp_ports: Dict[str, int]):
     """Stop the running otp routers on the ports giben in `otp_ports`"""
@@ -317,7 +317,7 @@ def stop_otp_router(otp_ports: Dict[str, int]):
     otp_server.stop()
 
 
-@meta(group='OTP', order=1)
+@meta(group='(6) OTP', order=1)
 @orca.step()
 def create_router(otp_routers: Dict[str, str],
                   database: str,
@@ -357,14 +357,14 @@ def network_fr_layers() -> Dict[str, str]:
     return layers
 
 
-@meta(group='Export')
+@meta(group='(5) Export')
 @orca.injectable()
 def gdbname(database) -> str:
     """the name of the File Geodatabase"""
     return f'{database}.gdb'
 
 
-@meta(group='Export', required=build_network_car)
+@meta(group='(5) Export', required=build_network_car)
 @orca.step()
 def copy_network_car_fgdb(database: str,
                           network_layers: Dict[str, str]):
@@ -376,7 +376,7 @@ def copy_network_car_fgdb(database: str,
     copy2fgdb.copy_layers('FileGDB')
 
 
-@meta(group='Export', required=build_network_fr)
+@meta(group='(5) Export', required=build_network_fr)
 @orca.step()
 def copy_network_fr_fgdb(database: str,
                          network_fr_layers: Dict[str, str]):

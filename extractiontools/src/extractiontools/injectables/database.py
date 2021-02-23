@@ -116,14 +116,14 @@ def corine() -> List[str]:
     return ['clc18']
 
 
-@meta(group='Export')
+@meta(group='(5) Export')
 @orca.injectable()
 def base_path() -> str:
     """The basepath on the Miraculix-Server where the data is exported to"""
     return r'~/gis/projekte'
 
 
-@meta(group='Export')
+@meta(group='(5) Export')
 @orca.injectable()
 def subfolder_tiffs() -> str:
     """The subfolder on the Miraculix-Server under the base_path
@@ -131,7 +131,7 @@ def subfolder_tiffs() -> str:
     return 'tiffs'
 
 
-@meta(group='Export')
+@meta(group='(5) Export')
 @orca.injectable()
 def subfolder_otp() -> str:
     """subfolder for the OpenTripPlanner"""
