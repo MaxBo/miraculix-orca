@@ -111,7 +111,7 @@ def scrape_db_fastest_routes(database: str, destinations_db_routing: str,
 @meta(group='(4) Public Transport')
 @orca.injectable()
 def destinations_db_routing() -> str:
-    """destination table (<schema>.<tablename>) for DB routing.
+    """destination table ({schema}.{tablename}) for DB routing.
     Single(!) primary key is required to be defined in table.
     """
     return 'timetables.haltestellen'
@@ -335,7 +335,7 @@ def create_router(otp_routers: Dict[str, str],
         otp_server.create_router(build_folder, target_folder)
 
 
-@meta(group='Network')
+@meta(group='(3) Network')
 @orca.injectable()
 def network_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
@@ -348,7 +348,7 @@ def network_layers() -> Dict[str, str]:
     return layers
 
 
-@meta(group='Network')
+@meta(group='(3) Network')
 @orca.injectable()
 def network_fr_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
