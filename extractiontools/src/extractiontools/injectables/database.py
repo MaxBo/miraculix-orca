@@ -27,7 +27,7 @@ def get_foreign_tables(database, schema):
     return sorted([row.table_name for row in rows])
 
 
-@meta(group='(1) Project', unique=True,
+@meta(group='(1) Project', unique=True, order=1,
       regex="^[A-Za-z_@#]{1}[A-Za-z0-9_\-]{0,127}$",
       regex_help="The first character can be a letter, @ , _ , or # . "
       "The rest is letters, numbers or @ , _ , - . "
@@ -38,7 +38,7 @@ def database() -> str:
     return ''
 
 
-@meta(group='Areas', order=1)
+@meta(group='(1) Project', order=3)
 @orca.injectable()
 def project_area() -> ogr.Geometry:
     """The default area of the project"""
@@ -53,17 +53,17 @@ def project_area() -> ogr.Geometry:
     return geom
 
 
-@meta(group='(1) Project')
+@meta(group='(1) Project', order=2)
 @orca.injectable()
 def target_srid() -> int:
     """The EPSG-Code of the geodata to be created"""
     return 25832
 
 
-@meta(group='Database')
+@meta(group='(1) Project', order=4, choices=['europe'])
 @orca.injectable()
 def source_db() -> str:
-    """The name of the base-database"""
+    """The name of the base-database to extract data from"""
     return 'europe'
 
 
@@ -73,7 +73,7 @@ def verwaltungsgrenzen_tables_choices(source_db) -> List[str]:
     return get_foreign_tables(source_db, 'verwaltungsgrenzen')
 
 
-@meta(group='Tables', choices=verwaltungsgrenzen_tables_choices)
+@meta(group='(2) Extract-Tables', choices=verwaltungsgrenzen_tables_choices)
 @orca.injectable()
 def verwaltungsgrenzen_tables() -> List[str]:
     """A list of tables in the schema `verwaltungsgrenzen` to copy"""
@@ -94,7 +94,7 @@ def gmes_choices(source_db) -> List[str]:
     return [t for t in tables if re.match(regex, t)]
 
 
-@meta(group='Tables', choices=gmes_choices)
+@meta(group='(2) Extract-Tables', choices=gmes_choices)
 @orca.injectable()
 def gmes() -> List[str]:
     """The Urban Atlas tables from the schema `landuse` to copy"""
@@ -109,7 +109,7 @@ def corine_choices(source_db) -> List[str]:
     return [t for t in tables if re.match(regex, t)]
 
 
-@meta(group='Tables', choices=corine_choices)
+@meta(group='(2) Extract-Tables', choices=corine_choices)
 @orca.injectable()
 def corine() -> List[str]:
     """The Corine Landcover tables from the schema `landuse` to copy"""
@@ -138,7 +138,7 @@ def subfolder_otp() -> str:
     return 'otp'
 
 
-@meta(group='Network')
+@meta(group='(3) Network')
 @orca.injectable()
 def network_schema() -> str:
     """
@@ -147,7 +147,7 @@ def network_schema() -> str:
     return 'network'
 
 
-@meta(group='Network')
+@meta(group='(3) Network')
 @orca.injectable()
 def network_fr_schema() -> str:
     """
@@ -156,7 +156,7 @@ def network_fr_schema() -> str:
     return 'network_fr'
 
 
-@meta(group='Network')
+@meta(group='(3) Network')
 @orca.injectable()
 def limit4links() -> int:
     """
@@ -166,21 +166,21 @@ def limit4links() -> int:
     return 0
 
 
-@meta(group='Network')
+@meta(group='(3) Network')
 @orca.injectable()
 def chunksize() -> int:
     """number of links to calculate in a chunk"""
     return 1000
 
 
-@meta(group='Network')
+@meta(group='(3) Network')
 @orca.injectable()
 def links_to_find() -> float:
     """proportion of all network links to be found from starting point"""
     return 0.25
 
 
-@meta(group='Network')
+@meta(group='(3) Network')
 @orca.injectable()
 def routing_walk() -> bool:
     """routing for walking"""
