@@ -154,12 +154,21 @@ class ExtractOSM(Extract):
         if len(ids) == 0:
             return
         chunksize = 1000
+
+        sql = f'''
+        CREATE TABLE {self.schema}.users
+        (id INTEGER NOT NULL,
+        name TEXT NOT NULL);'''
+        self.run_query(sql, conn=self.conn)
+
         for i in range(0, len(ids), chunksize):
             cur_ids = ids[i: i + chunksize]
             arr = ','.join([str(ci) for ci in cur_ids])
             sql = f"""
-            SELECT *
+            INSERT
             INTO {self.schema}.users
+            (id, name)
+            SELECT id, name
             FROM {self.temp}.users
             WHERE id = ANY(ARRAY[{arr}]);
             """
@@ -200,6 +209,7 @@ class ExtractOSM(Extract):
             self.extract_ways()
             self.copy_way_nodes()
             self.copy_relations()
+            self.conn.commit()
             self.copy_users()
             self.copy_schema_info()
         except Exception as e:
