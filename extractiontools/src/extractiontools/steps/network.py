@@ -87,7 +87,6 @@ def scrape_stops(database: str):
     """
     scrape = ScrapeStops(destination_db=database, logger=orca.logger)
     scrape.scrape()
-    scrape.copy_route_types()
 
 
 @meta(group='(4) Public Transport', order=5, required='scrape_stops or extract_stops')

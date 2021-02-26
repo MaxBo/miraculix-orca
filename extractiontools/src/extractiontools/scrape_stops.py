@@ -23,6 +23,7 @@ class ScrapeStops(Extract):
             self.conn.commit()
             self.scrape_haltestellen()
             self.conn.commit()
+            self.copy_route_types()
 
     def additional_stuff(self):
         """
@@ -31,11 +32,8 @@ class ScrapeStops(Extract):
         self.copy_route_types()
 
     def copy_route_types(self):
-        with Connection(login=self.login) as conn:
-            self.conn = conn
-            self.copy_tables_to_target_db(self.schema,
-                                          tables=['route_types'],
-                                          conn=conn)
+        self.copy_tables_to_target_db(self.schema,
+                                      tables=['route_types'])
 
     def final_stuff(self):
         """"""
@@ -98,7 +96,8 @@ class ScrapeStops(Extract):
         temp_table = 'temp_stations'
 
         # search around all hexagon points
-        for point in points:
+        for i, point in enumerate(points):
+            self.logger.info(f'Search at point {i+1}/{len(points)}')
             rowcount = self.get_stops_at_point(
                 point, search_radius, db_query, cursor, temp_table)
             # if there are more than 1000 stops, not all have been found

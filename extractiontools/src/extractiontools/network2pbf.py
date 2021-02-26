@@ -162,12 +162,16 @@ ANALYZE "{schema}".ways;
 DROP VIEW IF EXISTS "{schema}".relation_members CASCADE;
 CREATE MATERIALIZED VIEW "{schema}".relation_members AS
  SELECT rm.relation_id,
-    rm.member_id,
+    CASE
+    WHEN rm.member_type = 'W' THEN COALESCE(w.id, rm.member_id)
+    ELSE rm.member_id
+    END AS member_id,
     rm.member_type,
     rm.member_role,
-    rm.sequence_id
-   FROM osm.relation_members rm,
-   "{schema}".active_relations ar
+    row_number() OVER(PARTITION BY rm.relation_id ORDER BY rm.sequence_id, w.id) AS sequence_id
+   FROM "{schema}".active_relations ar,
+   osm.relation_members rm
+   LEFT JOIN "{schema}".ways w ON rm.member_id = w.way_id_original
    WHERE rm.relation_id = ar.id;
 CREATE INDEX relation_members_id_idx ON "{schema}".relation_members
 USING btree(relation_id, sequence_id);
@@ -427,12 +431,16 @@ ANALYZE "{schema}".ways;
 DROP VIEW IF EXISTS "{schema}".relation_members CASCADE;
 CREATE MATERIALIZED VIEW "{schema}".relation_members AS
  SELECT rm.relation_id,
-    rm.member_id,
+    CASE
+    WHEN rm.member_type = 'W' THEN COALESCE(w.id, rm.member_id)
+    ELSE rm.member_id
+    END AS member_id,
     rm.member_type,
     rm.member_role,
-    rm.sequence_id
-   FROM osm.relation_members rm,
-   "{schema}".active_relations ar
+    row_number() OVER(PARTITION BY rm.relation_id ORDER BY rm.sequence_id, w.id) AS sequence_id
+   FROM "{schema}".active_relations ar,
+   osm.relation_members rm
+   LEFT JOIN "{schema}".ways w ON rm.member_id = w.way_id_original
    WHERE rm.relation_id = ar.id;
 CREATE INDEX relation_members_id_idx ON "{schema}".relation_members
 USING btree(relation_id, sequence_id);

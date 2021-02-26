@@ -6,7 +6,7 @@ import psycopg2
 from psycopg2.extras import NamedTupleConnection, DictCursor
 from collections import OrderedDict
 import sqlparse
-from psycopg2.sql import SQL, Composed,  Literal
+from psycopg2.sql import SQL, Composed, Literal
 from copy import deepcopy
 from typing import Union, Dict
 
