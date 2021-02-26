@@ -96,7 +96,8 @@ class ScrapeStops(Extract):
         temp_table = 'temp_stations'
 
         # search around all hexagon points
-        for point in points:
+        for i, point in enumerate(points):
+            self.logger.info(f'Search at point {i+1}/{len(points)}')
             rowcount = self.get_stops_at_point(
                 point, search_radius, db_query, cursor, temp_table)
             # if there are more than 1000 stops, not all have been found
