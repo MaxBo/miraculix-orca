@@ -318,6 +318,14 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         with Connection(login=self.login) as conn:
             self.run_query(sql, conn)
 
+    def grant_access(self, users):
+        with Connection(login=self.login) as conn:
+            for user in users:
+                sql = f'''
+                GRANT ALL PRIVILEGES ON DATABASE {self.destination_db} to {user};
+                '''
+                self.run_query(sql, conn)
+
     def set_pg_path(self):
         """"""
         pg_path = os.environ.get('PGPATH')

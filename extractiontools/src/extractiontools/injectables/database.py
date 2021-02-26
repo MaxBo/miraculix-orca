@@ -8,14 +8,26 @@ from extractiontools.connection import Login, Connection
 from orcadjango.decorators import meta
 
 
-def get_foreign_tables(database, schema):
-    login = Login(
+def create_foreign_login(database='postgres'):
+    return Login(
         host=os.environ.get('FOREIGN_HOST', 'localhost'),
         port=os.environ.get('FOREIGN_PORT', 5432),
         user=os.environ.get('FOREIGN_USER'),
         password=os.environ.get('FOREIGN_PASS', ''),
         db=database
     )
+
+def create_login(database='postgres'):
+    return Login(
+        host=os.environ.get('DB_HOST', 'localhost'),
+        port=os.environ.get('DB_PORT', 5432),
+        user=os.environ.get('DB_USER', 'postgres'),
+        password=os.environ.get('DB_PASS', ''),
+        db=database
+    )
+
+def get_foreign_tables(database, schema):
+    login = create_foreign_login(database)
     sql = f"""
     SELECT * FROM information_schema.tables
     WHERE table_schema = '{schema}'
@@ -36,6 +48,24 @@ def get_foreign_tables(database, schema):
 def database() -> str:
     """The name of the database"""
     return ''
+
+
+@meta(hidden=True)
+@orca.injectable()
+def user_choices(source_db) -> List[str]:
+    login = create_login()
+    sql = 'SELECT usename FROM pg_catalog.pg_user;'
+    with Connection(login=login) as conn:
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+    return [r.usename for r in rows]
+
+
+@meta(group='(1) Project', order=4, choices=user_choices)
+@orca.injectable()
+def db_users() -> List[str]:
+    return []
 
 
 @meta(group='(1) Project', order=3)
