@@ -205,7 +205,7 @@ def timetables_gtfs(database: str,
     hafas.export_gtfs()
 
 
-@meta(group='(6) OTP')
+@meta(group='(6) OTP', editable_keys=True)
 @orca.injectable()
 def otp_networks() -> Dict[str, str]:
     """
@@ -335,7 +335,7 @@ def create_router(otp_routers: Dict[str, str],
         otp_server.create_router(build_folder, target_folder)
 
 
-@meta(group='(3) Network')
+@meta(group='(3) Network', editable_keys=True)
 @orca.injectable()
 def network_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
@@ -348,7 +348,7 @@ def network_layers() -> Dict[str, str]:
     return layers
 
 
-@meta(group='(3) Network')
+@meta(group='(3) Network', editable_keys=True)
 @orca.injectable()
 def network_fr_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
