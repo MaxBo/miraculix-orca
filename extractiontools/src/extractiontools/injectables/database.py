@@ -97,7 +97,7 @@ def source_db() -> str:
     return 'europe'
 
 
-@meta(hidden=True)
+@meta(hidden=True, refresh='always')
 @orca.injectable()
 def verwaltungsgrenzen_tables_choices(source_db) -> List[str]:
     return get_foreign_tables(source_db, 'verwaltungsgrenzen')
@@ -116,7 +116,7 @@ def verwaltungsgrenzen_tables() -> List[str]:
     return tables
 
 
-@meta(hidden=True)
+@meta(hidden=True, refresh='always')
 @orca.injectable()
 def gmes_choices(source_db) -> List[str]:
     tables = get_foreign_tables(source_db, 'landuse')
@@ -131,7 +131,7 @@ def gmes() -> List[str]:
     return ['ua2012']
 
 
-@meta(hidden=True)
+@meta(hidden=True, refresh='always')
 @orca.injectable()
 def corine_choices(source_db) -> List[str]:
     tables = get_foreign_tables(source_db, 'landuse')

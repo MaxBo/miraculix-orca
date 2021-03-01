@@ -335,7 +335,7 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
                     GRANT USAGE ON SCHEMA {schema} TO {user};
                     GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA {schema} TO {user};
                     GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {schema} TO {user};
-                    ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT INSERT, SELECT, UPDATE, DELETE ON TABLES TO {user};
+                    ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT INSERT, SELECT, UPDATE, DELETE, TRUNCATE ON TABLES TO {user};
                     '''
                     self.run_query(sql, conn, verbose=False)
 
