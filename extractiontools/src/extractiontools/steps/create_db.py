@@ -2,7 +2,6 @@ import orca
 from orcadjango.decorators import meta
 from extractiontools.ausschnitt import Extract
 from extractiontools.drop_db import DropDatabase
-from extractiontools.connection import DBApp
 import ogr
 
 __parent_modules__ = [
@@ -12,8 +11,7 @@ __parent_modules__ = [
 
 @meta(group='(1) Project', order=1)
 @orca.step()
-def create_db(target_srid: str, project_area: ogr.Geometry, database: str,
-              db_users: list):
+def create_db(target_srid: str, project_area: ogr.Geometry, database: str):
     """
     (re)create the target database
     and copy the selected files
@@ -25,8 +23,6 @@ def create_db(target_srid: str, project_area: ogr.Geometry, database: str,
     extract.recreate_db()
     extract.set_target_boundary(project_area)
     extract.update_boundaries()
-    if db_users:
-        extract.grant_access(db_users)
 
 
 @meta(group='(1) Project', order=2)
@@ -39,11 +35,14 @@ def drop_db(database: str):
     extract.extract()
 
 
-@meta(group='(1) Project', order=3)
+@meta(group='(1) Project', order=3, requires=create_db)
 @orca.step()
 def grant_access(database: str, db_users: list):
     '''
     Grant read and write access to the database for the specified users.
+    Only works for already existing schemas, so run this step last. Access for
+    a schema is removed on recreation (e.g. access to schema 'osm' is revoked
+    when re-running extract_osm)
     '''
     extract = Extract(destination_db=database, logger=orca.logger)
     extract.grant_access(db_users)

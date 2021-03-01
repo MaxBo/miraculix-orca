@@ -320,11 +320,24 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
 
     def grant_access(self, users):
         with Connection(login=self.login) as conn:
-            for user in users:
-                sql = f'''
-                GRANT ALL PRIVILEGES ON DATABASE {self.destination_db} to {user};
-                '''
-                self.run_query(sql, conn)
+            sql = 'SELECT schema_name FROM information_schema.schemata;'
+            cur = conn.cursor()
+            cur.execute(sql)
+            rows = cur.fetchall()
+            schemas = [r.schema_name for r in rows if not (
+                r.schema_name.startswith('pg_') or
+                r.schema_name == 'information_schema')]
+            for schema in schemas:
+                for user in users:
+                    self.logger.info(f'granting access to schema "{schema}" to '
+                                     f'user "{user}"')
+                    sql = f'''
+                    GRANT USAGE ON SCHEMA {schema} TO {user};
+                    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA {schema} TO {user};
+                    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {schema} TO {user};
+                    ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT INSERT, SELECT, UPDATE, DELETE ON TABLES TO {user};
+                    '''
+                    self.run_query(sql, conn, verbose=False)
 
     def set_pg_path(self):
         """"""
