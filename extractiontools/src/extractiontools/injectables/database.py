@@ -50,16 +50,16 @@ def database() -> str:
     return ''
 
 
-@meta(hidden=True)
+@meta(hidden=True, refresh='always')
 @orca.injectable()
 def user_choices(source_db) -> List[str]:
     login = create_login()
-    sql = 'SELECT usename FROM pg_catalog.pg_user;'
+    sql = 'SELECT rolname FROM pg_catalog.pg_roles WHERE rolsuper = False;'
     with Connection(login=login) as conn:
         cursor = conn.cursor()
         cursor.execute(sql)
         rows = cursor.fetchall()
-    return [r.usename for r in rows]
+    return [r.rolname for r in rows if not r.rolname.startswith('pg_')]
 
 
 @meta(group='(1) Project', order=4, choices=user_choices)
