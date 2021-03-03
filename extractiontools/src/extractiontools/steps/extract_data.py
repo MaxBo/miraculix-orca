@@ -14,6 +14,7 @@ import ogr
 
 import extractiontools.steps.create_db
 import extractiontools.steps.network
+import extractiontools.steps.statistics
 
 __parent_modules__ = [
     'extractiontools.steps.create_db',

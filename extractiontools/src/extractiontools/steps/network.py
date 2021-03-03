@@ -17,13 +17,6 @@ from extractiontools.stop_otp_router import OTPServer
 from extractiontools.copy2fgdb import Copy2FGDB
 from typing import List
 
-default_login = Login(
-    host=os.environ.get('DB_HOST', 'localhost'),
-    port=os.environ.get('DB_PORT', 5432),
-    user=os.environ.get('DB_USER'),
-    password=os.environ.get('DB_PASS', '')
-)
-
 
 @meta(group='(3) Networks', required=['extract_osm', 'extract_landuse'])
 @orca.step()

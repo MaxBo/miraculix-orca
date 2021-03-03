@@ -6,6 +6,7 @@ import re
 
 from extractiontools.connection import Login, Connection
 from orcadjango.decorators import meta
+from extractiontools.destatis import Destatis
 
 
 def create_foreign_login(database='postgres'):
@@ -52,7 +53,7 @@ def database() -> str:
 
 @meta(hidden=True, refresh='always')
 @orca.injectable()
-def user_choices(source_db) -> List[str]:
+def user_choices() -> List[str]:
     login = create_login()
     sql = 'SELECT rolname FROM pg_catalog.pg_roles WHERE rolsuper = False;'
     with Connection(login=login) as conn:
@@ -215,3 +216,29 @@ def links_to_find() -> float:
 def routing_walk() -> bool:
     """routing for walking"""
     return False
+
+
+@meta(group='(7) Statistics', order=1)
+@orca.injectable()
+def search_terms() -> List[str]:
+    """Search Term for Destatis data tables"""
+    return ['Bevölkerung', 'Arbeitsmarkt']
+
+
+@meta(hidden=True, refresh='always')
+@orca.injectable()
+def destatis_table_choices(database) -> List[str]:
+    if not database:
+        return []
+    destatis = Destatis(database, logger=orca.logger)
+    tables = destatis.get_tables()
+    # replace "," with another char because OrcaDjango is joining and splitting
+    # stored values by ","
+    return [f"{t.code} | {t.content.replace(',', '⹁')}" for t in tables]
+
+
+@meta(group='(7) Statistics', order=2, choices=destatis_table_choices)
+@orca.injectable()
+def destatis_tables() -> List[str]:
+    """Search Term for Destatis data tables"""
+    return []
