@@ -60,7 +60,7 @@ class Copy2FGDB(Extract):
             f'PG:"host={self.login.host} port={self.login.port} user={self.login.user} '\
             f'dbname={self.destination_db}" "{schema}.{layer}"'
 
-        self.logger.info(cmd)
+        self.logger.info(f'Copying {layer}')
         ret = subprocess.call(cmd, shell=self.SHELL)
         if ret:
             raise IOError(

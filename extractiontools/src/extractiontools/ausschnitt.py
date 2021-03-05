@@ -221,7 +221,7 @@ class Extract(DBApp):
         WHERE
         st_intersects(t.{geom}, tb.source_geom)
         """
-        self.logger.info(f'Extracting table {tn}')
+        self.logger.info(f'Extracting table "{tn}"')
         self.run_query(sql, conn=self.conn)
 
     def get_geometrytype(self, tn, geom):
@@ -461,6 +461,7 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         sql = f'''CREATE SCHEMA IF NOT EXISTS {schema};'''
         self.run_query(sql, conn=conn)
         for table in tables:
+            self.logger.info(f'Copying table "{table}"')
             sql = f'''
             DROP TABLE IF EXISTS {schema}.{table};
             CREATE TABLE {schema}.{table} (LIKE {temp_schema}.{table}

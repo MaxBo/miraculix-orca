@@ -383,12 +383,16 @@ WHERE NOT EXISTS
         """
         with Connection(login=self.login) as conn:
             self.conn = conn
+            self.logger.info('Creating polygons')
             self.run_query(sql_create_simple_polygons)
             self.run_query(sql_create_polygons_with_holes)
             self.run_query(sql_create_multipolygons)
             self.run_query(sql_delete_unused_simple_polygons)
+            self.logger.info('Updating tags')
             self.run_query(sql_update_tags)
+            self.logger.info('Creating indexes')
             self.run_query(sql_create_index)
+            self.logger.info('Creating views')
             self.run_query(sql_create_view)
             self.conn.commit()
 

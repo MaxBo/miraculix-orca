@@ -17,6 +17,7 @@ class ExtractOSM(Extract):
         """
         copy relation and relation_member Schema
         """
+        self.logger.info('Copying relations')
         sql = """
         CREATE TABLE "{schema}".relation_members AS
         (SELECT * FROM {temp}.relation_members) WITH NO DATA;
@@ -102,6 +103,7 @@ class ExtractOSM(Extract):
         copy the way_nodes in that area
         """
 
+        self.logger.info('Copying way nodes')
         sql = """
         -- copy way nodes
         SELECT
@@ -147,6 +149,7 @@ class ExtractOSM(Extract):
         UNION
         SELECT user_id FROM {self.schema}.relations) a;
         """
+        self.logger.info('Copying OSM users')
         cur = self.conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
@@ -187,6 +190,7 @@ class ExtractOSM(Extract):
         VALUES
         ('{self.session_id}', st_transform(ST_GeomFromEWKT('SRID={self.srid};{self.wkt}'), 4326), {self.target_srid});
         '''
+        self.logger.info('Creating session')
         self.run_query(sql, conn=self.conn)
 
     def remove_session(self):
@@ -197,6 +201,7 @@ class ExtractOSM(Extract):
         DELETE FROM {self.temp_meta}.session_boundary
         WHERE session_id='{self.session_id}'
         '''
+        self.logger.info('Removing session')
         self.run_query(sql, conn=self.conn)
         self.cleanup(self.temp_meta)
 
@@ -231,6 +236,7 @@ class ExtractOSM(Extract):
         WHERE w.session_id='{session_id}';
         ANALYZE "{schema}".ways;
         """
+        self.logger.info('Extracting ways')
         self.run_query(sql.format(temp_meta=self.temp_meta, schema=self.schema,
                                   target_srid=self.target_srid,
                                   source_srid=self.srid,
@@ -249,6 +255,7 @@ class ExtractOSM(Extract):
         WHERE n.session_id='{session_id}';
         ANALYZE "{schema}".nodes;
         """
+        self.logger.info('Extracting nodes')
         self.run_query(sql.format(temp=self.temp, schema=self.schema,
                                   target_srid=self.target_srid,
                                   temp_meta=self.temp_meta,
@@ -268,6 +275,7 @@ class ExtractOSM(Extract):
         INTO "{schema}".schema_info
         FROM {temp}.schema_info;
         """.format(temp=self.temp, schema=self.schema)
+        self.logger.info('Copying schema info')
         self.run_query(sql, self.conn)
 
     def create_index(self):
@@ -346,6 +354,7 @@ class ExtractOSM(Extract):
            SET (n_distinct=-0.1);
 
         """.format(schema=self.schema)
+        self.logger.info('Creating indexes')
         self.run_query(sql, self.conn)
 
     def further_stuff(self):
