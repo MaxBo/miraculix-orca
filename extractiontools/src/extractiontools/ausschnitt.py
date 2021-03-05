@@ -165,7 +165,7 @@ class Extract(DBApp):
         self.logger.info(
             f'Creating connection to database "{self.foreign_login.db}"')
         with Connection(login=self.login) as conn:
-            self.run_query(sql, conn=conn, verbose=False)
+            self.run_query(sql, conn=conn)
 
     def create_extensions(self):
         """
@@ -221,6 +221,7 @@ class Extract(DBApp):
         WHERE
         st_intersects(t.{geom}, tb.source_geom)
         """
+        self.logger.info(f'Extracting table {tn}')
         self.run_query(sql, conn=self.conn)
 
     def get_geometrytype(self, tn, geom):
@@ -337,7 +338,7 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
                     GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {schema} TO {user};
                     ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT INSERT, SELECT, UPDATE, DELETE, TRUNCATE ON TABLES TO {user};
                     '''
-                    self.run_query(sql, conn, verbose=False)
+                    self.run_query(sql, conn)
 
     def set_pg_path(self):
         """"""
@@ -411,9 +412,10 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         """
         remove the temp schema
         """
+        self.logger.info(f'Cleaning up...')
         sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
             temp=schema or self.temp)
-        self.run_query(sql, conn=conn or self.conn, verbose=False)
+        self.run_query(sql, conn=conn or self.conn)
 
     def vacuum(self, schema=None, tables=[]):
         """

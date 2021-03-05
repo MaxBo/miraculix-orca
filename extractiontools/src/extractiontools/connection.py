@@ -203,7 +203,7 @@ class DBApp:
 
         def execute(query, vars=None):
             if verbose:
-                self.logger.info(query)
+                self.logger.debug(query)
             cur.execute(query, vars)
 
         if split:

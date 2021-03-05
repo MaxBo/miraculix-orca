@@ -166,8 +166,7 @@ class ScrapeTimetable(ScrapeStops):
         WHERE "H_ID"=%(stop_id)s
         AND suchdatum=%(date)s;
         '''
-        self.run_query(sql, verbose=False, vars={'stop_id': stop_id,
-                                                 'date': self.date, })
+        self.run_query(sql, vars={'stop_id': stop_id, 'date': self.date, })
 
     def add_journey(self, journey, route, stop_id):
         # dt_txt = journey['departure'].strftime('%H:%M')

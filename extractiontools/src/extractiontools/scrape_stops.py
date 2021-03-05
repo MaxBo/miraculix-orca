@@ -107,7 +107,7 @@ class ScrapeStops(Extract):
                     point, search_radius, temp_table, db_query)
 
         sql = f'DROP TABLE IF EXISTS "{self.schema}"."{temp_table}";'
-        self.run_query(sql, verbose=False)
+        self.run_query(sql)
 
     def search_more_stops(self,
                           point: Tuple[float, float],
@@ -190,7 +190,7 @@ class ScrapeStops(Extract):
             CREATE TABLE IF NOT EXISTS "{self.schema}"."{temp_table}" (
             LIKE "{self.schema}".haltestellen INCLUDING CONSTRAINTS INCLUDING DEFAULTS);
             '''
-        self.run_query(sql, verbose=False)
+        self.run_query(sql)
         for stop in stops:
             sql = f"""
                 INSERT INTO "{self.schema}"."{temp_table}"
