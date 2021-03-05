@@ -129,6 +129,16 @@ class Connection:
         return OrderedDict(((d.name, d) for d in descr))
 
 
+def get_foreign_login(database):
+    return Login(
+        host=os.environ.get('FOREIGN_HOST', 'localhost'),
+        port=os.environ.get('FOREIGN_PORT', 5432),
+        user=os.environ.get('FOREIGN_USER', 'osm'),
+        password=os.environ.get('FOREIGN_PASS', ''),
+        db=database
+    )
+
+
 class DBApp:
     """
 
@@ -204,6 +214,8 @@ class DBApp:
         def execute(query, vars=None):
             if verbose:
                 self.logger.info(query)
+            else:
+                self.logger.debug(query)
             cur.execute(query, vars)
 
         if split:

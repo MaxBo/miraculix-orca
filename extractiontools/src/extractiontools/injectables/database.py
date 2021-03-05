@@ -4,21 +4,11 @@ import orca
 import os
 import re
 
-from extractiontools.connection import Login, Connection
+from extractiontools.connection import Login, Connection, get_foreign_login
 from orcadjango.decorators import meta
 from extractiontools.destatis import Destatis
 
-
-def create_foreign_login(database='postgres'):
-    return Login(
-        host=os.environ.get('FOREIGN_HOST', 'localhost'),
-        port=os.environ.get('FOREIGN_PORT', 5432),
-        user=os.environ.get('FOREIGN_USER'),
-        password=os.environ.get('FOREIGN_PASS', ''),
-        db=database
-    )
-
-def create_login(database='postgres'):
+def get_login(database='postgres'):
     return Login(
         host=os.environ.get('DB_HOST', 'localhost'),
         port=os.environ.get('DB_PORT', 5432),
@@ -28,7 +18,7 @@ def create_login(database='postgres'):
     )
 
 def get_foreign_tables(database, schema):
-    login = create_foreign_login(database)
+    login = get_foreign_login(database)
     sql = f"""
     SELECT * FROM information_schema.tables
     WHERE table_schema = '{schema}'
@@ -54,7 +44,7 @@ def database() -> str:
 @meta(hidden=True, refresh='always')
 @orca.injectable()
 def user_choices() -> List[str]:
-    login = create_login()
+    login = get_login()
     sql = 'SELECT rolname FROM pg_catalog.pg_roles WHERE rolsuper = False;'
     with Connection(login=login) as conn:
         cursor = conn.cursor()
@@ -240,5 +230,5 @@ def destatis_table_choices(database) -> List[str]:
 @meta(group='(7) Statistics', order=2, choices=destatis_table_choices)
 @orca.injectable()
 def destatis_tables() -> List[str]:
-    """Search Term for Destatis data tables"""
+    """"""
     return []

@@ -14,7 +14,7 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from copy import deepcopy
 import logging
 
-from .connection import Connection, DBApp, Login
+from .connection import Connection, DBApp, Login, get_foreign_login
 
 
 class BBox(object):
@@ -84,13 +84,7 @@ class Extract(DBApp):
         self.boundary = boundary
         self.boundary_name = boundary_name
         self.set_login(database=self.destination_db)
-        self.foreign_login = foreign_login or Login(
-            host=os.environ.get('FOREIGN_HOST', 'localhost'),
-            port=os.environ.get('FOREIGN_PORT', 5432),
-            user=os.environ.get('FOREIGN_USER'),
-            password=os.environ.get('FOREIGN_PASS', ''),
-            db=self.source_db
-        )
+        self.foreign_login = foreign_login or get_foreign_login(self.source_db)
         self.target_srid = (target_srid or self.get_target_srid()
                             or 25832)
 
