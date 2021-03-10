@@ -45,6 +45,8 @@ class CopyNetwork2Pbf(DBApp):
 
     def create_views(self):
         """"""
+
+        self.logger.info(f'Creating views on OSM network data')
         sql = """
 DROP SCHEMA IF EXISTS {schema} CASCADE;
 CREATE SCHEMA {schema};
@@ -137,6 +139,8 @@ AND NOT EXISTS (SELECT 1 FROM "{schema}".active_relations ar WHERE r.id = ar.id)
                    srid=self.srid)
         self.run_query(sql)
 
+        self.logger.info('Creating indexes and analysing users and '
+                         'relation members')
         sql = """
 CREATE INDEX node_user_id_idx ON "{schema}".nodes
 USING btree(user_id);
@@ -249,7 +253,8 @@ USING btree(id);
                               fn=file_path,
                               to_xml=to_xml,
                               )
-        self.logger.info(full_cmd)
+        self.logger.debug(full_cmd)
+        self.logger.info(f'Writing OSM network data to {fn}.osm.pbf')
         ret = subprocess.call(full_cmd, shell=self.SHELL)
         if ret:
             layer = 'pbf'
@@ -263,6 +268,7 @@ class CopyNetwork2PbfTagged(CopyNetwork2Pbf):
 
     def create_views(self):
         """"""
+        self.logger.info(f'Creating views on OSM network data')
         sql = """
 DROP SCHEMA IF EXISTS {schema} CASCADE;
 CREATE SCHEMA {schema};
@@ -406,6 +412,8 @@ AND NOT EXISTS (SELECT 1 FROM "{schema}".active_relations ar WHERE r.id = ar.id)
                    srid=self.srid)
         self.run_query(sql)
 
+        self.logger.info('Creating indexes and analysing users and '
+                         'relation members')
         sql = """
 CREATE INDEX node_user_id_idx ON "{schema}".nodes
 USING btree(user_id);

@@ -17,7 +17,8 @@ class ExtractOSM(Extract):
         """
         copy relation and relation_member Schema
         """
-        self.logger.info('Copying relations')
+        self.logger.info(f'Copying relation members to '
+                         f'{self.schema}.relation_members')
         sql = """
         CREATE TABLE "{schema}".relation_members AS
         (SELECT * FROM {temp}.relation_members) WITH NO DATA;
@@ -25,6 +26,7 @@ class ExtractOSM(Extract):
         self.run_query(sql, conn=self.conn)
         self.conn.commit()
 
+        self.logger.info(f'Copying relations to {self.schema}.relations')
         sql = f"""
         -- copy relations for ways and nodes
         SELECT id, version, user_id, tstamp, changeset_id, tags
@@ -103,7 +105,7 @@ class ExtractOSM(Extract):
         copy the way_nodes in that area
         """
 
-        self.logger.info('Copying way nodes')
+        self.logger.info(f'Copying way nodes to {schema}.way_nodes')
         sql = """
         -- copy way nodes
         SELECT
@@ -127,6 +129,8 @@ class ExtractOSM(Extract):
         rows = cur.fetchall()
         ids = [row[0] for row in rows]
         arr = ','.join([str(id) for id in ids])
+
+        self.logger.info(f'Copying related nodes to {schema}.nodes')
         sql = f'''
         INSERT INTO {self.schema}.nodes
         SELECT
@@ -149,7 +153,7 @@ class ExtractOSM(Extract):
         UNION
         SELECT user_id FROM {self.schema}.relations) a;
         """
-        self.logger.info('Copying OSM users')
+        self.logger.info(f'Copying OSM users to {self.schema}.users')
         cur = self.conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
@@ -236,7 +240,7 @@ class ExtractOSM(Extract):
         WHERE w.session_id='{session_id}';
         ANALYZE "{schema}".ways;
         """
-        self.logger.info('Extracting ways')
+        self.logger.info(f'Extracting ways to {self.schema}.ways')
         self.run_query(sql.format(temp_meta=self.temp_meta, schema=self.schema,
                                   target_srid=self.target_srid,
                                   source_srid=self.srid,
@@ -255,7 +259,7 @@ class ExtractOSM(Extract):
         WHERE n.session_id='{session_id}';
         ANALYZE "{schema}".nodes;
         """
-        self.logger.info('Extracting nodes')
+        self.logger.info(f'Extracting nodes into {schema}.nodes')
         self.run_query(sql.format(temp=self.temp, schema=self.schema,
                                   target_srid=self.target_srid,
                                   temp_meta=self.temp_meta,

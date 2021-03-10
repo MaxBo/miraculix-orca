@@ -383,7 +383,7 @@ WHERE NOT EXISTS
         """
         with Connection(login=self.login) as conn:
             self.conn = conn
-            self.logger.info('Creating polygons')
+            self.logger.info(f'Creating OSM polygons in schema {schema}')
             self.run_query(sql_create_simple_polygons)
             self.run_query(sql_create_polygons_with_holes)
             self.run_query(sql_create_multipolygons)
@@ -392,7 +392,8 @@ WHERE NOT EXISTS
             self.run_query(sql_update_tags)
             self.logger.info('Creating indexes')
             self.run_query(sql_create_index)
-            self.logger.info('Creating views')
+            self.logger.info(f'Creating views {schema}.polygons and '
+                             f'{schema}.lines')
             self.run_query(sql_create_view)
             self.conn.commit()
 

@@ -44,6 +44,7 @@ class ScrapeTimetable(ScrapeStops):
 
     def create_timetable_tables(self):
         """(Re-Create the timetable tables)"""
+        self.logger.info(f'(Re)creating timetables and indexes')
         sql = f"""
         CREATE TABLE IF NOT EXISTS "{self.schema}".abfahrten
         (

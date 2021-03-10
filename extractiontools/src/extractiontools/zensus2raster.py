@@ -19,6 +19,7 @@ class Zensus2Raster(Points2Raster):
     def ew2hectar(self):
         """convert Einwohner to Raster"""
 
+        self.logger.info(f'Converting inhabitants to raster')
         # create view joining geometry and values
         sql = """
 CREATE OR REPLACE VIEW
@@ -51,6 +52,7 @@ WHERE v.cellcode = z.id;
     def zensus2km2(self):
         """convert ZensusData to km2-Raster"""
 
+        self.logger.info(f'Converting zensus data to square kilometer raster')
         # create view joining geometry and values
         sql = """
 CREATE OR REPLACE VIEW
@@ -81,6 +83,7 @@ WHERE v.cellcode = z.id;
     def geostat2km2(self):
         """convert Geostat PopulationData to km2-Raster"""
 
+        self.logger.info(f'Converting geostat data to square kilometer raster')
         # create view joining geometry and values
         sql = """
 CREATE OR REPLACE VIEW
@@ -126,6 +129,7 @@ WHERE v.cellcode = z.id;
         noData : double, optional (Default=0)
             the noData Value
         """
+        self.logger.info(f'Creating square kilometer raster')
         self.point2raster(
             point_feature='{}.zensus_km2_pnt_laea'.format(self.schema),
             geom_col='pnt_laea',

@@ -54,8 +54,7 @@ class Hafas2GTFS(DBApp):
     def fill_gtfs_stops(self):
         """
         """
-        cur = self.conn.cursor()
-
+        self.logger.info(f'Filling gtfs stops')
         # Stops
         sql = """
 
@@ -85,6 +84,7 @@ regexp_replace(a."Fahrt_Name", ' +' ::text, ' ' ::text) || ' -> ' ::text ||
         """
         Suche Kreis, in dem die meisten Haltestellen einer Linie liegen
         """
+        self.logger.info(f'Identifying region')
         sql = """
 -- Kreis, in der die meisten Abfahrten der Linie liegen, generieren
 UPDATE abfahrten a
@@ -136,6 +136,7 @@ WHERE r.route_id = b.route_id;
     def line_type(self):
         """
         """
+        self.logger.info(f'Processing line types')
         sql = """
 
 -- Linientyp suchen
@@ -165,6 +166,7 @@ WHERE agency_name is NULL;
     def make_routes(self):
         """
         """
+        self.logger.info(f'Creating routes')
         sql = """
 TRUNCATE routes;
 INSERT INTO routes (route_id, agency_name, typ, route_short_name, abfahrten_list, h_folge, fz_folge, hz_folge)
@@ -213,6 +215,7 @@ WHERE a.abfahrt_id = ANY(r.abfahrten_list)
     def make_agencies(self):
         """
         """
+        self.logger.info(f'Creating agencies')
         sql = """
 -- agency-Tabelle erzeugen
 TRUNCATE agencies;
@@ -242,6 +245,7 @@ WHERE route_long_name IS NULL;
     def make_shapes(self):
         """
         """
+        self.logger.info(f'Creating shapes')
         sql = """
 
 -- generate shapes
@@ -326,6 +330,7 @@ WHERE a.route_id = r.route_id
     def make_stop_times(self):
         """
         """
+        self.logger.info(f'Creating stop times')
         sql = """
 
 TRUNCATE gtfs_stop_times;
@@ -385,6 +390,7 @@ WHERE departure_time IS NULL;
             tables = ['stops', 'agency', 'stop_times', 'routes', 'trips', 'shapes',
                       'calendar', 'calendar_dates', 'transfers']
             for table in tables:
+                self.logger.info(f'Exporting table {table} to gtfs')
                 tn = 'gtfs_{tn}'.format(tn=table)
                 fn = os.path.join(path, '{tn}.txt'.format(tn=table))
                 with open(fn, 'w') as f:

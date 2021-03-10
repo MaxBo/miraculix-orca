@@ -90,6 +90,7 @@ class HafasDB2GTFS(Extract):
 
     def create_gtfs_tables(self):
         """Create the gtfs tables if not yet exists"""
+        self.logger.info(f'Creating gtfs tables')
         sql = """
 CREATE TABLE IF NOT EXISTS gtfs_agency (
   agency_id TEXT NOT NULL,
@@ -195,6 +196,7 @@ CREATE INDEX IF NOT EXISTS gtfs_trips_trips_route_id ON gtfs_trips
 
     def create_routes_tables(self):
         """Create routes and agency tables"""
+        self.logger.info(f'Creating route tables')
         sql = """
 CREATE TABLE IF NOT EXISTS agencies (
   agency_id INTEGER NOT NULL,
@@ -257,6 +259,7 @@ TRUNCATE shapes;
         """
         make a backup of the timetables
         """
+        self.logger.info(f'Creating timetables')
         sql = """
 CREATE SEQUENCE IF NOT EXISTS stop_id_seq START 10000000;
 
@@ -572,6 +575,7 @@ AND extract(hour from "H_Abfahrt") >= 12;
                          cur.statusmessage)
 
     def shift_trips(self):
+        self.logger.info(f'Shifting trips')
         sql1 = """
 -- korrigiere Fahrten über Tagesgrenzen hinaus
 --verschiebe Fahrten nach vorne, so dass nur Fahrten heute und morgen auftreten
@@ -682,6 +686,7 @@ AND "H_Abfahrt" IS NOT NULL;
 
     def test_for_negative_travel_times(self):
         cur = self.conn.cursor()
+        self.logger.info(f'Validating travel times')
         sql = """
 SELECT count(*) FROM (
 SELECT *,
@@ -735,6 +740,7 @@ WHERE "H_Abfahrt" < "H_Ankunft";
         and save into abfahrt_id_final
         """
 
+        self.logger.info(f'Counting duplicate trips')
         cur = self.conn.cursor()
         sql = """
 -- zähle die doppelten Fahrten durch
@@ -811,6 +817,7 @@ GROUP BY keep;
 
     def show_multiple_trips(self):
         cur = self.conn.cursor()
+        self.logger.info(f'Finding duplicate trips')
         sql = '''
 SELECT
 f.*,
@@ -837,6 +844,7 @@ ORDER BY f."Fahrt_Name", f.abfahrt_id, f.fahrt_index;
         """
         save H_ID into stop_id before deleting a trip
         """
+        self.logger.info(f'Saving stop ids')
         cur = self.conn.cursor()
         sql = """
 -- sichere vor dem Löschen H_ID, die bei doppelten Fahrten gefunden wurden in Spalte stop_id
@@ -865,6 +873,7 @@ WHERE f.abfahrt_id = f2.abfahrt_id_final
         """
         Aktualisiere Haltestellen_d
         """
+        self.logger.info(f'Updating stops')
         sql = """
 
 INSERT INTO haltestellen_d ("H_ID", "H_Name", geom)
@@ -895,6 +904,7 @@ WHERE h."H_ID" =id1 ;
         """
         delete abfahrten marked with keep=False
         """
+        self.logger.info(f'Removing duplicate departures')
         cur = self.conn.cursor()
         sql = """
 -- lösche doppelte Fahrten
@@ -953,6 +963,7 @@ AND f."H_Name" = h."H_Name";
         """
         Update stop_ids aus Deutchlandweiten Daten
         """
+        self.logger.info(f'Updating stops from database')
         cur = self.conn.cursor()
         sql = """
 -- setze für noch nicht gefundenen H_IDs Haltestellennummern aus verschiedenen Haltestellentabellen
@@ -996,6 +1007,7 @@ AND hd."H_Name" IN (SELECT DISTINCT f."H_Name" FROM trips AS f);
         """
         behalte nur die relevanten Haltestellen
         """
+        self.logger.info(f'Cleaning up stops')
         cur = self.conn.cursor()
         sql = """
 -- packe die Haltestellen in eine Backup-Tabelle
@@ -1029,6 +1041,7 @@ WHERE
     def update_stop_id_from_similar_routes(self):
         """
         """
+        self.logger.info(f'Updating stops from similar routes')
         cur = self.conn.cursor()
         sql = """
 
@@ -1151,7 +1164,7 @@ UPDATE trips SET stop_id_txt = stop_id::text;
     def fill_gtfs_stops(self):
         """
         """
-        cur = self.conn.cursor()
+        self.logger.info(f'Filling gtfs stops')
 
         # Stops
         sql = """
@@ -1193,6 +1206,7 @@ AND h.kreis IS NULL;
         """
         Suche Kreis, in dem die meisten Haltestellen einer Linie liegen
         """
+        self.logger.info(f'Identifying region')
         sql = """
 -- Kreis, in der die meisten Abfahrten der Linie liegen, generieren
 UPDATE departures a
@@ -1244,6 +1258,7 @@ WHERE r.route_id = b.route_id;
     def line_type(self):
         """
         """
+        self.logger.info(f'Processing line types')
         sql = """
 
 -- Linientyp suchen
@@ -1273,6 +1288,7 @@ WHERE agency_name is NULL;
     def make_routes(self):
         """
         """
+        self.logger.info(f'Creating routes')
         sql = """
 TRUNCATE routes;
 INSERT INTO routes (
@@ -1350,6 +1366,7 @@ WHERE a.abfahrt_id = ANY(r.abfahrten_list)
     def make_agencies(self):
         """
         """
+        self.logger.info(f'Creating agencies')
         sql = """
 -- agency-Tabelle erzeugen
 TRUNCATE agencies;
@@ -1381,6 +1398,7 @@ WHERE route_long_name IS NULL;
     def make_shapes(self):
         """
         """
+        self.logger.info(f'Creating shapes')
         sql = """
 
 -- generate shapes
@@ -1466,6 +1484,7 @@ WHERE a.route_id = r.route_id
     def make_stop_times(self):
         """
         """
+        self.logger.info(f'Creating stop times')
         sql = """
 
 TRUNCATE gtfs_stop_times;
@@ -1534,6 +1553,7 @@ WHERE departure_time IS NULL;
                                        '{}.zip'.format(self.destination_db))
             with zipfile.ZipFile(zipfilename, 'w') as z:
                 for table in tables:
+                    self.logger.info(f'Exporting table {table} to gtfs')
                     tn = 'gtfs_{tn}'.format(tn=table)
                     tablename = '{tn}.txt'.format(tn=table)
                     fn = os.path.join(folder, tablename)

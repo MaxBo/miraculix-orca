@@ -43,6 +43,7 @@ class ScrapeStops(Extract):
         """
         CREATE INDEX
         """
+        self.logger.info(f'Creating indexes')
         sql = f"""
         ALTER TABLE "{self.schema}".haltestellen ADD PRIMARY KEY ("H_ID");
         CREATE INDEX idx_haltestellen_geom
@@ -87,7 +88,8 @@ class ScrapeStops(Extract):
           ) a
         ) b
         '''
-        self.logger.info(sql)
+        self.logger.info(f'Creating grid points')
+        self.logger.debug(sql)
         cursor = self.conn.cursor()
         cursor.execute(sql, {'boundary_name': self.boundary_name, })
         points = cursor.fetchall()
@@ -146,7 +148,7 @@ class ScrapeStops(Extract):
                   ) a
                 ) b;
             '''
-        self.logger.info(sql)
+        self.logger.debug(sql)
         cursor = self.conn.cursor()
         cursor.execute(sql, {'boundary_name': self.boundary_name, })
         new_points = cursor.fetchall()
@@ -227,7 +229,7 @@ class ScrapeStops(Extract):
                 "H_Name"=excluded."H_Name",
                 in_area=True::boolean;
             """
-        self.logger.info(sql)
+        self.logger.debug(sql)
         cursor.execute(sql)
 
         self.logger.info(f'inserted or updated {cursor.rowcount} stops')

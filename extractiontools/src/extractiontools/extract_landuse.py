@@ -42,6 +42,7 @@ class ExtractLanduse(Extract):
         """
         Extract OSM oceans and transform into target srid
         """
+        self.logger.info(f'Extracting oceans to {self.schema}.oceans')
         sql = f"""
         SELECT
           c.gid,
@@ -59,6 +60,8 @@ class ExtractLanduse(Extract):
         Extract Corine Landcover data and transform into target srid
         """
         for corine in self.corine:
+            self.logger.info(f'Extracting corine landcover data into '
+                             f'{self.schema}.{corine}')
             sql = f"""
             SELECT
               c.ogc_fid, c.code, c.id, c.remark,
@@ -97,6 +100,8 @@ class ExtractLanduse(Extract):
              for ov in self.corine_overviews]
 
         for tn in tables:
+            self.logger.info(f'Extracting corine raster data '
+                             f'into {self.schema}.{tn}')
             sql = f"""
             CREATE TABLE {self.schema}.{tn}
             (rid serial PRIMARY KEY,
@@ -127,6 +132,8 @@ class ExtractLanduse(Extract):
              for ov in self.aster_overviews]
 
         for tn in tables:
+            self.logger.info(f'Extracting Aster elevation data into '
+                             f'{self.schema}.{tn}')
             sql = f"""
             CREATE TABLE {self.schema}.{tn}
             (rid serial PRIMARY KEY,
@@ -144,6 +151,7 @@ class ExtractLanduse(Extract):
             """
             self.run_query(sql, conn=self.conn)
 
+        self.logger.info(f'Creating view {self.schema}.aster_centroids')
         # raster points
         sql = """
         CREATE MATERIALIZED VIEW {schema}.aster_centroids AS
@@ -162,6 +170,8 @@ class ExtractLanduse(Extract):
         """
         Extract GMES Urban Atlas Landcover data and transform into target srid
         """
+        self.logger.info(f'Extracting GMES Urban Atlas boundaries into '
+                         f'{self.schema}.ua2012_boundary')
         sql = f"""
         SELECT
           c.gid, c.country, c.cities, c.fua_or_cit,
@@ -176,6 +186,8 @@ class ExtractLanduse(Extract):
         self.run_query(sql, conn=self.conn)
 
         for gmes in self.gmes:
+            self.logger.info(f'Extracting GMES Urban Atlas landcover data into '
+                             f'{self.schema}.{gmes}')
             sql = f"""
             SELECT
               c.gid, c.country, c.cities, c.fua_or_cit,
@@ -207,6 +219,7 @@ class ExtractLanduse(Extract):
     def create_index_corine(self):
         """ Corine landcover Index"""
 
+        self.logger.info(f'Creating indexes for corine landcover data')
         sql = """
         ALTER TABLE {schema}.{corine} ADD PRIMARY KEY (ogc_fid);
         CREATE INDEX {corine}_geom_idx
@@ -227,6 +240,7 @@ class ExtractLanduse(Extract):
 
     def create_index_gmes(self):
         """ Corine GMES Index"""
+        self.logger.info(f'Creating indexes for GMES landcover data')
         sql = """
         ALTER TABLE {schema}.{gmes} ADD PRIMARY KEY (gid);
         CREATE INDEX {gmes}_geom_idx
@@ -257,6 +271,7 @@ class ExtractLanduse(Extract):
 
     def create_index_oceans(self):
         """Oceans Index"""
+        self.logger.info(f'Creating indexes for oceans')
         sql = """
         -- oceans
         ALTER TABLE {schema}.oceans ADD PRIMARY KEY (gid);
@@ -270,6 +285,7 @@ class ExtractLanduse(Extract):
         """
         add index to all corine rasters requiered in the arguments
         """
+        self.logger.info(f'Creating indexes for corine raster data')
         for corine in self.corine:
             corine_raster = self.get_corine_raster_name(corine)
             self.add_raster_index_and_overviews(overviews=self.corine_overviews,

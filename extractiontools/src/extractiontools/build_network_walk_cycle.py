@@ -15,7 +15,7 @@ class BuildNetworkWalkCycle(BuildNetwork):
         """
         Create the view for all ways suided for walking and cycling
         """
-
+        self.logger.info('Creating roads')
         sql = """
 CREATE MATERIALIZED VIEW "{network}".roads AS
 SELECT
@@ -42,6 +42,7 @@ HAVING bool_or(a.foot) or bool_or(a.bicycle);
         """
         create links
         """
+        self.logger.info('Creating links')
         sql = """
 DROP TABLE IF EXISTS "{network}".links;
 CREATE TABLE "{network}".links
@@ -79,6 +80,7 @@ WITH (
         """
 
         """
+        self.logger.info('Updating oneways')
         sql = """
 UPDATE "{network}".links l
 SET oneway = TRUE
@@ -127,6 +129,7 @@ AND w.tags @> ca.tags
     def update_speed(self):
         """
         """
+        self.logger.info('Updating speed')
         sql = """
 
 CREATE OR REPLACE FUNCTION "{network}".calc_v_rad (slope double precision)
@@ -207,6 +210,7 @@ WHERE bf.wayid = l.wayid AND bf.segment = l.segment
         """
 
         """
+        self.logger.info('Updating durations')
         sql = """
 UPDATE "{network}".links l
 SET
@@ -259,6 +263,7 @@ WHERE l.wayid = g.wayid AND l.segment = g.segment;
         """
         Create Barriers
         """
+        self.logger.info('Creating barriers')
         sql = """
 CREATE OR REPLACE VIEW "{network}".barriers_foot AS
  SELECT b.id,
@@ -357,6 +362,7 @@ CREATE OR REPLACE VIEW "{network}".line_barriers_cycle AS
         """
         Updates the edge_table
         """
+        self.logger.info('Updating edges')
         if self.routing_walk:
             cost = 'l.t_foot_hin'
             reverse_cost = 'l.t_foot_rueck'
@@ -385,6 +391,7 @@ FROM "{network}".links l;
     def create_views_roadtypes(self):
         """
         """
+        self.logger.info('Creating road type views')
         sql = """
 -- erstelle View für die einzelnen Streckentypen
 CREATE OR REPLACE VIEW "{network}".walk_cycle_network AS

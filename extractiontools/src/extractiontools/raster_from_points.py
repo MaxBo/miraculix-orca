@@ -134,6 +134,7 @@ class Points2Raster(DBApp):
         # table-name
         target_raster_tablename = target_schema_table[-1]
 
+        self.logger.info(f'Converting points to raster')
         if overwrite:
             sql = """
 DROP TABLE IF EXISTS {target} CASCADE;
@@ -233,12 +234,15 @@ COPY (
 
         with tempfile.NamedTemporaryFile('wb', delete=False) as f:
             cur = self.conn.cursor()
-            self.logger.info(copy_sql)
+
+            self.logger.info(f'Exporting raster file')
+            self.logger.debug(copy_sql)
             cur.copy_expert(copy_sql, f)
             f.close()
 
             cmd = f'/usr/bin/xxd -p -r {f.name} > {file_path}'
-            self.logger.info(cmd)
+            self.logger.info(f'Copying raster file to {file_path}')
+            self.logger.debug(cmd)
             ret = subprocess.call(cmd, shell=self.SHELL)
             try:
                 os.remove(f.name)
@@ -272,6 +276,7 @@ COPY (
             target raster
         """
 
+        self.logger.info(f'Creating polygon view intersecting the raster grid')
         sql = """
 DROP MATERIALIZED VIEW IF EXISTS {sc}.{tn} CASCADE;
 CREATE MATERIALIZED VIEW {sc}.{tn} AS
@@ -332,6 +337,7 @@ WHERE v.cellcode=l.cellcode;
             the raster with the weights
         """
 
+        self.logger.info(f'Creating polygon view intersecting the raster grid')
         sql = """
 
 DROP MATERIALIZED VIEW IF EXISTS {sc}.{tn}_raster_intersects CASCADE;
@@ -418,6 +424,7 @@ WHERE v.cellcode=l.cellcode;
         Create a materialized view for a point raster intersected
         with the raster polygon
         """
+        self.logger.info(f'Creating raster view')
         if value_column is None:
             val = 'count(*) as value'
         else:

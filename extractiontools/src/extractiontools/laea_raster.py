@@ -30,6 +30,7 @@ class ExtractLAEA(Extract):
         create views for zensus data and
         add a geometry index to views
         """
+        self.logger.info(f'Creating zensus view {self.schema}.ew_hectar')
         sql = f"""
         CREATE MATERIALIZED VIEW
         {self.schema}.ew_hectar AS
@@ -67,6 +68,8 @@ class ExtractLAEA(Extract):
         """
         add a table with the number of residents per hectar
         """
+        self.logger.info(f'Extracting inhabitants per hectar into '
+                         f'{self.schema}.zensus_ew_hectar')
         sql = f"""
         DROP TABLE IF EXISTS {self.schema}.zensus_ew_hectar CASCADE;
         CREATE TABLE {self.schema}.zensus_ew_hectar
@@ -83,6 +86,8 @@ class ExtractLAEA(Extract):
 
     def get_zensusdata_km2(self):
         """Extract Censusdata on km2 level for area"""
+        self.logger.info(f'Extracting inhabitants per square kilometer into '
+                         f'{self.schema}.zensus_km2')
         sql = f"""
         DROP TABLE IF EXISTS {self.schema}.zensus_km2 CASCADE;
         CREATE TABLE {self.schema}.zensus_km2
@@ -126,6 +131,8 @@ class ExtractLAEA(Extract):
 
     def get_geostat_data_km2(self):
         """Extract Geostat data on km2 level for area"""
+        self.logger.info(f'Extracting geostat data (square kilometer) into '
+                         f'{self.schema}.geostat_km2')
         sql = f"""
         DROP TABLE IF EXISTS {self.schema}.geostat_km2 CASCADE;
         CREATE TABLE {self.schema}.geostat_km2
@@ -157,6 +164,8 @@ class ExtractLAEA(Extract):
         Verschneide mit Gemeindegrenzen
         """
 
+        self.logger.info(f'Creating LAEA raster for pixel size {pixelsize} in '
+                         f'{self.schema}.laea_raster_{pixelsize}')
         tilesize = self.get_tilesize(pixelsize)
         default = 1
         sql = f"""
@@ -191,6 +200,8 @@ class ExtractLAEA(Extract):
         """
 
         self.run_query(sql, conn=self.conn)
+        self.logger.info(f'Creating LAEA vector table for pixel size {pixelsize} '
+                         f'in {self.schema}.laea_vector_{pixelsize}')
         str_pixelsize = self.str_pixelsize(pixelsize)
         srid = self.target_srid
         sql = f"""
@@ -218,6 +229,7 @@ class ExtractLAEA(Extract):
           (st_pixelascentroids(rast, 1)).geom AS pnt_laea
           FROM {self.schema}.laea_raster_{pixelsize} l) b
         ;
+
         CREATE INDEX laea_vector_{pixelsize}_geom_idx
         ON {self.schema}.laea_vector_{pixelsize} USING gist(geom);
         CREATE INDEX laea_vector_{pixelsize}_pnt_idx
@@ -274,6 +286,10 @@ class ExtractLAEA(Extract):
         ----------
         pixelsize : int
         """
+        self.logger.info(f'Creating views of points and polygons for pixel '
+                         f'size {pixelsize} in '
+                         f'{self.schema}.grid_points_{pixelsize} and '
+                         f'{self.schema}.grid_poly_{pixelsize}')
         sql = f"""
         CREATE OR REPLACE VIEW {self.schema}.grid_points_{pixelsize} AS
         SELECT

@@ -45,6 +45,7 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
                               schema='osm_layer'):
         """Create a linestring layer schema.view, with the given fields
         and the given where-clause"""
+        self.logger.info(f'Creating view {schema}.{view}')
         geometrytypes = {'nodes': ('POINT', 'geom'),
                          'lines': ('LINESTRING', 'geom'),
                          'polygons': ('MULTIPOLYGON', 'geom'), }
@@ -132,6 +133,7 @@ WHERE {where};
         """Create a composite layer of all geometrytypes"""
         cols = self.conn.get_column_dict(layers[0], schema)
         cols_without_geom = (c for c in cols if c != 'geom')
+        self.logger.info(f'Creating composite layer {schema}.{view}')
         if not cols_without_geom:
             raise ValueError("No Columns beside the geom column defined")
         col_str = ', '.join(cols_without_geom)

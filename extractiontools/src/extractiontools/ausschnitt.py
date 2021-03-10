@@ -78,7 +78,8 @@ class Extract(DBApp):
         self.source_db = source_db or os.environ.get(
             'FOREIGN_NAME', 'europe')
         self.destination_db = destination_db
-        self.tables = tables
+        if tables:
+            self.tables = tables
         self.tables2cluster = []
         self.check_platform()
         self.boundary = boundary
@@ -221,7 +222,7 @@ class Extract(DBApp):
         WHERE
         st_intersects(t.{geom}, tb.source_geom)
         """
-        self.logger.info(f'Extracting table "{tn}"')
+        self.logger.info(f'Extracting table "{tn}" into {self.schema}.{tn}')
         self.run_query(sql, conn=self.conn)
 
     def get_geometrytype(self, tn, geom):
@@ -461,7 +462,7 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         sql = f'''CREATE SCHEMA IF NOT EXISTS {schema};'''
         self.run_query(sql, conn=conn)
         for table in tables:
-            self.logger.info(f'Copying table "{table}"')
+            self.logger.info(f'Copying table "{table}" to {schema}.{table}')
             sql = f'''
             DROP TABLE IF EXISTS {schema}.{table};
             CREATE TABLE {schema}.{table} (LIKE {temp_schema}.{table}

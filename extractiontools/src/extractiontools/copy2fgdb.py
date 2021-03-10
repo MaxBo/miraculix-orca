@@ -61,6 +61,7 @@ class Copy2FGDB(Extract):
             f'dbname={self.destination_db}" "{schema}.{layer}"'
 
         self.logger.info(f'Copying {layer}')
+        self.logger.debug(cmd)
         ret = subprocess.call(cmd, shell=self.SHELL)
         if ret:
             raise IOError(
@@ -122,7 +123,9 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
 
         path = self.get_path(gdal_format)
         cmd_zip = f'zip -r -m {path}.zip {path}'
-        self.logger.info(cmd_zip)
+
+        self.logger.info(f'Zipping FGDBs to {path}')
+        self.logger.debug(cmd_zip)
         ret = subprocess.call(cmd_zip, shell=self.SHELL)
         if ret:
             raise IOError(

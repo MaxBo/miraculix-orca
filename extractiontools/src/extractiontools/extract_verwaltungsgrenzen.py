@@ -11,13 +11,13 @@ class ExtractVerwaltungsgrenzen(Extract):
     """
     Extract the osm data
     """
-    tables = {}
     schema = 'verwaltungsgrenzen'
     role = 'group_osm'
 
     def final_stuff(self):
         # foreign tables seem not to pass the pkeys
         # so the pkeys are retrieved from the foreign server directly
+        self.logger.info(f'Creating indexes')
         with Connection(login=self.foreign_login) as conn:
             for tn, geom in self.tables.items():
                 self.add_geom_index(tn, geom)
