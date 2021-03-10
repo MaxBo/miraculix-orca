@@ -4,6 +4,7 @@
 from argparse import ArgumentParser
 
 from extractiontools.ausschnitt import Extract
+import psycopg2
 
 
 class ExtractOSM(Extract):
@@ -105,7 +106,7 @@ class ExtractOSM(Extract):
         copy the way_nodes in that area
         """
 
-        self.logger.info(f'Copying way nodes to {schema}.way_nodes')
+        self.logger.info(f'Copying way nodes to {self.schema}.way_nodes')
         sql = """
         -- copy way nodes
         SELECT
@@ -130,7 +131,7 @@ class ExtractOSM(Extract):
         ids = [row[0] for row in rows]
         arr = ','.join([str(id) for id in ids])
 
-        self.logger.info(f'Copying related nodes to {schema}.nodes')
+        self.logger.info(f'Copying related nodes to {self.schema}.nodes')
         sql = f'''
         INSERT INTO {self.schema}.nodes
         SELECT
@@ -206,7 +207,11 @@ class ExtractOSM(Extract):
         WHERE session_id='{self.session_id}'
         '''
         self.logger.info('Removing session')
-        self.run_query(sql, conn=self.conn)
+        try:
+            self.run_query(sql, conn=self.conn)
+        # table not created yet
+        except psycopg2.errors.UndefinedTable:
+            pass
         self.cleanup(self.temp_meta)
 
     def additional_stuff(self):
@@ -240,7 +245,7 @@ class ExtractOSM(Extract):
         WHERE w.session_id='{session_id}';
         ANALYZE "{schema}".ways;
         """
-        self.logger.info(f'Extracting ways to {self.schema}.ways')
+        self.logger.info(f'Extracting ways into {self.schema}.ways')
         self.run_query(sql.format(temp_meta=self.temp_meta, schema=self.schema,
                                   target_srid=self.target_srid,
                                   source_srid=self.srid,
@@ -259,7 +264,7 @@ class ExtractOSM(Extract):
         WHERE n.session_id='{session_id}';
         ANALYZE "{schema}".nodes;
         """
-        self.logger.info(f'Extracting nodes into {schema}.nodes')
+        self.logger.info(f'Extracting nodes into {self.schema}.nodes')
         self.run_query(sql.format(temp=self.temp, schema=self.schema,
                                   target_srid=self.target_srid,
                                   temp_meta=self.temp_meta,
