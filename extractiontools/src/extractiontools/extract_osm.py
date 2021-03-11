@@ -194,6 +194,7 @@ class ExtractOSM(Extract):
         INSERT INTO {self.temp_meta}.session_boundary (session_id, source_geom, target_srid)
         VALUES
         ('{self.session_id}', st_transform(ST_GeomFromEWKT('SRID={self.srid};{self.wkt}'), 4326), {self.target_srid});
+        ANALYZE {self.temp_meta}.session_boundary;
         '''
         self.logger.info('Creating session')
         self.run_query(sql, conn=self.conn)
