@@ -1,11 +1,8 @@
 #!/usr/bin/env python
 # coding:utf-8
-import time
-from argparse import ArgumentParser
 
 from extractiontools.connection import DBApp, Connection
 from extractiontools.utils.bahn_query import BahnQuery
-from psycopg2.extras import NamedTupleCursor
 from typing import List
 
 
@@ -13,7 +10,6 @@ class DBRouting(DBApp):
     """Route"""
     tables = {}
     schema = 'timetables'
-    role = 'group_osm'
 
     def __init__(self,
                  database,
