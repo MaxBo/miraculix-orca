@@ -1,5 +1,6 @@
-import json
 import requests
+import time
+
 
 class GooglePlacesAPI:
     url = 'https://maps.googleapis.com/maps/api/place'
@@ -27,9 +28,9 @@ class GooglePlacesAPI:
     'veterinary_care', 'zoo'
     ]
 
-    def __init__(self, key):
+    def __init__(self, key, logger=None):
         self.key = key
-
+        self.logger = logger
 
     def query_places_nearby(self, lat: float, lon: float, radius: int=5000,
                             keyword: str=None, typ: int=None):
@@ -37,7 +38,7 @@ class GooglePlacesAPI:
 
         params = {
             'key': self.key,
-            'radius': radius,
+            'radius': 1000,
             'language': 'de',
             'location': f'{lat},{lon}',
         }
@@ -46,10 +47,31 @@ class GooglePlacesAPI:
         if keyword:
             params['keyword'] = keyword
 
-
         r = requests.get(self.nearby_url, params=params)
-        res_j = r.json()
         if r.status_code != 200:
+            raise Exception('Error while requesting Google API')
+        res_j = r.json()
+        if res_j['status'] == 'REQUEST_DENIED':
             raise Exception(r['error_message'])
-
-        return res_j
+        if res_j['status'] not in ['OK', 'ZERO_RESULTS'] and self.logger:
+            self.logger.warning(f"({lat}, {lon}) {r['error_message']}")
+        results = res_j['results']
+        next_page_token = res_j.get('next_page_token')
+        # pagination
+        while next_page_token:
+            time.sleep(1)
+            r = requests.get(self.nearby_url,
+                             params={'key': self.key,
+                                     'pagetoken': next_page_token})
+            res_j = r.json()
+            if res_j['status'] == 'INVALID_REQUEST':
+                print()
+                if res_j['status'] not in ['OK', 'ZERO_RESULTS'] and self.logger:
+                    self.logger.warning(f"({lat}, {lon}) {r['error_message']}")
+            next_page_token = res_j.get('next_page_token')
+            results.extend(res_j['results'])
+        if len(results) >= 60 and self.logger:
+            self.logger.warning(
+                f'60 results found at ({lat}, {lon}). There might be more '
+                'to be found. Google Places caps at 60 results')
+        return results
