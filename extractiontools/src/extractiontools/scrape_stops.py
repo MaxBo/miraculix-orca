@@ -76,17 +76,18 @@ class ScrapeStops(Extract):
 
         sql = f'''
         SELECT
-        st_x(b.point) x, st_y(b.point) y
+        st_x(a.point) x, st_y(a.point) y
         FROM (
-          SELECT st_transform(st_centroid(a.geom),4326) point
-          FROM (
-            SELECT (
-              ST_HexagonGrid({search_radius},
-              ST_Transform(geom, {self.target_srid}))).*
-            FROM meta.boundary
-            WHERE name=%(boundary_name)s
-          ) a
-        ) b
+          SELECT st_transform(st_centroid(hex.geom),4326) point
+          FROM
+              meta.boundary m
+              CROSS JOIN
+              ST_HexagonGrid({search_radius}, m.geom) AS hex
+          WHERE
+              name=%(boundary_name)s
+              AND
+              ST_Intersects(m.geom, hex.geom)
+        ) a
         '''
         self.logger.info(f'Creating grid points')
         self.logger.debug(sql)
