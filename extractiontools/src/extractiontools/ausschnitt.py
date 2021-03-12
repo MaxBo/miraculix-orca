@@ -120,6 +120,11 @@ class Extract(DBApp):
                 self.update_boundaries()
                 self.create_schema(self.schema, conn=conn, replace=True)
                 self.create_foreign_schema()
+                self.create_foreign_schema(
+                    foreign_schema='pg_catalog',
+                    target_schema='temp_pg_catalog',
+                    tables=['pg_description', 'pg_class', 'pg_namespace']
+                )
                 self.conn.commit()
                 for tn, geom in self.tables.items():
                     self.extract_table(tn, geom=geom)
@@ -133,6 +138,7 @@ class Extract(DBApp):
         finally:
             with Connection(login=self.login) as conn:
                 self.cleanup(conn=conn)
+                self.cleanup(conn=conn, schema='temp_pg_catalog')
 
     def further_stuff(self):
         """
@@ -220,14 +226,37 @@ class Extract(DBApp):
         FROM {self.temp}.{tn} t,
         (SELECT ST_GeomFromEWKT('SRID={self.srid};{wkt}') AS source_geom) tb
         WHERE
-        st_intersects(t.{geom}, tb.source_geom)
+        st_intersects(t.{geom}, tb.source_geom);
         """
+
         self.logger.info(f'Extracting table "{tn}" into {self.schema}.{tn}')
         self.run_query(sql, conn=self.conn)
 
+        description = self.get_table_description(
+            tn, self.foreign_schema or self.schema, foreign=True)
+        if description:
+            sql = f'''
+            COMMENT ON TABLE {self.schema}.{tn} IS '{description}';
+            '''
+            self.run_query(sql, conn=self.conn)
+
+    def get_table_description(self, table, schema, foreign=False, conn=None):
+        cat = 'temp_pg_catalog' if foreign else 'pg_catalog'
+        sql = f'''
+        SELECT d.description FROM {cat}.pg_description as d
+        join {cat}.pg_class as c on d.objoid = c.oid
+        join {cat}.pg_namespace as n on c.relnamespace = n.oid
+        where relname='{table}' and nspname='{schema}';
+        '''
+        conn = conn or self.conn
+        cur = conn.cursor()
+        cur.execute(sql)
+        description = cur.fetchone()
+        return description[0] if description else None
+
     def get_geometrytype(self, tn, geom):
         sql = """
-SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
+        SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         """.format(geom=geom, sn=self.temp, tn=tn)
         cur = self.conn.cursor()
         cur.execute(sql)
@@ -235,7 +264,7 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         return geometrytype
 
     def create_foreign_schema(self, foreign_schema=None, target_schema=None,
-                              conn=None):
+                              tables: list=None, conn=None):
         """
         links schema in database to schema on foreign server
         """
@@ -248,11 +277,10 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
         """
         self.run_query(sql, conn=conn)
 
-        sql = f"""
-        IMPORT FOREIGN SCHEMA {foreign_schema}
-        FROM SERVER {self.foreign_server} INTO {target_schema};
-        """
-
+        sql = f'IMPORT FOREIGN SCHEMA {foreign_schema} '
+        if tables:
+            sql += f'LIMIT TO ({",".join(tables)}) '
+        sql += f'FROM SERVER {self.foreign_server} INTO {target_schema};'
         self.run_query(sql, conn=conn)
 
     def get_target_boundary(self, boundary_name=None):
@@ -470,6 +498,13 @@ SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
             INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};
             '''
             self.run_query(sql, conn=conn)
+            description = self.get_table_description(
+                table, self.foreign_schema or schema, foreign=True)
+            if description:
+                sql = f'''
+                COMMENT ON TABLE {schema}.{table} IS '{description}';
+                '''
+                self.run_query(sql, conn=self.conn)
 
         self.cleanup(schema=temp_schema, conn=conn)
 
