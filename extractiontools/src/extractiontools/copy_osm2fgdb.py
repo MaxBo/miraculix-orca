@@ -107,7 +107,7 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
             where_clause += "\nAND tags <> ''::hstore"
         sql_comment = (f"OSM {geometrytype} with "
                        f"{'tags' if len(keys) > 1 else 'tag'} "
-                       f"{', '.join('<{k}>' for k in keys)}")
+                       f"{', '.join(f'<{k}>' for k in keys)}")
         self.create_geometry_layer(columns,
                                    where_clause,
                                    view,
@@ -148,9 +148,9 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
             raise ValueError("No Columns beside the geom column defined")
         col_str = ', '.join(cols_without_geom)
         sql = """
-SELECT {cols},
-st_pointonsurface(geom)::geometry(POINT, {srid}) AS geom
-FROM {schema}.{layer}"""
+        SELECT {cols},
+        st_pointonsurface(geom)::geometry(POINT, {srid}) AS geom
+        FROM {schema}.{layer}"""
         queries = '\nUNION ALL\n'.join(sql.format(cols=col_str,
                                                   schema=schema,
                                                   layer=layer,
@@ -158,12 +158,23 @@ FROM {schema}.{layer}"""
                                        for layer in layers)
 
         sql = """
-DROP VIEW IF EXISTS {schema}.{view} CASCADE;
-CREATE OR REPLACE VIEW {schema}.{view} AS
-{queries}
-;
+        DROP VIEW IF EXISTS {schema}.{view} CASCADE;
+        CREATE OR REPLACE VIEW {schema}.{view} AS
+        {queries};
         """.format(schema=schema, view=view, queries=queries)
         self.run_query(sql)
+
+        description = ''
+        for layer in layers:
+            desc = self.get_description(layer, schema)
+            if desc:
+                description += f'{desc}\r\n'
+        if description:
+            sql = f'''
+            COMMENT ON VIEW {schema}.{view} IS '{description}';
+            '''
+            self.run_query(sql)
+
 
     def create_railways(self):
         """Create railways layer"""
