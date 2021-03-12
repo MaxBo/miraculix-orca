@@ -14,6 +14,45 @@ class ExtractOSM(Extract):
     schema = 'osm'
     role = 'group_osm'
 
+    def additional_stuff(self):
+        """
+        """
+        self.set_session()
+        try:
+            self.extract_nodes()
+            self.extract_ways()
+            self.copy_way_nodes()
+            self.copy_relations()
+            self.conn.commit()
+            self.copy_users()
+            self.copy_schema_info()
+            self.add_comments()
+        except Exception as e:
+            self.conn.rollback()
+            raise(e)
+        finally:
+            self.remove_session()
+
+    def get_timestamp(self):
+        sql = f'''
+        SELECT max(latest_timestamp) FROM {self.temp}.replication_changes;
+        '''
+        cursor = self.conn.cursor()
+        cursor.execute(sql)
+        return cursor.fetchone().max
+
+    def add_comments(self):
+        self.logger.info('Applying table descriptions')
+        timestamp = self.get_timestamp()
+        t = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+        for table in ['relation_members', 'users', 'way_nodes', 'relations',
+                      'ways', 'nodes', 'actions']:
+            description = self.get_table_description(table, self.schema,
+                                                     foreign=True) or ''
+            description = f'timestamp: {t} \r\n{description}'
+            sql = f"COMMENT ON TABLE {self.schema}.{table} IS '{description}'"
+            self.run_query(sql)
+
     def copy_relations(self):
         """
         copy relation and relation_member Schema
@@ -214,24 +253,6 @@ class ExtractOSM(Extract):
         except psycopg2.errors.UndefinedTable:
             pass
         self.cleanup(self.temp_meta)
-
-    def additional_stuff(self):
-        """
-        """
-        self.set_session()
-        try:
-            self.extract_nodes()
-            self.extract_ways()
-            self.copy_way_nodes()
-            self.copy_relations()
-            self.conn.commit()
-            self.copy_users()
-            self.copy_schema_info()
-        except Exception as e:
-            self.conn.rollback()
-            raise(e)
-        finally:
-            self.remove_session()
 
     def extract_ways(self):
         """
