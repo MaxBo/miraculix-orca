@@ -26,17 +26,30 @@ def create_login(database='postgres'):
         db=database
     )
 
-def get_foreign_tables(database, schema):
+def get_foreign_tables(database, schema) -> dict:
     login = create_foreign_login(database)
     sql = f"""
     SELECT * FROM information_schema.tables
     WHERE table_schema = '{schema}'
+    ORDER BY table_name;
     """
     with Connection(login=login) as conn:
         cursor = conn.cursor()
         cursor.execute(sql)
         rows = cursor.fetchall()
-    return sorted([row.table_name for row in rows])
+        tables = {row.table_name: '' for row in rows}
+
+        sql = f'''
+        SELECT d.description, c.relname FROM pg_catalog.pg_description as d
+        join pg_catalog.pg_class as c on d.objoid = c.oid
+        join pg_catalog.pg_namespace as n on c.relnamespace = n.oid
+        where nspname='{schema}';
+        '''
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        for row in rows:
+            tables[row.relname] = row.description
+    return tables
 
 
 @meta(group='(1) Project', unique=True, order=1,
@@ -99,7 +112,7 @@ def source_db() -> str:
 
 @meta(hidden=True, refresh='always')
 @orca.injectable()
-def verwaltungsgrenzen_tables_choices(source_db) -> List[str]:
+def verwaltungsgrenzen_tables_choices(source_db) -> dict:
     return get_foreign_tables(source_db, 'verwaltungsgrenzen')
 
 
@@ -118,10 +131,10 @@ def verwaltungsgrenzen_tables() -> List[str]:
 
 @meta(hidden=True, refresh='always')
 @orca.injectable()
-def gmes_choices(source_db) -> List[str]:
+def gmes_choices(source_db) -> dict:
     tables = get_foreign_tables(source_db, 'landuse')
     regex = 'ua[0-9]{4}$'
-    return [t for t in tables if re.match(regex, t)]
+    return {k: v for k, v in tables.items() if re.match(regex, k)}
 
 
 @meta(group='(2) Extract-Tables', choices=gmes_choices)
@@ -133,10 +146,10 @@ def gmes() -> List[str]:
 
 @meta(hidden=True, refresh='always')
 @orca.injectable()
-def corine_choices(source_db) -> List[str]:
+def corine_choices(source_db) -> dict:
     tables = get_foreign_tables(source_db, 'landuse')
     regex = 'clc[0-9]{2}$'
-    return [t for t in tables if re.match(regex, t)]
+    return {k: v for k, v in tables.items() if re.match(regex, k)}
 
 
 @meta(group='(2) Extract-Tables', choices=corine_choices)
