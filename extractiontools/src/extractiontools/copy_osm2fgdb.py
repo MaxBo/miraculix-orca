@@ -42,38 +42,44 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
                               where_clause,
                               view,
                               geometrytype='lines',
-                              schema='osm_layer'):
+                              schema='osm_layer',
+                              sql_comment=None):
         """Create a linestring layer schema.view, with the given fields
         and the given where-clause"""
+        osm_geom_schema = 'osm'
         self.logger.info(f'Creating view {schema}.{view}')
         geometrytypes = {'nodes': ('POINT', 'geom'),
                          'lines': ('LINESTRING', 'geom'),
                          'polygons': ('MULTIPOLYGON', 'geom'), }
+
         try:
             geomtype, geomcolumn = geometrytypes[geometrytype]
         except KeyError:
             raise KeyError('geometrytype {gt} is not valid')
 
-        sql = """
-DROP VIEW IF EXISTS {schema}.{view} CASCADE;
-CREATE OR REPLACE VIEW {schema}.{view} AS
-SELECT
-  t.id AS id_long,
-  t.{geomcol}::geometry({geomtype}, {srid}) AS geom,
-  t.tags -> 'name' AS name,
-  {columns}
+        sql = f"""
+        DROP VIEW IF EXISTS {schema}.{view} CASCADE;
+        CREATE OR REPLACE VIEW {schema}.{view} AS
+        SELECT
+          t.id AS id_long,
+          t.{geomcolumn}::geometry({geomtype}, {self.target_srid}) AS geom,
+          t.tags -> 'name' AS name,
+          {columns}
 
-FROM osm.{geometrytype} t
-WHERE {where};
-"""
-        self.run_query(sql.format(schema=schema,
-                                  view=view,
-                                  columns=columns,
-                                  where=where_clause,
-                                  geometrytype=geometrytype,
-                                  geomcol=geomcolumn,
-                                  geomtype=geomtype,
-                                  srid=self.target_srid))
+        FROM {osm_geom_schema}.{geometrytype} t
+        WHERE {where_clause};
+        """
+        self.run_query(sql)
+
+        if sql_comment is None:
+            sql_comment = f'OSM {geometrytype} where {where_clause}'
+
+        geom_desc = self.get_description(geometrytype, osm_geom_schema) or ''
+
+        sql = f'''
+        COMMENT ON VIEW {schema}.{view} IS '{sql_comment}\r\n{geom_desc}';
+        '''
+        self.run_query(sql, conn=self.conn)
 
     def create_layer_by_key(self,
                             view,
@@ -99,9 +105,13 @@ WHERE {where};
         # of the partial index
         if geometrytype == 'nodes' and 'tags' in where_clause:
             where_clause += "\nAND tags <> ''::hstore"
+        sql_comment = (f"OSM {geometrytype} with "
+                       f"{'tags' if len(keys) > 1 else 'tag'} "
+                       f"{', '.join('<{k}>' for k in keys)}")
         self.create_geometry_layer(columns,
                                    where_clause,
                                    view,
+                                   sql_comment=sql_comment,
                                    schema=schema,
                                    geometrytype=geometrytype)
 

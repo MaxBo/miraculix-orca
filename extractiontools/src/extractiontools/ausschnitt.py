@@ -232,7 +232,7 @@ class Extract(DBApp):
         self.logger.info(f'Extracting table "{tn}" into {self.schema}.{tn}')
         self.run_query(sql, conn=self.conn)
 
-        description = self.get_table_description(
+        description = self.get_description(
             tn, self.foreign_schema or self.schema, foreign=True)
         if description:
             sql = f'''
@@ -240,13 +240,13 @@ class Extract(DBApp):
             '''
             self.run_query(sql, conn=self.conn)
 
-    def get_table_description(self, table, schema, foreign=False, conn=None):
+    def get_description(self, relation, schema, foreign=False, conn=None):
         cat = 'temp_pg_catalog' if foreign else 'pg_catalog'
         sql = f'''
         SELECT d.description FROM {cat}.pg_description as d
         join {cat}.pg_class as c on d.objoid = c.oid
         join {cat}.pg_namespace as n on c.relnamespace = n.oid
-        where relname='{table}' and nspname='{schema}';
+        where relname='{relation}' and nspname='{schema}';
         '''
         conn = conn or self.conn
         cur = conn.cursor()
@@ -498,7 +498,7 @@ class Extract(DBApp):
             INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};
             '''
             self.run_query(sql, conn=conn)
-            description = self.get_table_description(
+            description = self.get_description(
                 table, self.foreign_schema or schema, foreign=True)
             if description:
                 sql = f'''

@@ -47,8 +47,8 @@ class ExtractOSM(Extract):
         t = timestamp.strftime('%Y-%m-%d %H:%M:%S')
         for table in ['relation_members', 'users', 'way_nodes', 'relations',
                       'ways', 'nodes', 'actions']:
-            description = self.get_table_description(table, self.schema,
-                                                     foreign=True) or ''
+            description = self.get_description(table, self.schema,
+                                               foreign=True) or ''
             description = f'timestamp: {t} \r\n{description}'
             sql = f"COMMENT ON TABLE {self.schema}.{table} IS '{description}'"
             self.run_query(sql)
