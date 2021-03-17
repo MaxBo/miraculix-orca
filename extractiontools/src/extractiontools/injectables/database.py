@@ -6,6 +6,7 @@ import re
 
 from extractiontools.connection import Login, Connection
 from orcadjango.decorators import meta
+from extractiontools.utils.google_api import GooglePlacesAPI
 
 
 def create_foreign_login(database='postgres'):
@@ -228,3 +229,49 @@ def links_to_find() -> float:
 def routing_walk() -> bool:
     """routing for walking"""
     return False
+
+
+@meta(group='(7) Google')
+@orca.injectable()
+def google_key() -> str:
+    '''Google API key'''
+    return ''
+
+
+@meta(group='(7) Google')
+@orca.injectable()
+def places_table() -> str:
+    '''Name of table in schema "google" to store results of Google Places search
+    in. EXISTING TABLE WILL BE OVERWRITTEN!'''
+    return 'places'
+
+
+@meta(group='(7) Google')
+@orca.injectable()
+def places_keyword() -> str:
+    '''Optional keyword for Places search with Google. Term is matched against
+    all content that Google has indexed for the places, including but not
+    limited to name, type, and address, as well as customer reviews and other
+    third-party content'''
+    return ''
+
+
+@meta(group='(7) Google', choices=['no restriction']+GooglePlacesAPI.types)
+@orca.injectable()
+def places_type() -> str:
+    '''Optionally restrict the results of Places search with Google to places
+    matching the specified type.'''
+    return 'no restriction'
+
+
+@meta(group='(7) Google')
+@orca.injectable()
+def places_search_radius() -> int:
+    '''Search radius per Google Places query in meters (max. 50000 meters).
+    The project area will be rastered into several to cover the whole area with
+    the defined radius. The smaller the radius the more search points are needed
+    and the more requests will be done.
+    The Places API will return max. 60 features per request. If you expect a lot
+    of features per search set it as small as needed.
+    '''
+    return 1000
