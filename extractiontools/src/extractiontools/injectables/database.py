@@ -254,11 +254,11 @@ def places_type() -> str:
 @meta(group='(7) Google')
 @orca.injectable()
 def places_search_radius() -> int:
-    '''Search radius of the Places search in meters (max. 50000 meters).
+    '''Search radius per Google Places query in meters (max. 50000 meters).
     The project area will be rastered into several to cover the whole area with
     the defined radius. The smaller the radius the more search points are needed
     and the more requests will be done.
     The Places API will return max. 60 features per request. If you expect a lot
-    of features to be returned set it as small as needed.
+    of features per search set it as small as needed.
     '''
     return 1000

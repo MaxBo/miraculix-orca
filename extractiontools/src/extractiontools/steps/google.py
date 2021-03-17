@@ -12,12 +12,24 @@ from extractiontools.utils.google_api import GooglePlacesAPI
 def google_places(database: str, google_key: str, places_table: str,
                   places_type: str, places_keyword: str,
                   project_area: 'ogr.Geometry', places_search_radius:  int):
+    '''
+    Search for places with Google Places. Places are defined within the Google
+    Places API as establishments, geographic locations, or prominent points of
+    interest. Points will be distributed to cover the whole project area with
+    the set search radius.
+    The API will be queried at each point. Each query can return 60 places
+    at max. Set a smaller search radius if you
+    expect a lot of places with the set keyword/type combination.
+    '''
     google = GoogleApp(database, boundary=project_area)
     google.get_places(google_key, keyword=places_keyword, typ=places_type,
                       table=places_table, search_radius=places_search_radius)
 
 
 class GoogleApp(Extract):
+    '''
+    Collection of queries for the Google API. Store results in a database.
+    '''
     schema = 'google'
 
     def __init__(self, *args, **kwargs):
@@ -27,6 +39,11 @@ class GoogleApp(Extract):
 
     def get_places(self, key, search_radius=5000, keyword=None, typ=None,
                    table='places'):
+        '''
+        Query the google API at points in the project area. The points
+        will be distributed to cover the whole project area with the given
+        search radius per point.
+        '''
         #point_distance = math.floor(search_radius * math.sqrt(2))
 
         with Connection(login=self.login) as conn:

@@ -3,8 +3,13 @@ import time
 
 
 class GooglePlacesAPI:
+    '''
+    Google Places API queries
+    '''
     url = 'https://maps.googleapis.com/maps/api/place'
     nearby_url = f'{url}/nearbysearch/json'
+    # predefined types of places to query for
+    # (see https://developers.google.com/maps/documentation/places/web-service/supported_types?hl=fi)
     types = [
     'accounting', 'airport', 'amusement_park', 'aquarium', 'art_gallery',
     'atm', 'bakery', 'bank', 'bar', 'beauty_salon', 'bicycle_store',
@@ -28,13 +33,38 @@ class GooglePlacesAPI:
     'veterinary_care', 'zoo'
     ]
 
-    def __init__(self, key, logger=None):
+    def __init__(self, key: str, logger=None):
         self.key = key
         self.logger = logger
 
     def query_places_nearby(self, lat: float, lon: float, radius: int=5000,
-                            keyword: str=None, typ: int=None):
-        '''max-radius 50000'''
+                            keyword: str=None, typ: str=None) -> list:
+        '''
+        query Google Search API at given point
+
+        Parameters
+        ----------
+        lat : float
+           latitude of search point (WGS 84)
+        lon : float
+           longitude of search point (WGS 84)
+        radius : int, optional (default: 5000)
+           Search Radius around point. Maximum 50000 meters
+        keyword : str, optional
+           term is matched against all content that Google has indexed for
+           the places, including but not limited to name, type, and address, as
+           well as customer reviews and other third-party content
+        typ : str, optional
+           restrict the results of Places search with Google to places
+           matching the specified type. Type has to be an element of the
+           list "types" (class variable of this class). If it is not it will
+           be ignored
+
+        Returns
+        -------
+        list of dicts
+           list of results as returned by the API.
+        '''
 
         params = {
             'key': self.key,
