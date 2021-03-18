@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import numpy as np
 from io import StringIO
+from psycopg2.errors import UndefinedTable
 
 
 class Destatis(DBApp):
@@ -21,7 +22,7 @@ class Destatis(DBApp):
     }
     special_chars = 'äüö!@#$%^&*()[]{};:,./<>?\|`~=+"\' '
     tablename_length = 63
-    ags_foreign_table = 'verwaltungsgrenzen.gem_2019_12'
+    ags_foreign_table = 'verwaltungsgrenzen.krs_2019_12'
 
     def __init__(self, database: str, **kwargs):
         super().__init__(schema=self.schema, **kwargs)
@@ -125,7 +126,10 @@ class Destatis(DBApp):
         sql = f'SELECT * FROM {self.schema}.table_codes ORDER BY code ASC;'
         with Connection(login=self.login) as conn:
             cursor = conn.cursor()
-            cursor.execute(sql)
+            try:
+                cursor.execute(sql)
+            except UndefinedTable:
+                return []
             rows = cursor.fetchall()
             return rows
 
@@ -156,21 +160,11 @@ class Destatis(DBApp):
             rows = cursor.fetchall()
             ags = [r.ags for r in rows]
 
-        table_df = None
+        #table_df = None
         # request every single AGS, API is aggregating results otherwise
-        for a in ags:
-            self.logger.info(f'Querying table for AGS {a}')
-            res_df = self.query_table(code, ags=[a])
-            if res_df is None:
-                continue
-            res_df = res_df.drop(columns=[c for c in res_df.columns
-                                          if c.endswith('_Code')
-                                          or c.endswith('_Label')])
-            res_df['AGS'] = a
-            if table_df is None:
-                table_df = res_df
-            else:
-                table_df = table_df.append(res_df)
+        table_df = self.query_table(code, ags=ags)
+        table_df = table_df.drop(columns=[c for c in table_df.columns
+                                          if c.endswith('_Code')])
         fn = f'{code}.csv'
         fp = os.path.join(folder, fn)
         self.logger.info(f'Writing data to {os.path.join(project_folder, fn)}')
