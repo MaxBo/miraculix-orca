@@ -120,11 +120,7 @@ class Extract(DBApp):
                 self.update_boundaries()
                 self.create_schema(self.schema, conn=conn, replace=True)
                 self.create_foreign_schema()
-                self.create_foreign_schema(
-                    foreign_schema='pg_catalog',
-                    target_schema='temp_pg_catalog',
-                    tables=['pg_description', 'pg_class', 'pg_namespace']
-                )
+                self.create_foreign_catalog()
                 self.conn.commit()
                 for tn, geom in self.tables.items():
                     self.extract_table(tn, geom=geom)
@@ -282,6 +278,13 @@ class Extract(DBApp):
             sql += f'LIMIT TO ({",".join(tables)}) '
         sql += f'FROM SERVER {self.foreign_server} INTO {target_schema};'
         self.run_query(sql, conn=conn)
+
+    def create_foreign_catalog(self):
+        self.create_foreign_schema(
+            foreign_schema='pg_catalog',
+            target_schema='temp_pg_catalog',
+            tables=['pg_description', 'pg_class', 'pg_namespace']
+        )
 
     def get_target_boundary(self, boundary_name=None):
         """
@@ -444,7 +447,10 @@ class Extract(DBApp):
         self.logger.info(f'Cleaning up...')
         sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
             temp=schema or self.temp)
-        self.run_query(sql, conn=conn or self.conn)
+        try:
+            self.run_query(sql, conn=conn or self.conn)
+        except errors.UndefinedTable:
+            pass
 
     def vacuum(self, schema=None, tables=[]):
         """
@@ -475,6 +481,7 @@ class Extract(DBApp):
         self.create_schema(schema, conn=conn)
         self.create_foreign_schema(foreign_schema=schema,
                                    target_schema=temp_schema, conn=conn)
+        self.create_foreign_catalog()
 
         cur = conn.cursor()
         if not tables:
