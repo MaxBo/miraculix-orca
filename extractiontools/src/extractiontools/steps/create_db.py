@@ -43,6 +43,7 @@ def grant_access(database: str, db_users: list):
     Only works for already existing schemas, so run this step last. Access for
     a schema is removed on recreation (e.g. access to schema 'osm' is revoked
     when re-running extract_osm)
+    User "osm" always has access to all databases.
     '''
     extract = Extract(destination_db=database, logger=orca.logger)
     extract.grant_access(db_users)

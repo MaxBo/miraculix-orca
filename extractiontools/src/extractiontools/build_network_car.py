@@ -1359,7 +1359,7 @@ SELECT count(*) FROM "{network}".edges_reached;
                                              maxcosts=10000000)
 
             self.logger.info(msg.format(i=i, v=vertex.id))
-            self.logger.info(sql_count_result)
+            self.logger.debug(sql_count_result)
             cursor.execute(sql_count_result)
             row = cursor.fetchone()
             links_reached = float(row.count)
