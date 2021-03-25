@@ -71,6 +71,7 @@ CREATE MATERIALIZED VIEW "{schema}".ways AS
     w.changeset_id,
     w.tags,
     w.nodes,
+    l.wayid AS way_id_original,
     st_transform(w.bbox, {srid}) AS bbox,
     st_transform(w.linestring, {srid}) AS linestring
    FROM osm.ways w, {network}.links_reached_without_planned l
@@ -343,7 +344,7 @@ CREATE MATERIALIZED VIEW "{schema}".ways AS
 CREATE INDEX way_id_idx ON "{schema}".ways
 USING btree(id);
 CREATE INDEX way_id_original_idx ON "{schema}".ways
-USING btree(way_id_original);
+USING btree(way_id_o riginal);
 
 CREATE OR REPLACE VIEW "{schema}".schema_info AS
  SELECT s.version
