@@ -66,7 +66,7 @@ class DBRouting(DBApp):
                              ' within radius')
             sql = f'''
             SELECT
-            "H_ID", "H_Name", d.{pk},
+            "H_ID", "H_Name", d.{pk} AS dest_id,
             ST_X(ST_TRANSFORM(d.geom, 4326)), ST_Y(ST_TRANSFORM(d.geom, 4326))
             FROM
             "{self.schema}".haltestellen h,
