@@ -344,7 +344,7 @@ CREATE MATERIALIZED VIEW "{schema}".ways AS
 CREATE INDEX way_id_idx ON "{schema}".ways
 USING btree(id);
 CREATE INDEX way_id_original_idx ON "{schema}".ways
-USING btree(way_id_o riginal);
+USING btree(way_id_original);
 
 CREATE OR REPLACE VIEW "{schema}".schema_info AS
  SELECT s.version
