@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 from argparse import ArgumentParser
 
@@ -40,6 +40,13 @@ class ExtractVerwaltungsgrenzen(Extract):
         self.run_query(sql, conn=self.conn)
 
 
+class ExtractFirmsNeighbourhoods(ExtractVerwaltungsgrenzen):
+    """
+    Extract the firms from bedirect and the IRS Neighbourhoods
+    """
+    schema = 'firms'
+
+
 if __name__ == '__main__':
 
     parser = ArgumentParser(description="Extract Data for Model")
@@ -71,11 +78,10 @@ if __name__ == '__main__':
                                                   'gem_2014_ew_svb',
                                                   'plz_2016'])
 
-
     options = parser.parse_args()
 
     extract = ExtractVerwaltungsgrenzen(source_db=options.source_db,
-                         destination_db=options.destination_db)
+                                        destination_db=options.destination_db)
     extract.tables = dict([(f, 'geom') for f in options.tabellen])
 
     extract.set_login(host=options.host,

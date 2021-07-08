@@ -6,7 +6,8 @@ from orcadjango.decorators import meta
 from extractiontools.extract_osm import ExtractOSM
 from extractiontools.osm2polygons import CreatePolygons
 from extractiontools.extract_landuse import ExtractLanduse
-from extractiontools.extract_verwaltungsgrenzen import ExtractVerwaltungsgrenzen
+from extractiontools.extract_verwaltungsgrenzen import (
+    ExtractVerwaltungsgrenzen, ExtractFirmsNeighbourhoods)
 from extractiontools.laea_raster import ExtractLAEA
 from extractiontools.zensus2raster import Zensus2Raster, ExportZensus
 from extractiontools.copy_osm2fgdb import CopyOSM2FGDB
@@ -72,6 +73,23 @@ def extract_verwaltungsgrenzen(source_db: str, database: str,
                                         destination_db=database, tables=tables,
                                         logger=orca.logger,
                                         boundary=project_area)
+    extract.extract()
+
+
+@meta(group='(2) Extract Data', order=11, required='create_db')
+@orca.step()
+def extract_firms_neighbourhoods(source_db: str, database: str,
+                                 firms_tables: List[str],
+                                 target_srid: int, project_area: ogr.Geometry):
+    """
+    extract firms and neighbourhoods in the area
+    """
+    tables = {f: 'geom' for f in firms_tables}
+    extract = ExtractFirmsNeighbourhoods(source_db=source_db,
+                                         destination_db=database,
+                                         tables=tables,
+                                         logger=orca.logger,
+                                         boundary=project_area)
     extract.extract()
 
 

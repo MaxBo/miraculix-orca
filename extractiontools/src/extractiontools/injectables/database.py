@@ -18,6 +18,7 @@ def create_foreign_login(database='postgres'):
         db=database
     )
 
+
 def create_login(database='postgres'):
     return Login(
         host=os.environ.get('DB_HOST', 'localhost'),
@@ -26,6 +27,7 @@ def create_login(database='postgres'):
         password=os.environ.get('DB_PASS', ''),
         db=database
     )
+
 
 def get_foreign_tables(database, schema) -> dict:
     login = create_foreign_login(database)
@@ -127,6 +129,21 @@ def verwaltungsgrenzen_tables() -> List[str]:
               'lan_2018_12',
               'gem_2014_ew_svb',
               'plz_2016']
+    return tables
+
+
+@meta(hidden=True, refresh='always')
+@orca.injectable()
+def firms_tables_choices(source_db) -> dict:
+    return get_foreign_tables(source_db, 'firms')
+
+
+@meta(group='(2) Extract-Tables', choices=firms_tables_choices)
+@orca.injectable()
+def firms_tables() -> List[str]:
+    """A list of tables in the schema `firms` to copy"""
+    tables = ['bedirect',
+              'irb_stadtteile']
     return tables
 
 
@@ -256,7 +273,7 @@ def places_keyword() -> str:
     return ''
 
 
-@meta(group='(7) Google', choices=['no restriction']+GooglePlacesAPI.types)
+@meta(group='(7) Google', choices=['no restriction'] + GooglePlacesAPI.types)
 @orca.injectable()
 def places_type() -> str:
     '''Optionally restrict the results of Places search with Google to places
