@@ -84,10 +84,7 @@ def db_users() -> List[str]:
     return []
 
 
-@meta(group='(1) Project', order=3)
-@orca.injectable()
-def project_area() -> ogr.Geometry:
-    """The default area of the project"""
+def dummy_polygon():
     ring = ogr.Geometry(ogr.wkbLinearRing)
     ring.AddPoint(9.0, 54.6)
     ring.AddPoint(9.1, 54.6)
@@ -96,6 +93,14 @@ def project_area() -> ogr.Geometry:
     ring.AddPoint(9.0, 54.6)
     geom = ogr.Geometry(ogr.wkbPolygon)
     geom.AddGeometry(ring)
+    return geom
+
+
+@meta(group='(1) Project', order=3)
+@orca.injectable()
+def project_area() -> ogr.Geometry:
+    """The default area of the project"""
+    geom = dummy_polygon()
     return geom
 
 
@@ -292,3 +297,19 @@ def places_search_radius() -> int:
     of features per search set it as small as needed.
     '''
     return 1000
+
+
+@meta(group='(3) Network', order=1)
+@orca.injectable()
+def detailed_network_area() -> ogr.Geometry:
+    """The area in which the network will be detailed"""
+    geom = dummy_polygon()
+    return geom
+
+
+@meta(group='(3) Network', order=2)
+@orca.injectable()
+def larger_network_area() -> ogr.Geometry:
+    """The area where the network will only cover main roads"""
+    geom = dummy_polygon()
+    return geom

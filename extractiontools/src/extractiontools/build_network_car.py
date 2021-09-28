@@ -46,7 +46,8 @@ class BuildNetwork(DBApp):
             self.conn = conn
             self.get_srid()
             # self.set_session_authorization(self.conn)
-            self.create_views()
+            self.create_schema()
+            self.create_streets_view()
 
             # select roads and junctions
             self.logger.info(f'Create Views')
@@ -116,18 +117,24 @@ SELECT st_srid(geom) AS srid FROM meta.boundary LIMIT 1;
         row = cur.fetchone()
         self.srid = row.srid
 
-    def create_views(self):
+    def create_schema(self):
         """
         Create Views defining the relevant waytypes
         """
-        self.logger.info(f'Create Views')
+        self.logger.info(f'Recreate Schema')
         sql = """
 DROP SCHEMA IF EXISTS "{network}" CASCADE;
 CREATE SCHEMA "{network}";
         """.format(network=self.network)
         self.run_query(sql)
 
-        sql = """
+    def create_streets_view(self):
+        """
+        Create Views defining the relevant waytypes
+        """
+        self.logger.info(f'Create Streets View')
+        network = self.network
+        sql = f"""
 -- selektiere alle Wege und Straßen, die in waytype2linktype definiert sind
 CREATE MATERIALIZED VIEW "{network}".streets AS
 SELECT
@@ -147,7 +154,7 @@ AND wtc.linktype_id=lt.id
 GROUP BY w.id;
 CREATE INDEX streets_idx ON "{network}".streets USING btree(id);
 ANALYZE "{network}".streets;
-""".format(network=self.network)
+"""
         self.run_query(sql)
 
     def create_roads(self):
