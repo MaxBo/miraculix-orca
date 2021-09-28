@@ -1,0 +1,3 @@
+[submodule "extractiontools/src/orcadjango"]
+	path = extractiontools/src/orcadjango
+	url = git://github.com/MaxBo/orcadjango.git
