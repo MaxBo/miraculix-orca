@@ -27,7 +27,8 @@ class BuildGraduatedNetwork(BuildNetwork):
         self.logger.info(f'Create graduated Streets View')
         network = self.network
         srid = 4326
-        wkb = self.detailed_network_area.ExportToWkb()
+        target_srid = self.srid
+        wkt = self.detailed_network_area.ExportToWkt()
         sql = f"""
 -- selektiere alle Wege und Straßen, die in waytype2linktype definiert sind
 CREATE MATERIALIZED VIEW "{network}".streets AS
@@ -40,7 +41,7 @@ osm.ways w,
 classifications.linktypes lt,
 classifications.waytype2linktype wtl,
 classifications.wt2lt_construction wtc,
-(SELECT ST_GeomFromEWKB('SRID={srid};{wkt}') AS geom) da
+(SELECT ST_Transform(ST_GeomFromEWKT('SRID={srid};{wkt}'), {target_srid}) AS geom) da
 WHERE (w.tags @> wtl.tags
 -- Nimm auch geplante oder im Bau befindliche Straßen mit
 OR (w.tags @> wtc.tag1 AND w.tags @> wtc.tag2))
