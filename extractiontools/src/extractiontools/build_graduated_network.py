@@ -28,7 +28,8 @@ class BuildGraduatedNetwork(BuildNetwork):
         network = self.network
         srid = 4326
         target_srid = self.srid
-        wkt = self.detailed_network_area.ExportToWkt()
+        wkt_da = self.detailed_network_area.ExportToWkt()
+        wkt_la = self.larger_network_area.ExportToWkt()
         sql = f"""
 -- selektiere alle Wege und Straßen, die in waytype2linktype definiert sind
 CREATE MATERIALIZED VIEW "{network}".streets AS
@@ -41,13 +42,15 @@ osm.ways w,
 classifications.linktypes lt,
 classifications.waytype2linktype wtl,
 classifications.wt2lt_construction wtc,
-(SELECT ST_Transform(ST_GeomFromEWKT('SRID={srid};{wkt}'), {target_srid}) AS geom) da
+(SELECT ST_Transform(ST_GeomFromEWKT('SRID={srid};{wkt_da}'), {target_srid}) AS geom) da,
+(SELECT ST_Transform(ST_GeomFromEWKT('SRID={srid};{wkt_la}'), {target_srid}) AS geom) la
 WHERE (w.tags @> wtl.tags
 -- Nimm auch geplante oder im Bau befindliche Straßen mit
 OR (w.tags @> wtc.tag1 AND w.tags @> wtc.tag2))
 AND wtl.linktype_id=lt.id
 AND wtc.linktype_id=lt.id
-AND (lt.road_category <= 'B' OR st_intersects(w.linestring, da.geom))
+AND ((lt.road_category <= 'B' AND st_intersects(w.linestring, la.geom))
+OR st_intersects(w.linestring, da.geom))
 GROUP BY w.id;
 CREATE INDEX streets_idx ON "{network}".streets USING btree(id);
 ANALYZE "{network}".streets;
