@@ -224,6 +224,15 @@ def network_fr_schema() -> str:
 
 @meta(group='(3) Network')
 @orca.injectable()
+def network_graduated_schema() -> str:
+    """
+    The network-schema for a graduated network in the database
+    """
+    return 'network_grad'
+
+
+@meta(group='(3) Network')
+@orca.injectable()
 def limit4links() -> int:
     """
     limit the creation of links to limit4links * chunksize

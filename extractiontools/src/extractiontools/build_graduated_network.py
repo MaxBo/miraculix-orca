@@ -16,7 +16,7 @@ class BuildGraduatedNetwork(BuildNetwork):
                  detailed_network_area: ogr.Geometry,
                  larger_network_area: ogr.Geometry,
                  **kwargs):
-        super().__init__(kwargs)
+        super().__init__(**kwargs)
         self.detailed_network_area = detailed_network_area
         self.larger_network_area = larger_network_area
 
@@ -47,9 +47,9 @@ WHERE (w.tags @> wtl.tags
 OR (w.tags @> wtc.tag1 AND w.tags @> wtc.tag2))
 AND wtl.linktype_id=lt.id
 AND wtc.linktype_id=lt.id
-AND (lt.category <= 'B' OR st_intersects(w.linestring, da.geom)
+AND (lt.road_category <= 'B' OR st_intersects(w.linestring, da.geom))
 GROUP BY w.id;
 CREATE INDEX streets_idx ON "{network}".streets USING btree(id);
 ANALYZE "{network}".streets;
-""".format(network=self.network)
+"""
         self.run_query(sql)
