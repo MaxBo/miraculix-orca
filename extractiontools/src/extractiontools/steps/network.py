@@ -3,10 +3,12 @@
 from typing import Dict
 import os
 import orca
+import ogr
 from datetime import date
 from orcadjango.decorators import meta
 from extractiontools.connection import Login
 from extractiontools.build_network_car import BuildNetwork
+from extractiontools.build_graduated_network import BuildGraduatedNetwork
 from extractiontools.build_network_walk_cycle import BuildNetworkWalkCycle
 from extractiontools.scrape_stops import ScrapeStops
 from extractiontools.bahn_routing import DBRouting
@@ -43,6 +45,33 @@ def build_network_car(database: str,
                                  links_to_find=links_to_find,
                                  corine=corine,
                                  logger=orca.logger)
+    build_network.build()
+
+
+
+@meta(group='(3) Networks', required=['extract_osm', 'extract_landuse'])
+@orca.step()
+def build_graduated_network_car(database: str,
+                                chunksize: int,
+                                limit4links: int,
+                                links_to_find: float,
+                                corine: str,
+                                network_graduated_schema: str,
+                                detailed_network_area: ogr.Geometry,
+                                larger_network_area: ogr.Geometry):
+    """
+    build a graduated car network, detailed in the detailed area and only main roads in the larger area
+    """
+    build_network = BuildGraduatedNetwork(db=database,
+                                          network_schema=network_graduated_schema,
+                                          limit=limit4links,
+                                          chunksize=chunksize,
+                                          links_to_find=links_to_find,
+                                          corine=corine,
+                                          logger=orca.logger,
+                                          detailed_network_area=detailed_network_area,
+                                          larger_network_area=larger_network_area,
+                                          )
     build_network.build()
 
 
