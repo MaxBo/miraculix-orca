@@ -902,7 +902,7 @@ SET lanes = 1
 WHERE l.oneway;
 
 UPDATE "{network}".links l
-SET lanes = substring(w.tags->'lanes' FROM '[0-9]+')::integer
+SET lanes = GREATEST(LEAST(substring(w.tags->'lanes' FROM '[0-9]+')::integer, 10), 0)
 FROM osm.ways w
 WHERE l.wayid=w.id AND w.tags ? 'lanes';
 
