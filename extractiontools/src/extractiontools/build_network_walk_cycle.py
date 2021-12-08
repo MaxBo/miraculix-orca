@@ -4,6 +4,7 @@
 from argparse import ArgumentParser
 
 from extractiontools.build_network_car import BuildNetwork
+import ogr
 
 
 class BuildNetworkWalkCycle(BuildNetwork):
