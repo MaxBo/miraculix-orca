@@ -48,7 +48,6 @@ def build_network_car(database: str,
     build_network.build()
 
 
-
 @meta(group='(3) Networks', required=['extract_osm', 'extract_landuse'])
 @orca.step()
 def build_graduated_network_car(database: str,
@@ -83,18 +82,23 @@ def build_network_fr(database: str,
                      links_to_find: float,
                      corine: str,
                      routing_walk: bool,
-                     network_fr_schema: str):
+                     network_fr_schema: str,
+                     detailed_network_area: str,
+                     ):
     """
     build a walk and cycle network
     """
-    build_network = BuildNetworkWalkCycle(db=database,
-                                          network_schema=network_fr_schema,
-                                          limit=limit4links,
-                                          chunksize=chunksize,
-                                          links_to_find=links_to_find,
-                                          corine=corine,
-                                          routing_walk=routing_walk,
-                                          logger=orca.logger)
+    build_network = BuildNetworkWalkCycle(
+        db=database,
+        network_schema=network_fr_schema,
+        limit=limit4links,
+        chunksize=chunksize,
+        links_to_find=links_to_find,
+        corine=corine,
+        routing_walk=routing_walk,
+        logger=orca.logger,
+        detailed_network_area=detailed_network_area,
+    )
     build_network.build()
 
 
