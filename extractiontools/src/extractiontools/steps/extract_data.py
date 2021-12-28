@@ -11,6 +11,7 @@ from extractiontools.extract_verwaltungsgrenzen import (
 from extractiontools.laea_raster import ExtractLAEA
 from extractiontools.zensus2raster import Zensus2Raster, ExportZensus
 from extractiontools.copy_osm2fgdb import CopyOSM2FGDB
+from extractiontools.pendlerdaten import ImportPendlerdaten, ExtractPendler
 from osgeo import ogr
 
 import extractiontools.steps.create_db
@@ -198,12 +199,15 @@ def import_pendlerdaten(source_db: str,
 
 @meta(group='(8) Pendler')
 @orca.step()
-def export_pendlerdaten(database: str,
+def export_pendlerdaten(source_db: str,
+                        database: str,
                         pendlerdaten_gemeinden: str):
     """
     export commutertrips from base database
     """
-    extract_pendler = ExtractPendler(db=database,
-                                     pendlerdaten_gemeinden=pendlerdaten_gemeinden,
-                                     logger=orca.logger)
-    extract_pendler.run()
+    extract_pendler = ExtractPendler(
+        source_db=source_db,
+        destination_db=database,
+        pendlerdaten_gemeinden=pendlerdaten_gemeinden,
+        logger=orca.logger)
+    extract_pendler.extract()
