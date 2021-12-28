@@ -201,14 +201,21 @@ def subfolder_tiffs() -> str:
 @orca.injectable()
 def subfolder_otp() -> str:
     """subfolder for the OpenTripPlanner"""
-    return 'otp'8
+    return 'otp'
 
 
 @meta(group='(8) Pendlerdaten')
 @orca.injectable()
 def subfolder_pendlerdaten() -> str:
     """subfolder for the Pendlerdaten-Excelfiles"""
-    return 'pendlerdaten'
+    return 'Pendlerdaten'
+
+
+@meta(group='(8) Pendlerdaten')
+@orca.injectable()
+def pendlerdaten_years() -> str:
+    """Years to import as Pendlerdaten"""
+    return [2019, 2020]
 
 
 @meta(group='(3) Network')

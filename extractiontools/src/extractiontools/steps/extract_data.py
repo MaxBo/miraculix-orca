@@ -185,11 +185,14 @@ def copy_zensus_to_tiff(database: str, subfolder_tiffs: str):
 
 @meta(group='(8) Pendler', required=extract_verwaltungsgrenzen)
 @orca.step()
-def import_pendlerdaten(database: str, subfolder_pendlerdaten: str):
+def import_pendlerdaten(database: str,
+                        subfolder_pendlerdaten: str,
+                        pendlerdaten_years: List[int]):
     """
     import commutertrips to base database
     """
     import_pendler = ImportPendlerdaten(db=database,
                                         subfolder=subfolder_pendlerdaten,
+                                        pendlerdaten_years=pendlerdaten_years,
                                         logger=orca.logger)
     import_pendler.run()

@@ -4,3 +4,4 @@ sqlparse
 orca
 requests
 lxml
+pyxlsb
