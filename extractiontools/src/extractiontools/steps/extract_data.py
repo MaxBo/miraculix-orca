@@ -186,7 +186,7 @@ def copy_zensus_to_tiff(database: str, subfolder_tiffs: str):
 @orca.step()
 def import_pendlerdaten(source_db: str,
                         subfolder_pendlerdaten: str,
-                        pendlerdaten_years: List[int]):
+                        pendlerdaten_years: List[str]):
     """
     import commutertrips to base database
     """

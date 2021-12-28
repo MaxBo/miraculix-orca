@@ -182,8 +182,10 @@ class ImportPendlerdaten(DBApp):
         df.drop_duplicates(keep='first', inplace=True)
 
         # make ZZ unique
-        zz = df[index_cols[2]] == 'ZZ'
-        #rn = df.loc[zz].group_by
+        is_zz = df[index_cols[2]] == 'ZZ'
+        only_zz = df.loc[is_zz]
+        zz_idx = only_zz.groupby([index_cols[0]]).cumcount(ascending=True).astype('U')
+        df.loc[is_zz, index_cols[2]] = df.loc[is_zz, index_cols[2]] + '_' + zz_idx
 
         df['Bundesland'] = bundesland
         df['Stichtag'] = stichtag

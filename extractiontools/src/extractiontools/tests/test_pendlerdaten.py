@@ -16,7 +16,7 @@ class TestImportPendler(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.backup_injectables = {}
-        patches = {'database': 'test_db', }
+        patches = {'source_db': 'test_db', 'pendlerdaten_years': ['2013']}
         for inj, value in patches.items():
             cls.patch_injectable(inj, value)
 
