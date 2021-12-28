@@ -8,11 +8,56 @@ import tempfile
 from extractiontools.connection import Connection, DBApp, Login
 
 
+from extractiontools.ausschnitt import Extract
+
+
+class ExtractPendler(Extract):
+    """
+    Extract the landuse data
+    """
+    tables = {}
+    schema = 'pendlerdaten'
+    role = 'group_osm'
+
+    def __init__(self,
+                 source_db,
+                 destination_db,
+                 pendlerdaten_gemeinden,
+                 **kwargs):
+        super().__init__(destination_db=destination_db,
+                         source_db=source_db, **kwargs)
+        self.gemeindelayer = pendlerdaten_gemeinden
+
+
+    def additional_stuff(self):
+        """
+        """
+        self.extract_pendler()
+
+
+    def extract_pendler(self):
+        """
+        Extract Pendler
+        """
+        self.logger.info(f'Extracting commuters to {self.schema}.pendlerdaten')
+        sql = f"""
+        SELECT
+          p.*
+        INTO {self.schema}.pendlerdaten
+        FROM {self.temp}.pendlerdaten p,
+        {self.gemeindelayer} g
+        WHERE
+        (g.ags = p.ags_wo AND p."Ein_Aus" = "Auspendler Gemeinden") OR
+        (g.ags = p.ags_ao AND p."Ein_Aus" = "Einpendler Gemeinden")
+        """
+        self.run_query(sql, conn=self.conn)
+
+
 class ImportPendlerdaten(DBApp):
     """
     Import Commuter trips from excel-files to database
     """
-    schema = 'pendler'
+    schema = 'pendlerdaten'
     role = 'group_osm'
 
     def __init__(self,

@@ -213,9 +213,16 @@ def subfolder_pendlerdaten() -> str:
 
 @meta(group='(8) Pendlerdaten')
 @orca.injectable()
-def pendlerdaten_years() -> str:
+def pendlerdaten_years() -> List[int]:
     """Years to import as Pendlerdaten"""
     return [2019, 2020]
+
+
+@meta(group='(8) Pendlerdaten')
+@orca.injectable()
+def pendlerdaten_gemeinden() -> str:
+    """Gemeindelayer for Pendlerdaten"""
+    return 'verwaltungsgrenzen.gem_2018_12'
 
 
 @meta(group='(3) Network')
