@@ -123,7 +123,7 @@ class ImportPendlerdaten(DBApp):
                                        filepath, sheet_name,
                                        dtype, na_values)
 
-        self.logger.info(upload data)
+        self.logger.info('Upload Data')
         df = df_auspendler.append(df_einpendler)
         tablename = 'pendlerdaten.ein_auspendler'
 
