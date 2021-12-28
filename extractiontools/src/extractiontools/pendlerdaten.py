@@ -99,7 +99,7 @@ class ImportPendlerdaten(DBApp):
 
     def process_file(self, filepath: str):
         """upload a single excel-file with Pendlerdaten"""
-        print(filepath)
+        self.logger.info(filepath)
 
         data_cols = ['insgesamt', 'Männer', 'Frauen', 'Deutsche', 'Ausländer', 'Azubis']
 
@@ -123,20 +123,20 @@ class ImportPendlerdaten(DBApp):
                                        filepath, sheet_name,
                                        dtype, na_values)
 
+        self.logger.info(upload data)
         df = df_auspendler.append(df_einpendler)
         tablename = 'pendlerdaten.ein_auspendler'
 
         try:
             file_name = tempfile.mktemp(suffix='.csv')
-            print(file_name)
             df.to_csv(file_name, encoding='UTF8')
             cur = self.conn.cursor()
             delete_sql = f'DELETE FROM {tablename} WHERE "Bundesland" = %s AND "Stichtag" = %s'
             bundesland, stichtag = df.reset_index().loc[1, ['Bundesland', 'Stichtag']]
             cur.execute(delete_sql, (bundesland, stichtag))
-            print(f'deleted {cur.rowcount} rows in {tablename}')
+            self.logger.info(f'deleted {cur.rowcount} rows in {tablename}')
             with open(file_name, encoding='UTF8') as file:
-                cur.copy_expert("COPY pendlerdaten.ein_auspendler FROM STDIN WITH CSV HEADER ENCODING 'UTF8';", file)
+                cur.copy_expert(f"COPY {tablename} FROM STDIN WITH CSV HEADER ENCODING 'UTF8';", file)
             self.conn.commit()
         finally:
             os.remove(file_name)
