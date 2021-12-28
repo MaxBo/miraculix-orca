@@ -199,11 +199,11 @@ def import_pendlerdaten(source_db: str,
 
 @meta(group='(8) Pendler')
 @orca.step()
-def export_pendlerdaten(source_db: str,
-                        database: str,
-                        pendlerdaten_gemeinden: str):
+def extract_pendlerdaten(source_db: str,
+                         database: str,
+                         pendlerdaten_gemeinden: str):
     """
-    export commutertrips from base database
+    Filter Pendlerdaten mit Quelle oder Ziel in Gemeinden
     """
     extract_pendler = ExtractPendler(
         source_db=source_db,
