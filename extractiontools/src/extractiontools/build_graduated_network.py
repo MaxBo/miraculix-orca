@@ -2,7 +2,7 @@
 # coding:utf-8
 
 from argparse import ArgumentParser
-import ogr
+from osgeo import ogr
 
 from extractiontools.build_network_car import BuildNetwork
 

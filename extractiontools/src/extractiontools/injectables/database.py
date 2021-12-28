@@ -1,5 +1,5 @@
 from typing import List
-import ogr
+from osgeo import ogr
 import orca
 import os
 import re
@@ -213,9 +213,9 @@ def subfolder_pendlerdaten() -> str:
 
 @meta(group='(8) Pendlerdaten')
 @orca.injectable()
-def pendlerdaten_years() -> List[int]:
+def pendlerdaten_years() -> List[str]:
     """Years to import as Pendlerdaten"""
-    return [2019, 2020]
+    return ['2019', '2020']
 
 
 @meta(group='(8) Pendlerdaten')
