@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 
-import gdal
+from osgeo import gdal
 import os
 import numpy as np
 from osgeo.gdalconst import *
 
 from elan.agents.raster2 import Grids
 from simcommon.matrixio import XArray, Aufwand, XRecArray
+
 
 def main():
     folder = r'E:\GGR\Berlin Dichte\30 Gis\31 gisserver_backup\tiffs'
@@ -18,14 +19,14 @@ def main():
 
     # erzeuge Kernel
     size = 1
-    x = np.arange(-size, size+1)
-    y = np.arange(-size, size+1)
+    x = np.arange(-size, size + 1)
+    y = np.arange(-size, size + 1)
     xx, yy = np.meshgrid(x, y)
     # Distanz zum Kernel-Mittelpunkt
-    dist = np.sqrt(xx**2+yy**2)
+    dist = np.sqrt(xx**2 + yy**2)
     # Distance Decay-Parameter
     beta = -1
-    weights = np.exp(beta*dist)
+    weights = np.exp(beta * dist)
 
     # Erzeuge Grids-Objekt
     g = Grids(1886, 2030, 100, -100, 4464400, 3374900, max_rings=3)
@@ -33,7 +34,7 @@ def main():
     # Gewichtung der Bezugsflächen 1
     freq = np.ones(val.shape)
     # only include inhabited raster cells into Bezugsflächen
-    freq[val==0] = 0
+    freq[val == 0] = 0
 
     # berechner Kernel
     g.init_array('result', val.shape, default=0)
@@ -44,7 +45,7 @@ def main():
 
     # setze Ergebnis auf 0 auf unbesiedelten Rasterzellen
     # (Dichte der Eingangsdaten = 0)
-    g.result[val==0] = 0
+    g.result[val == 0] = 0
 
     # Erzeuge Ergebnis-Tiff
     driver = f.GetDriver()
@@ -86,9 +87,9 @@ def classify_ew_dichte():
     ra = XRecArray.fromarrays((bins[1:], verteilung_berlin, verteilung_umland),
                               names=('dichte', 'berlin', 'umland'))
     for row in ra:
-        print( row.dichte, ',', row.berlin, ',', row.umland)
+        print(row.dichte, ',', row.berlin, ',', row.umland)
 
 
 if __name__ == '__main__':
-    #main()
+    # main()
     classify_ew_dichte()

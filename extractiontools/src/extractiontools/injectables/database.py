@@ -1,5 +1,5 @@
 from typing import List
-import ogr
+from osgeo import ogr
 import orca
 import os
 import re
@@ -202,6 +202,27 @@ def subfolder_tiffs() -> str:
 def subfolder_otp() -> str:
     """subfolder for the OpenTripPlanner"""
     return 'otp'
+
+
+@meta(group='(8) Pendlerdaten')
+@orca.injectable()
+def subfolder_pendlerdaten() -> str:
+    """subfolder for the Pendlerdaten-Excelfiles"""
+    return 'Pendlerdaten'
+
+
+@meta(group='(8) Pendlerdaten')
+@orca.injectable()
+def pendlerdaten_years() -> List[str]:
+    """Years to import as Pendlerdaten"""
+    return ['2019', '2020']
+
+
+@meta(group='(8) Pendlerdaten')
+@orca.injectable()
+def pendlerdaten_gemeinden() -> str:
+    """Gemeindelayer for Pendlerdaten"""
+    return 'verwaltungsgrenzen.gem_2018_12'
 
 
 @meta(group='(3) Network')

@@ -2,7 +2,7 @@ import orca
 from orcadjango.decorators import meta
 from extractiontools.ausschnitt import Extract
 from extractiontools.drop_db import DropDatabase
-import ogr
+from osgeo import ogr
 
 __parent_modules__ = [
     'extractiontools.injectables.database'
