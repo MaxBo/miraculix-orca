@@ -13,6 +13,8 @@ from extractiontools.zensus2raster import Zensus2Raster, ExportZensus
 from extractiontools.copy_osm2fgdb import CopyOSM2FGDB
 import ogr
 
+from extractiontools.pendlerdaten import ImportPendlerdaten
+
 import extractiontools.steps.create_db
 import extractiontools.steps.network
 import extractiontools.steps.google
@@ -179,3 +181,15 @@ def copy_zensus_to_tiff(database: str, subfolder_tiffs: str):
     z2r = ExportZensus(db=database, subfolder=subfolder_tiffs,
                        logger=orca.logger)
     z2r.run()
+
+
+@meta(group='(8) Pendler', required=extract_verwaltungsgrenzen)
+@orca.step()
+def import_pendlerdaten(database: str, subfolder_pendlerdaten: str):
+    """
+    import commutertrips to base database
+    """
+    import_pendler = ImportPendlerdaten(db=database,
+                                        subfolder=subfolder_pendlerdaten,
+                                        logger=orca.logger)
+    import_pendler.run()
