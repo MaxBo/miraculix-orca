@@ -3,7 +3,7 @@
 from typing import Dict
 import os
 import orca
-import ogr
+from osgeo import ogr
 from datetime import date
 from orcadjango.decorators import meta
 from extractiontools.connection import Login

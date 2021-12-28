@@ -7,7 +7,7 @@ import sys
 import os
 import subprocess
 import time
-import ogr
+from osgeo import ogr
 from psycopg2.sql import Identifier, SQL
 from psycopg2 import errors
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
@@ -260,7 +260,7 @@ class Extract(DBApp):
         return geometrytype
 
     def create_foreign_schema(self, foreign_schema=None, target_schema=None,
-                              tables: list=None, conn=None):
+                              tables: list = None, conn=None):
         """
         links schema in database to schema on foreign server
         """

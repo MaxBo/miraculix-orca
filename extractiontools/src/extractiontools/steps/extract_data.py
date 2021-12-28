@@ -11,7 +11,8 @@ from extractiontools.extract_verwaltungsgrenzen import (
 from extractiontools.laea_raster import ExtractLAEA
 from extractiontools.zensus2raster import Zensus2Raster, ExportZensus
 from extractiontools.copy_osm2fgdb import CopyOSM2FGDB
-import ogr
+from extractiontools.pendlerdaten import ImportPendlerdaten, ExtractPendler
+from osgeo import ogr
 
 import extractiontools.steps.create_db
 import extractiontools.steps.network
@@ -179,3 +180,34 @@ def copy_zensus_to_tiff(database: str, subfolder_tiffs: str):
     z2r = ExportZensus(db=database, subfolder=subfolder_tiffs,
                        logger=orca.logger)
     z2r.run()
+
+
+@meta(group='(8) Pendler')
+@orca.step()
+def import_pendlerdaten(source_db: str,
+                        subfolder_pendlerdaten: str,
+                        pendlerdaten_years: List[str]):
+    """
+    import commutertrips to base database
+    """
+    import_pendler = ImportPendlerdaten(db=source_db,
+                                        subfolder=subfolder_pendlerdaten,
+                                        pendlerdaten_years=pendlerdaten_years,
+                                        logger=orca.logger)
+    import_pendler.run()
+
+
+@meta(group='(8) Pendler')
+@orca.step()
+def extract_pendlerdaten(source_db: str,
+                         database: str,
+                         pendlerdaten_gemeinden: str):
+    """
+    Filter Pendlerdaten mit Quelle oder Ziel in Gemeinden
+    """
+    extract_pendler = ExtractPendler(
+        source_db=source_db,
+        destination_db=database,
+        pendlerdaten_gemeinden=pendlerdaten_gemeinden,
+        logger=orca.logger)
+    extract_pendler.extract()
