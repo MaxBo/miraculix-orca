@@ -11,7 +11,10 @@ from extractiontools.extract_verwaltungsgrenzen import (
 from extractiontools.laea_raster import ExtractLAEA
 from extractiontools.zensus2raster import Zensus2Raster, ExportZensus
 from extractiontools.copy_osm2fgdb import CopyOSM2FGDB
-from extractiontools.pendlerdaten import ImportPendlerdaten, ExtractPendler
+from extractiontools.pendlerdaten import (ImportPendlerdaten,
+                                          ExtractPendler,
+                                          CreatePendlerSpinne,
+                                          ExportPendlerdaten)
 from osgeo import ogr
 
 import extractiontools.steps.create_db
@@ -211,3 +214,31 @@ def extract_pendlerdaten(source_db: str,
         pendlerdaten_gemeinden=pendlerdaten_gemeinden,
         logger=orca.logger)
     extract_pendler.extract()
+
+
+@meta(group='(8) Pendler', required=extract_pendlerdaten)
+@orca.step()
+def create_pendlerspinne(database: str,
+                         pendlerspinne_gebiete: str,
+                         target_srid: int):
+    """
+    Erzeuge Pendlerspinne
+    """
+    create_pendlerspinne = CreatePendlerSpinne(
+        db=database,
+        pendlerspinne_gebiete=pendlerspinne_gebiete,
+        target_srid=target_srid,
+        logger=orca.logger)
+    create_pendlerspinne.run()
+
+
+@meta(group='(8) Pendler', required=create_pendlerspinne)
+@orca.step()
+def export_pendlerdaten(database: str):
+    """
+    Export Pendlerdaten
+    """
+    export = ExportPendlerdaten(
+        db=database,
+        logger=orca.logger)
+    export.export()

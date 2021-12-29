@@ -7,7 +7,6 @@ import numpy as np
 import tempfile
 from extractiontools.connection import Connection, DBApp, Login
 
-
 from extractiontools.ausschnitt import Extract
 
 
@@ -184,8 +183,10 @@ class ImportPendlerdaten(DBApp):
         # make ZZ unique
         is_zz = df[index_cols[2]] == 'ZZ'
         only_zz = df.loc[is_zz]
-        zz_idx = only_zz.groupby([index_cols[0]]).cumcount(ascending=True).astype('U')
-        df.loc[is_zz, index_cols[2]] = df.loc[is_zz, index_cols[2]] + '_' + zz_idx
+        zz_idx = only_zz.groupby([index_cols[0]]).cumcount(
+            ascending=True).astype('U')
+        df.loc[is_zz, index_cols[2]] = df.loc[is_zz,
+                                              index_cols[2]] + '_' + zz_idx
 
         df['Bundesland'] = bundesland
         df['Stichtag'] = stichtag
@@ -212,3 +213,157 @@ class ImportPendlerdaten(DBApp):
         stichtag = datetime.datetime.strptime(stichtag, "%d.%m.%Y")
         first_row = df.iloc[:, 1].first_valid_index()
         return bundesland, stichtag, first_row
+
+
+class CreatePendlerSpinne(DBApp):
+    """
+    Import Commuter trips from excel-files to database
+    """
+    schema = 'pendlerdaten'
+    role = 'group_osm'
+
+    def __init__(self,
+                 db: str,
+                 pendlerspinne_gebiete: str,
+                 target_srid: int,
+                 **kwargs):
+        super().__init__(schema=self.schema, **kwargs)
+        self.destination_db = self.db = db
+        self.set_login(database=db)
+        self.check_platform()
+        self.pendlerspinne_gebiete = pendlerspinne_gebiete
+        self.target_srid = target_srid
+
+    def run(self):
+        """
+        """
+        with Connection(login=self.login) as conn:
+            # preparation
+            self.conn = conn
+            self.validate_gebietslayer()
+            self.create_spinne()
+            self.conn.commit()
+
+    def validate_gebietslayer(self):
+        """validate the Gebietslayer"""
+        schema_table = self.pendlerspinne_gebiete.split('.')
+        cur = self.conn.cursor()
+        if len(schema_table) == 1:
+            sql = 'Select exists(select * from information_schema.tables where table_name=%s)'
+        elif len(schema_table) == 2:
+            sql = 'Select exists(select * from information_schema.tables where table_schema=%s AND table_name=%s)'
+        else:
+            raise ValueError(
+                f'{self.pendlerspinne_gebiete} is no valid schema.table')
+        cur.execute(sql, schema_table)
+        if not cur.fetchone()[0]:
+            self.conn.rollback()
+            raise ValueError(f'{self.pendlerspinne_gebiete} does not exist')
+
+    def create_spinne(self):
+        """create Pendlerspinne"""
+
+        sql = f"DROP VIEW IF EXISTS {self.schema}.ein_auspendler_zusammengefasst CASCADE;"
+        self.run_query(sql)
+
+        sql = f"""
+CREATE OR REPLACE VIEW {self.schema}.ein_auspendler_zusammengefasst AS
+SELECT
+e."Stichtag",
+e.ags_wo,
+e.gen_wo,
+e.ags_ao,
+e.gen_ao,
+max(e.insgesamt) AS insgesamt,
+max(e."Männer") AS "Männer",
+max(e."Frauen") AS "Frauen",
+max(e."Deutsche") AS "Deutsche",
+max(e."Ausländer") AS "Ausländer",
+max(e."Azubis") AS "Azubis"
+FROM {self.schema}.ein_auspendler e
+GROUP BY e."Stichtag", e.ags_wo, e.gen_wo, e.ags_ao, e.gen_ao;
+"""
+        self.run_query(sql)
+
+        sql = f"""
+CREATE OR REPLACE VIEW {self.schema}.pendlerbeziehungen AS
+SELECT DISTINCT
+e.ags_wo, e.ags_ao
+FROM {self.schema}.ein_auspendler_zusammengefasst e
+UNION
+SELECT DISTINCT
+e.ags_ao, e.ags_wo
+FROM {self.schema}.ein_auspendler_zusammengefasst e
+"""
+        self.run_query(sql)
+
+        sql = f"""
+CREATE OR REPLACE VIEW {self.schema}.spinne AS
+SELECT
+p.ags_wo,
+p.ags_ao,
+st_makeline(st_pointonsurface(g1.geom), st_pointonsurface(g2.geom))::geometry(LINESTRING, {self.target_srid}) AS geom
+FROM {self.pendlerspinne_gebiete} g1,
+{self.pendlerspinne_gebiete} g2,
+{self.schema}.pendlerbeziehungen p
+WHERE g1.ags = p.ags_wo
+AND g2.ags = p.ags_ao;
+"""
+        self.run_query(sql)
+
+        sql = f"""
+CREATE OR REPLACE VIEW {self.schema}.pendler_spinne AS
+SELECT
+row_number() OVER()::integer AS rn,
+e."Stichtag", s.ags_wo, s.ags_ao, s.geom,
+e.insgesamt, e."Männer", e."Frauen", e."Deutsche", e."Ausländer", e."Azubis"
+FROM {self.schema}.spinne s,
+{self.schema}.ein_auspendler_zusammengefasst e
+WHERE s.ags_wo = e.ags_wo
+AND s.ags_ao = e.ags_ao;
+        """
+        self.run_query(sql)
+
+
+class ExportPendlerdaten(DBApp):
+    """
+    Export Pendlerdaten to Excel and Access
+    """
+    schema = 'pendlerdaten'
+    role = 'group_osm'
+
+    def __init__(self,
+                 db: str,
+                 **kwargs):
+        super().__init__(schema=self.schema, **kwargs)
+        self.destination_db = self.db = db
+        self.set_login(database=db)
+        self.check_platform()
+
+    def export(self):
+        with Connection(login=self.login) as conn:
+            self.conn = conn
+
+            folder = os.path.abspath(
+                os.path.join(self.folder,
+                             'projekte',
+                             self.login.db,
+                             'Pendlerdaten',
+                             )
+            )
+            os.makedirs(folder, exist_ok=True)
+
+            file_path = os.path.join(folder, 'Pendlerdaten.xlsx')
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
+            with pd.ExcelWriter(file_path) as excel_writer:
+                tbl = 'ein_auspendler_zusammengefasst'
+                df = pd.read_sql(f'SELECT * FROM {self.schema}.{tbl}', conn)
+                df.to_excel(excel_writer=excel_writer,
+                            sheet_name='zusammengefasst')
+
+                tbl = 'ein_auspendler'
+                df = pd.read_sql(f'SELECT * FROM {self.schema}.{tbl}', conn)
+                df.to_excel(excel_writer=excel_writer, sheet_name='Rohdaten')
+

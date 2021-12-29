@@ -225,6 +225,13 @@ def pendlerdaten_gemeinden() -> str:
     return 'verwaltungsgrenzen.gem_2018_12'
 
 
+@meta(group='(8) Pendlerdaten')
+@orca.injectable()
+def pendlerspinne_gebiete() -> str:
+    """Layer mit den Gebieten für die Pendlerspinne"""
+    return 'verwaltungsgrenzen.gem_2018_12'
+
+
 @meta(group='(3) Network')
 @orca.injectable()
 def network_schema() -> str:
