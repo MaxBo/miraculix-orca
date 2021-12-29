@@ -232,7 +232,7 @@ def create_pendlerspinne(database: str,
     create_pendlerspinne.run()
 
 
-@meta(group='(8) Pendler', required=create_pendlerspinne)
+@meta(group='(8) Pendler', required=extract_pendlerdaten)
 @orca.step()
 def export_pendlerdaten(database: str):
     """
