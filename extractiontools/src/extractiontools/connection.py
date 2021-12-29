@@ -179,6 +179,25 @@ class DBApp:
         if not os.path.exists(folder):
             os.makedirs(folder)
 
+    def validate_table_exists(self, table: str):
+        """
+        validate that the [schema.]table
+        is a valid table/view in the database and that it exists
+        """
+        schema_table = table.split('.')
+        cur = self.conn.cursor()
+        if len(schema_table) == 1:
+            sql = 'Select exists(select * from information_schema.tables where table_name=%s)'
+        elif len(schema_table) == 2:
+            sql = 'Select exists(select * from information_schema.tables where table_schema=%s AND table_name=%s)'
+        else:
+            raise ValueError(
+                f'{table} is no valid for schema.table')
+        cur.execute(sql, schema_table)
+        if not cur.fetchone()[0]:
+            self.conn.rollback()
+            raise ValueError(f'{table} does not exist')
+
     def run_query(self, sql: Union[str, Composed], conn=None,
                   split=True, verbose=True, vars: Dict[str, object] = None):
         """

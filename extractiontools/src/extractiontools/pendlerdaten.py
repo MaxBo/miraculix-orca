@@ -30,6 +30,7 @@ class ExtractPendler(Extract):
     def additional_stuff(self):
         """
         """
+        self.validate_table_exists(self.gemeindelayer)
         self.extract_pendler()
 
     def extract_pendler(self):
@@ -48,7 +49,38 @@ class ExtractPendler(Extract):
         (g.ags = p.ags_wo AND p."Ein_Aus" = 'Auspendler Gemeinden') OR
         (g.ags = p.ags_ao AND p."Ein_Aus" = 'Einpendler Gemeinden')
         """
-        self.run_query(sql, conn=self.conn)
+        self.run_query(sql)
+
+        sql = f"""
+CREATE OR REPLACE VIEW {self.schema}.ein_auspendler_zusammengefasst AS
+SELECT
+e."Stichtag",
+e.ags_wo,
+e.gen_wo,
+e.ags_ao,
+e.gen_ao,
+max(e.insgesamt) AS insgesamt,
+max(e."Männer") AS "Männer",
+max(e."Frauen") AS "Frauen",
+max(e."Deutsche") AS "Deutsche",
+max(e."Ausländer") AS "Ausländer",
+max(e."Azubis") AS "Azubis"
+FROM {self.schema}.ein_auspendler e
+GROUP BY e."Stichtag", e.ags_wo, e.gen_wo, e.ags_ao, e.gen_ao;
+"""
+        self.run_query(sql)
+
+        sql = f"""
+CREATE OR REPLACE VIEW {self.schema}.pendlerbeziehungen AS
+SELECT DISTINCT
+e.ags_wo, e.ags_ao
+FROM {self.schema}.ein_auspendler_zusammengefasst e
+UNION
+SELECT DISTINCT
+e.ags_ao, e.ags_wo
+FROM {self.schema}.ein_auspendler_zusammengefasst e
+"""
+        self.run_query(sql)
 
 
 class ImportPendlerdaten(DBApp):
@@ -240,61 +272,14 @@ class CreatePendlerSpinne(DBApp):
         with Connection(login=self.login) as conn:
             # preparation
             self.conn = conn
-            self.validate_gebietslayer()
+            self.validate_table_exists(self.pendlerspinne_gebiete)
             self.create_spinne()
             self.conn.commit()
-
-    def validate_gebietslayer(self):
-        """validate the Gebietslayer"""
-        schema_table = self.pendlerspinne_gebiete.split('.')
-        cur = self.conn.cursor()
-        if len(schema_table) == 1:
-            sql = 'Select exists(select * from information_schema.tables where table_name=%s)'
-        elif len(schema_table) == 2:
-            sql = 'Select exists(select * from information_schema.tables where table_schema=%s AND table_name=%s)'
-        else:
-            raise ValueError(
-                f'{self.pendlerspinne_gebiete} is no valid schema.table')
-        cur.execute(sql, schema_table)
-        if not cur.fetchone()[0]:
-            self.conn.rollback()
-            raise ValueError(f'{self.pendlerspinne_gebiete} does not exist')
 
     def create_spinne(self):
         """create Pendlerspinne"""
 
-        sql = f"DROP VIEW IF EXISTS {self.schema}.ein_auspendler_zusammengefasst CASCADE;"
-        self.run_query(sql)
-
-        sql = f"""
-CREATE OR REPLACE VIEW {self.schema}.ein_auspendler_zusammengefasst AS
-SELECT
-e."Stichtag",
-e.ags_wo,
-e.gen_wo,
-e.ags_ao,
-e.gen_ao,
-max(e.insgesamt) AS insgesamt,
-max(e."Männer") AS "Männer",
-max(e."Frauen") AS "Frauen",
-max(e."Deutsche") AS "Deutsche",
-max(e."Ausländer") AS "Ausländer",
-max(e."Azubis") AS "Azubis"
-FROM {self.schema}.ein_auspendler e
-GROUP BY e."Stichtag", e.ags_wo, e.gen_wo, e.ags_ao, e.gen_ao;
-"""
-        self.run_query(sql)
-
-        sql = f"""
-CREATE OR REPLACE VIEW {self.schema}.pendlerbeziehungen AS
-SELECT DISTINCT
-e.ags_wo, e.ags_ao
-FROM {self.schema}.ein_auspendler_zusammengefasst e
-UNION
-SELECT DISTINCT
-e.ags_ao, e.ags_wo
-FROM {self.schema}.ein_auspendler_zusammengefasst e
-"""
+        sql = f"DROP VIEW IF EXISTS {self.schema}.spinne CASCADE;"
         self.run_query(sql)
 
         sql = f"""
