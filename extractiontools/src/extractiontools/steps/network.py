@@ -56,8 +56,8 @@ def build_graduated_network_car(database: str,
                                 links_to_find: float,
                                 corine: str,
                                 network_graduated_schema: str,
-                                detailed_network_area: ogr.Geometry,
-                                larger_network_area: ogr.Geometry):
+                                detailed_area: ogr.Geometry,
+                                larger_area: ogr.Geometry):
     """
     build a graduated car network, detailed in the detailed area and only main roads in the larger area
     """
@@ -68,8 +68,8 @@ def build_graduated_network_car(database: str,
                                           links_to_find=links_to_find,
                                           corine=corine,
                                           logger=orca.logger,
-                                          detailed_network_area=detailed_network_area,
-                                          larger_network_area=larger_network_area,
+                                          detailed_network_area=detailed_area,
+                                          larger_network_area=larger_area,
                                           )
     build_network.build()
 
@@ -83,7 +83,7 @@ def build_network_fr(database: str,
                      corine: str,
                      routing_walk: bool,
                      network_fr_schema: str,
-                     detailed_network_area: str,
+                     detailed_area: str,
                      ):
     """
     build a walk and cycle network
@@ -97,7 +97,7 @@ def build_network_fr(database: str,
         corine=corine,
         routing_walk=routing_walk,
         logger=orca.logger,
-        detailed_network_area=detailed_network_area,
+        detailed_network_area=detailed_area,
     )
     build_network.build()
 

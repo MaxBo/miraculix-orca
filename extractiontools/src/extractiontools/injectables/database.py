@@ -344,9 +344,43 @@ def detailed_network_area() -> ogr.Geometry:
     return geom
 
 
+@meta(group='(3) Network', order=3, refresh='always')
+@orca.injectable()
+def detailed_area(detailed_network_area: ogr.Geometry,
+                  project_area: ogr.Geometry) -> ogr.Geometry:
+    """
+    The area in which the network will be detailed,
+    defaults to the project area, if no detailed_network_area is given
+    """
+    dummy_geom = dummy_polygon()
+    # compare the geometry to the default dummy_area
+    if detailed_network_area.SymmetricDifference(dummy_geom).Area():
+        #  if its different, the area of the symmetric difference is > 0
+        return detailed_network_area
+    #  otherwise, use the project_area instead
+    return project_area
+
+
 @meta(group='(3) Network', order=2)
 @orca.injectable()
 def larger_network_area() -> ogr.Geometry:
     """The area where the network will only cover main roads"""
     geom = dummy_polygon()
     return geom
+
+
+@meta(group='(3) Network', order=4, refresh='always')
+@orca.injectable()
+def larger_area(larger_network_area: ogr.Geometry,
+                project_area: ogr.Geometry) -> ogr.Geometry:
+    """
+    The area in which the network will only cover main roads,
+    defaults to the project area, if no larger_network_area is given
+    """
+    dummy_geom = dummy_polygon()
+    # compare the geometry to the default dummy_area
+    if larger_network_area.SymmetricDifference(dummy_geom).Area():
+        #  if its different, the area of the symmetric difference is > 0
+        return larger_network_area
+    #  otherwise, use the project_area instead
+    return project_area
