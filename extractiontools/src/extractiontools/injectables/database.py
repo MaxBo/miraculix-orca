@@ -164,7 +164,7 @@ def gmes_choices(source_db) -> dict:
 @orca.injectable()
 def gmes() -> List[str]:
     """The Urban Atlas tables from the schema `landuse` to copy"""
-    return ['ua2012']
+    return ['ua2018']
 
 
 @meta(hidden=True, refresh='always')

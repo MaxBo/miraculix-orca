@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 from argparse import ArgumentParser
 from extractiontools.ausschnitt import Extract
@@ -119,7 +119,6 @@ class ExtractLanduse(Extract):
             """
             self.run_query(sql, conn=self.conn)
 
-
     def extract_aster(self):
         """
         Extract Aster Digital Elevation data and transform into target srid
@@ -170,39 +169,74 @@ class ExtractLanduse(Extract):
         """
         Extract GMES Urban Atlas Landcover data and transform into target srid
         """
-        self.logger.info(f'Extracting GMES Urban Atlas boundaries into '
-                         f'{self.schema}.ua2012_boundary')
-        sql = f"""
-        SELECT
-          c.gid, c.country, c.cities, c.fua_or_cit,
-          st_multi(st_transform(c.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
-          {self.target_srid}) AS geom
-        INTO {self.schema}.ua2012_boundary
-        FROM {self.temp}.ua2012_boundary c,
-        (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
-        WHERE
-        st_intersects(c.geom, tb.source_geom)
-            """
-        self.run_query(sql, conn=self.conn)
-
         for gmes in self.gmes:
-            self.logger.info(f'Extracting GMES Urban Atlas landcover data into '
-                             f'{self.schema}.{gmes}')
+            self.logger.info(f'Extracting GMES Urban Atlas boundaries into '
+                             f'{self.schema}.{gmes}_boundary')
+            columns = self.conn.get_column_dict(
+                f'"{self.temp}"."{gmes}_boundary"')
+            columns.pop('geom')
+            cols = ', '.join([f'c."{col}"' for col in columns])
             sql = f"""
             SELECT
-              c.gid, c.country, c.cities, c.fua_or_cit,
-              c.code2012 AS code,
-              c.item2012 AS item,
-              c.prod_date,
+              {cols},
               st_multi(st_transform(c.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
               {self.target_srid}) AS geom
-            INTO {self.schema}.{gmes}
-            FROM {self.temp}.{gmes} c,
+            INTO "{self.schema}"."{gmes}_boundary"
+            FROM "{self.temp}"."{gmes}_boundary" c,
+            (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
+            WHERE
+            st_intersects(c.geom, tb.source_geom)
+                """
+            self.run_query(sql, conn=self.conn)
+
+            self.logger.info(f'Extracting GMES Urban Atlas landcover data into '
+                             f'"{self.schema}"."{gmes}"')
+            columns = self.conn.get_column_dict(
+                f'"{self.temp}"."{gmes}"')
+            columns.pop('geom')
+            cols = ', '.join([f'c."{col}"' for col in columns])
+            sql = f"""
+            SELECT
+              {cols},
+              st_multi(st_transform(c.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
+              {self.target_srid}) AS geom
+            INTO "{self.schema}"."{gmes}"
+            FROM "{self.temp}"."{gmes}" c,
             (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
             WHERE
             st_intersects(c.geom, tb.source_geom)
             """
             self.run_query(sql, conn=self.conn)
+
+            sql = f"""
+            SELECT EXISTS (SELECT *
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = '{self.temp}'
+            AND TABLE_NAME = '{gmes}_urban_core')
+            """
+            cur = self.conn.cursor()
+            cur.execute(sql)
+            urban_core_exists = cur.fetchone()[0]
+
+            if urban_core_exists:
+                self.logger.info(f'Extracting GMES Urban Atlas urban core into '
+                                 f'{self.schema}.{gmes}_urban_core')
+                columns = self.conn.get_column_dict(
+                    f'"{self.temp}"."{gmes}_urban_core"')
+                columns.pop('geom')
+                cols = ', '.join([f'c."{col}"' for col in columns])
+                sql = f"""
+                SELECT
+                  {cols},
+                  st_multi(st_transform(c.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
+                  {self.target_srid}) AS geom
+                INTO "{self.schema}"."{gmes}_urban_core"
+                FROM "{self.temp}"."{gmes}_urban_core" c,
+                (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
+                WHERE
+                st_intersects(c.geom, tb.source_geom)
+                """
+                self.run_query(sql, conn=self.conn)
 
     def create_index(self):
         """
@@ -241,33 +275,58 @@ class ExtractLanduse(Extract):
     def create_index_gmes(self):
         """ Corine GMES Index"""
         self.logger.info(f'Creating indexes for GMES landcover data')
-        sql = """
-        ALTER TABLE {schema}.{gmes} ADD PRIMARY KEY (gid);
-        CREATE INDEX {gmes}_geom_idx
-        ON {schema}.{gmes}
+        sql_boundary = """
+        ALTER TABLE "{schema}"."{gmes}_boundary" ADD PRIMARY KEY (ogc_fid);
+        CREATE INDEX {gmes}_boundary_geom_idx
+        ON "{schema}"."{gmes}_boundary"
         USING gist(geom);
         """
-        self.run_query(sql.format(schema=self.schema,
-                                  gmes='ua2012_boundary'), conn=self.conn)
 
+        sql_urban_core = """
+        ALTER TABLE "{schema}"."{gmes}_urban_core" ADD PRIMARY KEY (ogc_fid);
+        CREATE INDEX {gmes}_urban_core_geom_idx
+        ON "{schema}"."{gmes}_urban_core"
+        USING gist(geom);
+        """
 
-        sql = """
-        ALTER TABLE {schema}.{gmes} ADD PRIMARY KEY (gid);
+        sql_ua = """
+        ALTER TABLE "{schema}"."{gmes}" ADD PRIMARY KEY (ogc_fid);
         CREATE INDEX {gmes}_geom_idx
-          ON {schema}.{gmes}
+          ON "{schema}"."{gmes}"
           USING gist(geom);
         CREATE INDEX idx_{gmes}_code
-          ON {schema}.{gmes}
-          USING btree(code);
+          ON "{schema}"."{gmes}"
+          USING btree({code});
         ALTER TABLE {schema}.{gmes} CLUSTER ON {gmes}_geom_idx;
         """
         for gmes in self.gmes:
+            cols = self.conn.get_column_dict(f'"{self.schema}"."{gmes}"')
+            code = [col for col in cols if col.startswith('code')][0]
+            self.logger.info(sql_ua.format(
+                schema=self.schema, gmes=gmes, code=code))
+            self.run_query(sql_ua.format(
+                schema=self.schema, gmes=gmes, code=code),
+                conn=self.conn)
+            self.logger.info(sql_boundary.format(
+                schema=self.schema, gmes=gmes))
 
-            self.run_query(sql.format(schema=self.schema,
-                                      gmes=gmes), conn=self.conn)
-            self.tables2cluster.append('{schema}.{gmes}'.format(
-                schema=self.schema,
-                gmes=gmes))
+            self.run_query(sql_boundary.format(
+                schema=self.schema, gmes=gmes),
+                conn=self.conn)
+            sql = f"""
+            SELECT EXISTS (SELECT *
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = '{self.schema}'
+            AND TABLE_NAME = '{gmes}_urban_core')
+            """
+            cur = self.conn.cursor()
+            cur.execute(sql)
+            urban_core_exists = cur.fetchone()[0]
+            if urban_core_exists:
+                self.run_query(sql_urban_core.format(
+                    schema=self.schema, gmes=gmes), conn=self.conn)
+
+            self.tables2cluster.append(f'"{self.schema}"."{gmes}"')
 
     def create_index_oceans(self):
         """Oceans Index"""
@@ -322,7 +381,6 @@ if __name__ == '__main__':
     parser.add_argument('--gmes', action="store", nargs='*',
                         help="specify the corine datasets",
                         dest="gmes", default=['ua2012'])
-
 
     options = parser.parse_args()
 

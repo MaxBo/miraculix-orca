@@ -60,6 +60,7 @@ class Connection:
         self.conn = conn
         self.conn.get_dict_cursor = self.get_dict_cursor
         self.conn.get_column_dict = self.get_column_dict
+        self.conn.get_colums = self.get_columns
         self.set_copy_command_format()
         return conn
 
