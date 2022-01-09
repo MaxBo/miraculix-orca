@@ -302,13 +302,9 @@ class ExtractLanduse(Extract):
         for gmes in self.gmes:
             cols = self.conn.get_column_dict(f'"{self.schema}"."{gmes}"')
             code = [col for col in cols if col.startswith('code')][0]
-            self.logger.info(sql_ua.format(
-                schema=self.schema, gmes=gmes, code=code))
             self.run_query(sql_ua.format(
                 schema=self.schema, gmes=gmes, code=code),
                 conn=self.conn)
-            self.logger.info(sql_boundary.format(
-                schema=self.schema, gmes=gmes))
 
             self.run_query(sql_boundary.format(
                 schema=self.schema, gmes=gmes),
