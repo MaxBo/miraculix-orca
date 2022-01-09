@@ -4,11 +4,11 @@
 import sys
 import psycopg2
 from psycopg2.extras import NamedTupleConnection, DictCursor
-from collections import OrderedDict
 import sqlparse
 from psycopg2.sql import SQL, Composed, Literal
+from psycopg2.extensions import Column
 from copy import deepcopy
-from typing import Union, Dict
+from typing import Union, Dict, OrderedDict, Tuple, List
 
 import os
 import logging
@@ -75,19 +75,18 @@ class Connection:
         data_format = 'CSV'
         quote = '"'
         delimiter = ','
-        strWith = '''WITH (
+        strWith = f'''WITH (
         FORMAT {data_format},
         DELIMITER '{delimiter}',
-        QUOTE '"',
+        QUOTE '{quote}',
         HEADER);
-        '''.format(data_format=data_format, quote=quote,
-                   delimiter=delimiter)
+        '''
         self.conn.copy_sql = '''COPY "{tn}" TO STDOUT ''' + strWith
 
     def get_dict_cursor(self):
         return self.conn.cursor(cursor_factory=DictCursor)
 
-    def get_columns(self, tablename):
+    def get_columns(self, tablename: str) -> Tuple[Column, ...]:
         """
         Return a tuple of columns of a table
 
@@ -101,12 +100,14 @@ class Connection:
             tuple of Column objects
         """
         cur = self.get_dict_cursor()
-        sql = 'SELECT * FROM {} LIMIT 0;'.format(tablename)
+        sql = f'SELECT * FROM {tablename} LIMIT 0;'
         cur.execute(sql)
         descr = cur.description
         return descr
 
-    def get_column_dict(self, tablename, schema=None):
+    def get_column_dict(self,
+                        tablename: str,
+                        schema: str = None) -> OrderedDict[str, Column]:
         """
         Return a tuple of column names of a table
 
@@ -123,9 +124,9 @@ class Connection:
         cols : Ordered Dict of the columns
         """
         if schema is not None:
-            table = '{s}.{t}'.format(s=schema, t=tablename)
+            table = f'"{schema}"."{tablename}"'
         else:
-            table = tablename
+            table = f'"{tablename}"'
         descr = self.get_columns(table)
         return OrderedDict(((d.name, d) for d in descr))
 
@@ -136,15 +137,22 @@ class DBApp:
     """
     role = None
 
-    def __init__(self, schema='osm', conn=None, logger=None):
+    def __init__(self,
+                 schema: str = 'osm',
+                 conn: NamedTupleConnection = None,
+                 logger: logging.Logger = None):
         """
         """
         self.schema = schema
         self.logger = logger or logging.getLogger(self.__module__)
         self.conn = conn
 
-    def set_login(self, host: str = None, port: int = None, user: str = None,
-                  password: str = None, database: str = None):
+    def set_login(self,
+                  host: str = None,
+                  port: int = None,
+                  user: str = None,
+                  password: str = None,
+                  database: str = None):
         self.login = Login(
             host or os.environ.get('DB_HOST', 'localhost'),
             port or os.environ.get('DB_PORT', 5432),
@@ -153,7 +161,10 @@ class DBApp:
             database
         )
 
-    def create_schema(self, schema, conn=None, replace=False):
+    def create_schema(self,
+                      schema: str,
+                      conn: NamedTupleConnection = None,
+                      replace: bool = False):
         if replace:
             sql = f'DROP SCHEMA IF EXISTS {schema} CASCADE;'
             self.run_query(sql, conn=conn or self.conn)
@@ -199,8 +210,12 @@ class DBApp:
             self.conn.rollback()
             raise ValueError(f'{table} does not exist')
 
-    def run_query(self, sql: Union[str, Composed], conn=None,
-                  split=True, verbose=True, vars: Dict[str, object] = None):
+    def run_query(self,
+                  sql: Union[str, Composed],
+                  conn: NamedTupleConnection = None,
+                  split: bool = True,
+                  verbose: bool = True,
+                  vars: Dict[str, object] = None):
         """
         runs an sql query log the statusmessage of each query
 
@@ -246,28 +261,29 @@ class DBApp:
         cur.execute(sql)
 
     def show_search_path(self):
+        """send the postgresql-search path to the logger"""
         cur = self.conn.cursor()
         sql = 'show search_path ;'
         cur.execute(sql)
         rows = cur.fetchall()
         self.logger.info(rows)
 
-    def set_session_authorization(self, conn):
+    def set_session_authorization(self, conn: NamedTupleConnection):
         """
         Set session authorization to self.role, if exists
         """
         # if a role is defined, create this schema with this role and also
         # perform all queries during this transaction with this role
         if self.role:
-            sql = "SET SESSION SESSION AUTHORIZATION '{role}';"
-            self.run_query(sql.format(role=self.role), conn)
+            sql = f"SET SESSION SESSION AUTHORIZATION '{self.role}';"
+            self.run_query(sql, conn)
 
-    def reset_authorization(self, conn):
+    def reset_authorization(self, conn: NamedTupleConnection):
         """Reset role to Login Role"""
         sql = """RESET SESSION AUTHORIZATION;"""
         self.run_query(sql, conn)
 
-    def check_if_database_exists(self, db_name: str):
+    def check_if_database_exists(self, db_name: str) -> bool:
         """
         checks if database exists
 
@@ -290,7 +306,7 @@ class DBApp:
             rows = cursor.fetchall()
         return len(rows) > 0
 
-    def drop_database(self, dbname: str, conn=None):
+    def drop_database(self, dbname: str, conn: NamedTupleConnection = None):
         """
         Drop database, disconnect all connections before
 
@@ -303,22 +319,26 @@ class DBApp:
         """
         if conn is None:
             conn = self.conn
-        sql = """
-update pg_database set datallowconn = 'false' where datname = '{db}';
-SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
-            """.format(db=dbname)
+        sql = f"""
+UPDATE pg_database set datallowconn = 'false' where datname = '{dbname}';
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{dbname}';
+            """
         self.run_query(sql, conn)
 
         cur = conn.cursor()
-        sql = """
-DROP DATABASE IF EXISTS {db};
+        sql = f"""
+DROP DATABASE IF EXISTS {dbname};
         """
         conn.set_isolation_level(0)
-        cur.execute(sql.format(db=dbname))
+        cur.execute(sql)
         conn.set_isolation_level(1)
         conn.commit()
 
-    def add_raster_index(self, schema, tablename, raster_column='rast', conn=None):
+    def add_raster_index(self,
+                         schema: str,
+                         tablename: str,
+                         raster_column: str = 'rast',
+                         conn: NamedTupleConnection = None):
         """
         add a raster index
         """
@@ -334,48 +354,56 @@ SELECT AddRasterConstraints('{schema}', '{tn}', '{rast}', TRUE, TRUE, TRUE, TRUE
                        conn=conn)
         conn.commit()
 
-    def add_overview_index(self, overviews, schema, tablename, raster_column='rast', conn=None):
+    def add_overview_index(self,
+                           overviews: List[int],
+                           schema: str,
+                           tablename: str,
+                           raster_column: str = 'rast',
+                           conn: NamedTupleConnection = None):
         """
         Add an index to all given overview rasters for the given raster table
         """
         conn = conn or self.conn
         for ov in overviews:
-            ov_tn = 'o_{ov}_{tn}'.format(ov=ov, tn=tablename)
-            sql = '''
-SELECT AddOverviewConstraints('{schema}', '{ov_tn}', '{rast}',
-                              '{schema}', '{tn}', '{rast}', {ov});
+            ov_tn = f'o_{ov}_{tablename}'
+            sql = f'''
+SELECT AddOverviewConstraints('{schema}', '{ov_tn}', '{raster_column}',
+                              '{schema}', '{tablename}', '{raster_column}', {ov});
 
             '''
-            self.run_query(sql.format(schema=schema,
-                                      tn=tablename,
-                                      ov_tn=ov_tn,
-                                      ov=ov,
-                                      rast=raster_column), conn=conn)
+            self.run_query(sql, conn=conn)
             self.add_raster_index(schema, ov_tn, raster_column=raster_column)
         conn.commit()
 
-    def add_raster_index_and_overviews(self, overviews, schema, tablename,
-                                       raster_column='rast', conn=None):
+    def add_raster_index_and_overviews(self,
+                                       overviews: List[int],
+                                       schema: str,
+                                       tablename: str,
+                                       raster_column: str = 'rast',
+                                       conn: NamedTupleConnection = None):
         conn = conn or self.conn
         self.add_raster_index(schema, tablename, raster_column, conn)
         self.add_overview_index(
             overviews, schema, tablename, raster_column, conn)
 
-    def get_primary_key(self, schema, tablename, conn=None):
+    def get_primary_key(self,
+                        schema: str,
+                        tablename: str,
+                        conn: NamedTupleConnection = None) -> str:
         """
         Return the primary key columns of schema.tablename as string
         """
         conn = conn or self.conn
-        sql = """
+        sql = f"""
 SELECT a.attname
 FROM   pg_index i
 JOIN   pg_attribute a ON a.attrelid = i.indrelid
                      AND a.attnum = ANY(i.indkey)
-WHERE  i.indrelid = '"{s}"."{t}"'::regclass
+WHERE  i.indrelid = '"{schema}"."{tablename}"'::regclass
 AND    i.indisprimary;
-        """.format(s=schema, t=tablename)
+        """
         cur = conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
-        pkey = ', '.join(['"{}"'.format(r[0]) for r in rows])
+        pkey = ', '.join([f'"{r[0]}"' for r in rows])
         return pkey

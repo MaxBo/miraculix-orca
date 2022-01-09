@@ -173,7 +173,7 @@ class ExtractLanduse(Extract):
             self.logger.info(f'Extracting GMES Urban Atlas boundaries into '
                              f'{self.schema}.{gmes}_boundary')
             columns = self.conn.get_column_dict(
-                f'"{self.temp}"."{gmes}_boundary"')
+                f'{gmes}_boundary', self.temp)
             columns.pop('geom')
             cols = ', '.join([f'c."{col}"' for col in columns])
             sql = f"""
@@ -191,8 +191,7 @@ class ExtractLanduse(Extract):
 
             self.logger.info(f'Extracting GMES Urban Atlas landcover data into '
                              f'"{self.schema}"."{gmes}"')
-            columns = self.conn.get_column_dict(
-                f'"{self.temp}"."{gmes}"')
+            columns = self.conn.get_column_dict(gmes, self.temp)
             columns.pop('geom')
             cols = ', '.join([f'c."{col}"' for col in columns])
             sql = f"""
@@ -221,8 +220,8 @@ class ExtractLanduse(Extract):
             if urban_core_exists:
                 self.logger.info(f'Extracting GMES Urban Atlas urban core into '
                                  f'{self.schema}.{gmes}_urban_core')
-                columns = self.conn.get_column_dict(
-                    f'"{self.temp}"."{gmes}_urban_core"')
+                columns = self.conn.get_column_dict(f'{gmes}_urban_core',
+                                                    self.temp)
                 columns.pop('geom')
                 cols = ', '.join([f'c."{col}"' for col in columns])
                 sql = f"""
@@ -300,7 +299,7 @@ class ExtractLanduse(Extract):
         ALTER TABLE {schema}.{gmes} CLUSTER ON {gmes}_geom_idx;
         """
         for gmes in self.gmes:
-            cols = self.conn.get_column_dict(f'"{self.schema}"."{gmes}"')
+            cols = self.conn.get_column_dict(gmes, self.schema)
             code = [col for col in cols if col.startswith('code')][0]
             self.run_query(sql_ua.format(
                 schema=self.schema, gmes=gmes, code=code),

@@ -81,7 +81,7 @@ class ExtractOSM(Extract):
         WHERE session_id='{self.session_id}';
         """
         cur = self.conn.cursor()
-        self.logger.info(sql)
+        self.logger.debug(sql)
         cur.execute(sql)
         rows = cur.fetchall()
         ids = [row[0] for row in rows]
@@ -91,7 +91,7 @@ class ExtractOSM(Extract):
             sql = f'''
             SELECT id FROM {self.schema}.relations tr WHERE id = ANY(ARRAY[{arr}]);
             '''
-            self.logger.info(sql)
+            self.logger.debug(sql)
             cur.execute(sql)
             rows = cur.fetchall()
             already_in = {row[0] for row in rows}
@@ -105,7 +105,7 @@ class ExtractOSM(Extract):
             SELECT id, version, user_id, tstamp, changeset_id, tags
             FROM {self.temp}.relations WHERE id = ANY(ARRAY[{arr}])
             '''
-            self.logger.info(sql)
+            self.logger.debug(sql)
             cur.execute(sql)
 
             sql = f'''
@@ -114,7 +114,7 @@ class ExtractOSM(Extract):
             WHERE rm.member_id = ANY(ARRAY[{arr}])
             AND rm.member_type = 'R';
             '''
-            self.logger.info(sql)
+            self.logger.debug(sql)
             cur.execute(sql)
             rows = cur.fetchall()
             ids = [row[0] for row in rows]
