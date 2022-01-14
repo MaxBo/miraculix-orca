@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding:utf-8
 
+from typing import List, Tuple
 from argparse import ArgumentParser
 
 import logging
@@ -26,6 +27,7 @@ class CopyOSM2FGDB(Copy2FGDB):
             self.create_waterways()
             self.create_tourism()
             self.create_shops()
+            self.create_boundaries()
 
             self.conn.commit()
 
@@ -38,15 +40,16 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
         self.run_query(sql)
 
     def create_geometry_layer(self,
-                              columns,
-                              where_clause,
-                              view,
-                              geometrytype='lines',
-                              schema='osm_layer',
-                              sql_comment=None):
+                              columns: str,
+                              where_clause: str,
+                              view: str,
+                              geometrytype: str = 'lines',
+                              schema: str = 'osm_layer',
+                              sql_comment: str = None,
+                              osm_geom_schema: str = 'osm'):
         """Create a linestring layer schema.view, with the given fields
         and the given where-clause"""
-        osm_geom_schema = 'osm'
+
         self.logger.info(f'Creating view {schema}.{view}')
         geometrytypes = {'nodes': ('POINT', 'geom'),
                          'lines': ('LINESTRING', 'geom'),
@@ -82,10 +85,10 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
         self.run_query(sql, conn=self.conn)
 
     def create_layer_by_key(self,
-                            view,
-                            keys,
-                            schema='osm_layer',
-                            geometrytype='lines'):
+                            view: str,
+                            keys: List[str],
+                            schema: str = 'osm_layer',
+                            geometrytype: str = 'lines'):
         """
         Create a linestring layer for all ways having the given keys
 
@@ -115,7 +118,7 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
                                    schema=schema,
                                    geometrytype=geometrytype)
 
-    def keys2sql(self, keys):
+    def keys2sql(self, keys: List[str]) -> Tuple[str, str]:
         """
         convert keys to sql-code
 
@@ -137,8 +140,8 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
         return columns, where_clause
 
     def create_composite_layer(self,
-                               view,
-                               schema,
+                               view: str,
+                               schema: str,
                                *layers):
         """Create a composite layer of all geometrytypes"""
         cols = self.conn.get_column_dict(layers[0], schema)
@@ -174,7 +177,6 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
             COMMENT ON VIEW {schema}.{view} IS '{description}';
             '''
             self.run_query(sql)
-
 
     def create_railways(self):
         """Create railways layer"""
@@ -260,6 +262,100 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
                                     self.schema,
                                     view_lines,
                                     view_polys)
+
+    def create_boundaries(self,
+                          osm_geom_schema: str = 'osm'):
+        """Create administrative boundaries"""
+        sql = f"""
+CREATE OR REPLACE VIEW {self.schema}.osm_admin_units(
+    id,
+    adminlevel,
+    name,
+    geom,
+    admin_type,
+    capital,
+    heritage,
+    population,
+    place,
+    wikipedia,
+    wikidata,
+    source)
+AS
+  SELECT b.id,
+         b.adminlevel,
+         b.name,
+         b.geom,
+         r.tags -> 'type'::text AS admin_type,
+         r.tags -> 'capital'::text AS capital,
+         r.tags -> 'heritage'::text AS heritage,
+         r.tags -> 'population'::text AS population,
+         r.tags -> 'place'::text AS place,
+         r.tags -> 'wikipedia'::text AS wikipedia,
+         r.tags -> 'wikidata'::text AS wikidata,
+         r.tags -> 'source'::text AS source
+  FROM (
+         SELECT r_1.id,
+                r_1.adminlevel,
+                r_1.name,
+                st_collect(r_1.geom)::geometry(MultiPolygon, {self.target_srid}) AS geom
+         FROM (
+                SELECT r_1_1.id,
+                       r_1_1.adminlevel,
+                       r_1_1.name,
+                       st_makepolygon(r_1_1.geom) AS geom
+                FROM (
+                       SELECT r_2.id,
+                              r_2.adminlevel,
+                              r_2.name,
+                              r_2.member_role,
+                              st_geometrytype(r_2.geom) AS st_geometrytype,
+                              (st_dump(r_2.geom)).path[1] AS seq,
+                              (st_dump(r_2.geom)).geom AS geom
+                       FROM (
+                              SELECT r_3.id,
+                                     r_3.member_role,
+                                     r_3.adminlevel,
+                                     r_3.name,
+                                     st_linemerge(st_collect(r_3.linestring)) AS
+                                       geom
+                              FROM (
+                                     SELECT r_4.id,
+                                            r_4.adminlevel,
+                                            r_4.name,
+                                            w.linestring,
+                                            rm.member_role
+                                     FROM (
+                                            SELECT r_5.id,
+                                                   r_5.tags -> 'admin_level':: text AS adminlevel,
+                                                   r_5.tags -> 'name'::text AS name
+                                            FROM {osm_geom_schema}.relations r_5
+                                            WHERE r_5.tags ? 'admin_level'::text
+                                          ) r_4,
+                                          {osm_geom_schema}.relation_members rm,
+                                          {osm_geom_schema}.ways w
+                                     WHERE r_4.id = rm.relation_id AND
+                                           w.id = rm.member_id AND
+                                           rm.member_type = 'W'::bpchar
+                                     ORDER BY r_4.id,
+                                              rm.sequence_id
+                                   ) r_3
+                              GROUP BY r_3.id,
+                                       r_3.member_role,
+                                       r_3.adminlevel,
+                                       r_3.name
+                            ) r_2
+                       WHERE st_isclosed(r_2.geom)
+                     ) r_1_1
+              ) r_1
+         GROUP BY r_1.id,
+                  r_1.adminlevel,
+                  r_1.name
+       ) b,
+       {osm_geom_schema}.relations r
+  WHERE b.id = r.id;
+        """
+
+        self.run_query(sql)
 
 
 if __name__ == '__main__':
