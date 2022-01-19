@@ -23,6 +23,7 @@ class CopyOSM2FGDB(Copy2FGDB):
             self.create_amenity()
             self.create_buildings()
             self.create_leisure()
+            self.create_landuse()
             self.create_natural()
             self.create_waterways()
             self.create_tourism()
@@ -142,7 +143,7 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
     def create_composite_layer(self,
                                view: str,
                                schema: str,
-                               *layers):
+                               *layers: List[str]):
         """Create a composite layer of all geometrytypes"""
         cols = self.conn.get_column_dict(layers[0], schema)
         cols_without_geom = (c for c in cols if c != 'geom')
@@ -249,6 +250,12 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
         """create natural layer"""
         keys = ['natural']
         view = 'natural'
+        self.create_layer_by_key(view, keys, geometrytype='polygons')
+
+    def create_landuse(self):
+        """create natural layer"""
+        keys = ['landuse']
+        view = 'osm_landuse'
         self.create_layer_by_key(view, keys, geometrytype='polygons')
 
     def create_waterways(self):

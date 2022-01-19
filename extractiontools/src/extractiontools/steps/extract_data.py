@@ -134,6 +134,7 @@ def osm_layers() -> Dict[str, str]:
               'buildings': 'osm_layer',
               'leisure_pnt': 'osm_layer',
               'leisure_polys': 'osm_layer',
+              'osm_landuse': 'landuse',
               'natural': 'landuse',
               'waterways_lines': 'landuse',
               'amenity_pnt': 'osm_layer',
