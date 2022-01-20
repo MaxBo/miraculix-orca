@@ -274,6 +274,52 @@ CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION group_osm;
                           osm_geom_schema: str = 'osm'):
         """Create administrative boundaries"""
         sql = f"""
+
+CREATE OR REPLACE VIEW {self.schema}.osm_admin_units_linestrings AS
+   SELECT
+        r_3.id,
+        r_3.member_role,
+        CASE WHEN st_isclosed(r_3.geom) THEN r_3.geom
+        WHEN st_distance(st_startpoint(r_3.geom), st_endpoint(r_3.geom)) < 100
+        THEN st_addpoint(r_3.geom, st_startpoint(r_3.geom))
+        ELSE NULL
+        END AS geom,
+        row_number() OVER (PARTITION BY r_3.id) AS r_seq
+    FROM (
+    SELECT r_2.id,
+           r_2.member_role,
+           (st_dump(r_2.geom)) . geom AS geom
+    FROM (
+           SELECT r_3.id,
+                   r_3.member_role,
+                  st_linemerge(st_collect(r_3.linestring)) AS
+                    geom
+           FROM (
+                  SELECT r_4.id,
+                         w.linestring,
+                         rm.member_role
+                  FROM (
+                         SELECT r_5.id,
+                                r_5.tags -> 'admin_level'::
+                                  text AS adminlevel,
+                                r_5.tags -> 'name'::text AS
+                                  name
+                         FROM {osm_geom_schema}.relations r_5
+                         WHERE r_5.tags ? 'admin_level'::text
+                       ) r_4,
+                       {osm_geom_schema}.relation_members rm,
+                       {osm_geom_schema}.ways w
+                  WHERE r_4.id = rm.relation_id AND
+                        w.id = rm.member_id AND
+                        rm.member_type = 'W'::bpchar
+                  ORDER BY r_4.id,
+                           rm.sequence_id
+                ) r_3
+           GROUP BY r_3.id,
+                    r_3.member_role
+         ) r_2
+    ) r_3
+;
 CREATE OR REPLACE VIEW {self.schema}.osm_admin_units(
     id,
     adminlevel,
@@ -289,8 +335,8 @@ CREATE OR REPLACE VIEW {self.schema}.osm_admin_units(
     source)
 AS
   SELECT b.id,
-         b.adminlevel,
-         b.name,
+         r.tags -> 'admin_level'::text AS adminlevel,
+         r.tags -> 'name'::text AS name,
          b.geom,
          r.tags -> 'type'::text AS admin_type,
          r.tags -> 'capital'::text AS capital,
@@ -301,65 +347,42 @@ AS
          r.tags -> 'wikidata'::text AS wikidata,
          r.tags -> 'source'::text AS source
   FROM (
-         SELECT r_1.id,
-                r_1.adminlevel,
-                r_1.name,
-                st_collect(r_1.geom)::geometry(MultiPolygon, {self.target_srid}) AS geom
-         FROM (
-                SELECT r_1_1.id,
-                       r_1_1.adminlevel,
-                       r_1_1.name,
-                       st_makepolygon(r_1_1.geom) AS geom
-                FROM (
-                       SELECT r_2.id,
-                              r_2.adminlevel,
-                              r_2.name,
-                              r_2.member_role,
-                              st_geometrytype(r_2.geom) AS st_geometrytype,
-                              (st_dump(r_2.geom)).path[1] AS seq,
-                              (st_dump(r_2.geom)).geom AS geom
-                       FROM (
-                              SELECT r_3.id,
-                                     r_3.member_role,
-                                     r_3.adminlevel,
-                                     r_3.name,
-                                     st_linemerge(st_collect(r_3.linestring)) AS
-                                       geom
-                              FROM (
-                                     SELECT r_4.id,
-                                            r_4.adminlevel,
-                                            r_4.name,
-                                            w.linestring,
-                                            rm.member_role
-                                     FROM (
-                                            SELECT r_5.id,
-                                                   r_5.tags -> 'admin_level':: text AS adminlevel,
-                                                   r_5.tags -> 'name'::text AS name
-                                            FROM {osm_geom_schema}.relations r_5
-                                            WHERE r_5.tags ? 'admin_level'::text
-                                          ) r_4,
-                                          {osm_geom_schema}.relation_members rm,
-                                          {osm_geom_schema}.ways w
-                                     WHERE r_4.id = rm.relation_id AND
-                                           w.id = rm.member_id AND
-                                           rm.member_type = 'W'::bpchar
-                                     ORDER BY r_4.id,
-                                              rm.sequence_id
-                                   ) r_3
-                              GROUP BY r_3.id,
-                                       r_3.member_role,
-                                       r_3.adminlevel,
-                                       r_3.name
-                            ) r_2
-                       WHERE st_isclosed(r_2.geom)
-                     ) r_1_1
-              ) r_1
-         GROUP BY r_1.id,
-                  r_1.adminlevel,
-                  r_1.name
+ select
+c.id, st_collect(st_makepolygon(c.geom, oi.inner_geom))::geometry(MULTIPOLYGON, 25832) AS geom
+FROM {self.schema}.osm_admin_units_linestrings c,
+(
+SELECT
+o.id,
+o.r_seq,
+array_remove(array_agg(i.geom), NULL) AS inner_geom
+
+FROM
+(
+select
+c.id,
+c.r_seq,
+st_makepolygon(c.geom) AS geom
+FROM
+{self.schema}.osm_admin_units_linestrings c
+WHERE c.member_role = 'outer'
+AND c.geom IS NOT NULL
+) AS o
+LEFT JOIN
+(SELECT c.id,
+c.geom
+FROM {self.schema}.osm_admin_units_linestrings c
+WHERE c.member_role = 'inner'
+AND c.geom IS NOT NULL
+) i
+ON (o.id = i.id AND st_within(i.geom, o.geom))
+GROUP BY o.id, o.r_seq
+) oi
+WHERE c.id = oi.id AND c.r_seq = oi.r_seq
+GROUP BY c.id
        ) b,
        {osm_geom_schema}.relations r
   WHERE b.id = r.id;
+
         """
 
         self.run_query(sql)
