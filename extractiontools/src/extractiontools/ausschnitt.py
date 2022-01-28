@@ -208,22 +208,37 @@ class Extract(DBApp):
         """
         extracts a single table
         """
-
-        wkt = self.get_target_boundary(
-            boundary_name=boundary_name or self.boundary_name)
-        geometrytype = self.get_geometrytype(tn, geom)
         cols = self.conn.get_column_dict(tn, self.temp)
-        cols_without_geom = ('t."{}"'.format(c) for c in cols if c != geom)
-        col_str = ', '.join(cols_without_geom)
 
-        sql = f"""
-        SELECT {col_str}, st_transform(t.{geom}, {self.target_srid})::geometry({geometrytype}, {self.target_srid}) as geom
-        INTO {self.schema}.{tn}
-        FROM {self.temp}.{tn} t,
-        (SELECT ST_GeomFromEWKT('SRID={self.srid};{wkt}') AS source_geom) tb
-        WHERE
-        st_intersects(t.{geom}, tb.source_geom);
-        """
+        if geom is None:
+            cols = ('t."{}"'.format(c)
+                    for c in cols)
+            col_str = ', '.join(cols)
+            sql = f"""
+SELECT {col_str}
+INTO {self.schema}.{tn}
+FROM {self.temp}.{tn} t;
+            """
+        else:
+
+            wkt = self.get_target_boundary(
+                boundary_name=boundary_name or self.boundary_name)
+            geometrytype = self.get_geometrytype(tn, geom)
+            cols_without_geom = ('t."{}"'.format(c)
+                                 for c in cols if c != geom)
+            col_str = ', '.join(cols_without_geom)
+
+            sql = f"""
+            SELECT
+              {col_str},
+              st_transform(t.{geom}, {self.target_srid})::geometry({geometrytype},
+              {self.target_srid}) as geom
+            INTO {self.schema}.{tn}
+            FROM {self.temp}.{tn} t,
+            (SELECT ST_GeomFromEWKT('SRID={self.srid};{wkt}') AS source_geom) tb
+            WHERE
+            st_intersects(t.{geom}, tb.source_geom);
+            """
 
         self.logger.info(f'Extracting table "{tn}" into {self.schema}.{tn}')
         self.run_query(sql, conn=self.conn)

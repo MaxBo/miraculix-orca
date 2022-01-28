@@ -1,12 +1,7 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 
 from argparse import ArgumentParser
-
-import numpy as np
-import sys
-import os
-import subprocess
 
 from extractiontools.ausschnitt import Extract
 
@@ -82,7 +77,6 @@ class ExtractLAEA(Extract):
         WHERE v.cellcode = z.id;
         """
         self.run_query(sql, conn=self.conn)
-
 
     def get_zensusdata_km2(self):
         """Extract Censusdata on km2 level for area"""
@@ -272,7 +266,7 @@ class ExtractLAEA(Extract):
         available_sizes = [100, 250, 500, 1000, 2000, 5000, 10000]
         if size not in available_sizes:
             msg = 'size %s not in available sizes %s'
-            raise ValueError(msg %(size, available_sizes))
+            raise ValueError(msg % (size, available_sizes))
         if size >= 1000:
             return '%skm' % (size // 1000)
         else:
@@ -332,12 +326,12 @@ if __name__ == '__main__':
                         help="source database",
                         dest="source_db", default='europe')
 
-
     options = parser.parse_args()
 
     extract = ExtractLAEA(source_db=options.source_db,
                           destination_db=options.destination_db,
                           target_srid=None)
-    extract.set_login(host=options.host, port=options.port, user=options.user)
+    extract.set_login(host=options.host,
+                      port=options.port, user=options.user)
     extract.get_target_boundary_from_dest_db()
     extract.extract()

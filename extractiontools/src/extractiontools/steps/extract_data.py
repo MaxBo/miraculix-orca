@@ -15,6 +15,7 @@ from extractiontools.pendlerdaten import (ImportPendlerdaten,
                                           ExtractPendler,
                                           CreatePendlerSpinne,
                                           ExportPendlerdaten)
+from extractiontools.verschneidungstool import PrepareVerschneidungstool
 from osgeo import ogr
 
 import extractiontools.steps.create_db
@@ -243,3 +244,15 @@ def export_pendlerdaten(database: str):
         db=database,
         logger=orca.logger)
     export.export()
+
+
+@meta(group='(9) TravelDemandModel', order=1)
+@orca.step()
+def prepare_verschneidungstool(source_db: str, database: str, target_srid: int):
+    """
+    prepare Verschneidungstool tables and views
+    """
+    prepare = PrepareVerschneidungstool(source_db=source_db,
+                                        destination_db=database,
+                                        logger=orca.logger)
+    prepare.extract()
