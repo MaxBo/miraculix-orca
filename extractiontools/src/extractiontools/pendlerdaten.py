@@ -111,7 +111,24 @@ max(e."Deutsche") AS "Deutsche",
 max(e."Ausländer") AS "Ausländer",
 max(e."Azubis") AS "Azubis"
 FROM {self.schema}.ein_auspendler e
-GROUP BY e."Stichtag", e.ags_wo, e.gen_wo, e.ags_ao, e.gen_ao;
+GROUP BY e."Stichtag", e.ags_wo, e.gen_wo, e.ags_ao, e.gen_ao
+UNION
+SELECT
+make_date(s.jahr, 6, 30) AS "Stichtag",
+s.ags AS ags_wo,
+g.gen AS gen_wo,
+s.ags AS ags_ao,
+g.gen AS gen_ao,
+s.wo_ao AS insgesamt,
+NULL AS "Männer",
+NULL AS "Frauen",
+NULL AS "Deutsche",
+NULL AS "Ausländer",
+NULL AS "Azubis"
+FROM {ExtractRegionalstatistik.schema}.svb_jahr s,
+{self.gemeindelayer} g
+WHERE s.ags = g.ags
+;
 """
         self.run_query(sql)
 
@@ -124,6 +141,7 @@ UNION
 SELECT DISTINCT
 e.ags_ao, e.ags_wo
 FROM {self.schema}.ein_auspendler_zusammengefasst e
+WHERE NOT e.ags_wo = e.ags_ao;
 """
         self.run_query(sql)
 
@@ -342,12 +360,47 @@ AND g2.ags = p.ags_ao;
         self.run_query(sql)
 
         sql = f"""
+CREATE VIEW {self.schema}.view_circle (
+    ags,
+    geom)
+AS
+SELECT p.ags,
+    ST_CurveToLine(
+      ST_GeomFromEWKT(
+        replace(ST_AsEWKT(ST_MakeLine(p.points)), 'LINESTRING', 'CIRCULARSTRING')
+        )
+      )::geometry(Linestring,{self.target_srid}) AS geom
+FROM (
+    SELECT g.ags,
+            array_agg(st_translate(st_pointonsurface(g.geom), d.dx::double precision, d.dy::double precision)) AS points
+    FROM {self.pendlerspinne_gebiete} g,
+            ( VALUES (2000,0), (0,'-2000'::integer), (0,2000)) d(dx, dy)
+    GROUP BY g.ags
+    ) p;
+"""
+        self.run_query(sql)
+
+        sql = f"""
+DROP MATERIALIZED VIEW IF EXISTS {self.schema}.spinne_geom;
+CREATE MATERIALIZED VIEW {self.schema}.spinne_geom AS
+SELECT s.*
+FROM {self.schema}.spinne s
+UNION
+SELECT
+c.ags AS ags_wo,
+c.ags AS ags_ao,
+c.geom
+FROM {self.schema}.view_circle AS c;
+        """
+        self.run_query(sql)
+
+        sql = f"""
 CREATE OR REPLACE VIEW {self.schema}.pendler_spinne AS
 SELECT
 row_number() OVER()::integer AS rn,
 e."Stichtag", s.ags_wo, s.ags_ao, s.geom,
 e.insgesamt, e."Männer", e."Frauen", e."Deutsche", e."Ausländer", e."Azubis"
-FROM {self.schema}.spinne s,
+FROM {self.schema}.spinne_geom s,
 {self.schema}.ein_auspendler_zusammengefasst e
 WHERE s.ags_wo = e.ags_wo
 AND s.ags_ao = e.ags_ao;

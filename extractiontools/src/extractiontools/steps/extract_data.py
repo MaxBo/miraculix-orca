@@ -221,7 +221,7 @@ def import_pendlerdaten(source_db: str,
     import_pendler.run()
 
 
-@meta(group='(8b) Pendler')
+@meta(group='(8b) Pendler', required=extract_regionalstatistik)
 @orca.step()
 def extract_pendlerdaten(source_db: str,
                          database: str,
