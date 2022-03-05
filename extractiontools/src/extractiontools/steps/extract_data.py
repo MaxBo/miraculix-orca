@@ -13,6 +13,7 @@ from extractiontools.zensus2raster import Zensus2Raster, ExportZensus
 from extractiontools.copy_osm2fgdb import CopyOSM2FGDB
 from extractiontools.pendlerdaten import (ImportPendlerdaten,
                                           ExtractPendler,
+                                          ExtractRegionalstatistik,
                                           CreatePendlerSpinne,
                                           ExportPendlerdaten)
 from extractiontools.verschneidungstool import PrepareVerschneidungstool
@@ -187,7 +188,25 @@ def copy_zensus_to_tiff(database: str, subfolder_tiffs: str):
     z2r.run()
 
 
-@meta(group='(8) Pendler')
+@meta(group='(8a) Regionalstatistik')
+@orca.step()
+def extract_regionalstatistik(source_db: str,
+                              database: str,
+                              regionalstatistik_gemeinden: str,
+                              regionalstatistik_years: List[int]):
+    """
+    Filter Regionalstatistik in Gemeinden
+    """
+    extract_regionalstatistik = ExtractRegionalstatistik(
+        source_db=source_db,
+        destination_db=database,
+        regionalstatistik_gemeinden=regionalstatistik_gemeinden,
+        regionalstatistik_years=regionalstatistik_years,
+        logger=orca.logger)
+    extract_regionalstatistik.extract()
+
+
+@meta(group='(8b) Pendler')
 @orca.step()
 def import_pendlerdaten(source_db: str,
                         subfolder_pendlerdaten: str,
@@ -202,7 +221,7 @@ def import_pendlerdaten(source_db: str,
     import_pendler.run()
 
 
-@meta(group='(8) Pendler')
+@meta(group='(8b) Pendler')
 @orca.step()
 def extract_pendlerdaten(source_db: str,
                          database: str,
@@ -218,7 +237,7 @@ def extract_pendlerdaten(source_db: str,
     extract_pendler.extract()
 
 
-@meta(group='(8) Pendler', required=extract_pendlerdaten)
+@meta(group='(8b) Pendler', required=extract_pendlerdaten)
 @orca.step()
 def create_pendlerspinne(database: str,
                          pendlerspinne_gebiete: str,
@@ -234,7 +253,7 @@ def create_pendlerspinne(database: str,
     create_pendlerspinne.run()
 
 
-@meta(group='(8) Pendler', required=extract_pendlerdaten)
+@meta(group='(8b) Pendler', required=extract_pendlerdaten)
 @orca.step()
 def export_pendlerdaten(database: str):
     """

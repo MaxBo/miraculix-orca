@@ -10,9 +10,54 @@ from extractiontools.connection import Connection, DBApp, Login
 from extractiontools.ausschnitt import Extract
 
 
+class ExtractRegionalstatistik(Extract):
+    """
+    Extract the regional statistics
+    """
+    tables = {}
+    schema = 'regionalstatistik'
+    role = 'group_osm'
+
+    def __init__(self,
+                 source_db: str,
+                 destination_db: str,
+                 regionalstatistik_gemeinden: str,
+                 regionalstatistik_years: List[int],
+                 **kwargs):
+        super().__init__(destination_db=destination_db,
+                         source_db=source_db, **kwargs)
+        self.gemeindelayer = regionalstatistik_gemeinden
+        self.jahre = regionalstatistik_years
+
+    def additional_stuff(self):
+        """
+        """
+        self.validate_table_exists(self.gemeindelayer)
+        self.extract_erwerbstaetigkeit()
+
+    def extract_erwerbstaetigkeit(self):
+        """
+        Extract Erwerbstätigkeit
+        """
+        self.logger.info(
+            f'Extracting jobs and workers to {self.schema}.svb_jahr')
+        jahre = list(int(j) for j in self.jahre)
+        sql = f"""
+        SELECT
+          s.*
+        INTO {self.schema}.svb_jahr
+        FROM {self.temp}.svb_jahr s,
+        {self.gemeindelayer} g
+        WHERE
+        g.ags = s.ags
+        AND s.jahr=ANY(%s)
+        """
+        self.run_query(sql, vars=(jahre, ))
+
+
 class ExtractPendler(Extract):
     """
-    Extract the landuse data
+    Extract the commuter statistics
     """
     tables = {}
     schema = 'pendlerdaten'

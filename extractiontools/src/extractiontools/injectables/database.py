@@ -204,28 +204,42 @@ def subfolder_otp() -> str:
     return 'otp'
 
 
-@meta(group='(8) Pendlerdaten')
+@meta(group='(8b) Pendlerdaten')
 @orca.injectable()
 def subfolder_pendlerdaten() -> str:
     """subfolder for the Pendlerdaten-Excelfiles"""
     return 'Pendlerdaten'
 
 
-@meta(group='(8) Pendlerdaten')
+@meta(group='(8b) Pendlerdaten')
 @orca.injectable()
 def pendlerdaten_years() -> List[str]:
     """Years to import as Pendlerdaten"""
     return ['2019', '2020']
 
 
-@meta(group='(8) Pendlerdaten')
+@meta(group='(8a) Regionalstatistik')
+@orca.injectable()
+def regionalstatistik_years() -> List[str]:
+    """Years to import as Regionalstatistik"""
+    return ['2020', '2021']
+
+
+@meta(group='(8a) Regionalstatistik')
+@orca.injectable()
+def regionalstatistik_gemeinden() -> str:
+    """Gemeindelayer for Regionalstatistik"""
+    return 'verwaltungsgrenzen.gem_2020_12'
+
+
+@meta(group='(8b) Pendlerdaten')
 @orca.injectable()
 def pendlerdaten_gemeinden() -> str:
     """Gemeindelayer for Pendlerdaten"""
     return 'verwaltungsgrenzen.gem_2018_12'
 
 
-@meta(group='(8) Pendlerdaten')
+@meta(group='(8b) Pendlerdaten')
 @orca.injectable()
 def pendlerspinne_gebiete() -> str:
     """Layer mit den Gebieten für die Pendlerspinne"""
