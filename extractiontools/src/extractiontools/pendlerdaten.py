@@ -34,6 +34,7 @@ class ExtractRegionalstatistik(Extract):
         """
         self.validate_table_exists(self.gemeindelayer)
         self.extract_erwerbstaetigkeit()
+        self.extract_kfz()
 
     def extract_erwerbstaetigkeit(self):
         """
@@ -50,6 +51,25 @@ class ExtractRegionalstatistik(Extract):
         {self.gemeindelayer} g
         WHERE
         g.ags = s.ags
+        AND s.jahr=ANY(%s)
+        """
+        self.run_query(sql, vars=(jahre, ))
+
+    def extract_kfz(self):
+        """
+        Extract Kfz
+        """
+        self.logger.info(
+            f'Extracting Kfz to {self.schema}.kfz')
+        jahre = list(int(j) for j in self.jahre)
+        sql = f"""
+        SELECT
+          s.*
+        INTO {self.schema}.kfz
+        FROM {self.temp}.kfz s,
+        {self.gemeindelayer} g
+        WHERE
+        g.ags = s.ags_g
         AND s.jahr=ANY(%s)
         """
         self.run_query(sql, vars=(jahre, ))
