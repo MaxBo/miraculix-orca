@@ -69,7 +69,7 @@ class ExtractRegionalstatistik(Extract):
         FROM {self.temp}.kfz s,
         {self.gemeindelayer} g
         WHERE
-        g.ags = s.ags_g
+        g.ags = s.ags
         AND s.jahr=ANY(%s)
         """
         self.run_query(sql, vars=(jahre, ))
