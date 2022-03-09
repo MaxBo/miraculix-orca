@@ -195,7 +195,7 @@ def extract_regionalstatistik(source_db: str,
                               regionalstatistik_gemeinden: str,
                               regionalstatistik_years: List[int]):
     """
-    Regionalstatistik (SvB, Kfz) auf Gemeindeebene
+    Regionalstatistik (SvB, Kfz, Arbeitslose) auf Gemeindeebene
     """
     extract_regionalstatistik = ExtractRegionalstatistik(
         source_db=source_db,
