@@ -332,19 +332,24 @@ class BahnQuery:
         #date_txt = re.findall(r'\d{1,2}.\d{1,2}.\d{2,4}', dt_div.text)[0]
         #date = datetime.datetime.strptime(date_txt, '%d.%m.%y').date()
 
-        table = content.xpath('.//table[contains(@class, "result")]')[0]
-        rows = table.findall('tr')
+        table = content.xpath('.//div[contains(@class, "tqResults")]')[0]
+        rows = table.xpath('.//div[contains(@class, "tqRow")]')
 
         def parse_time(div):
-            txt = re.findall(r'\d{1,2}:\d{1,2}', div.text)
-            if not txt:
-                return
-            t = datetime.datetime.strptime(txt[0], self.time_format).time()
-            return t
+            for txt in div.itertext():
+                txt = re.findall(r'\d{1,2}:\d{1,2}', txt)
+                if txt:
+                    return datetime.datetime.strptime(txt[0], self.time_format).time()
+            return
 
         for row in rows:
-            cls = row.get('class')
-            if not (cls and cls.startswith('trainrow')):
+            cls = row.get('class').split(' ')
+            is_train_row = False
+            for c in cls:
+                if c.startswith('trainrow'):
+                    is_train_row = True
+                    break
+            if not is_train_row:
                 continue
             section = {}
             station = row.find_class('station')[0].find('a')
@@ -357,8 +362,10 @@ class BahnQuery:
             date_txt = re.findall('date=([0-9\.]+)', station_url)[0]
             date = datetime.datetime.strptime(date_txt, '%d.%m.%y').date()
 
-            arr_time = parse_time(row.find_class('arrival')[0])
-            dep_time = parse_time(row.find_class('departure')[0])
+            arr_divs = row.xpath('.//div[contains(@class, "arrival")]')
+            arr_time = parse_time(arr_divs[0]) if arr_divs else None
+            dep_divs = row.xpath('.//div[contains(@class, "departure")]')
+            dep_time = parse_time(dep_divs[0]) if dep_divs else None
 
             if arr_time:
                 section['arrival'] = datetime.datetime.combine(

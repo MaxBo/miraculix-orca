@@ -109,10 +109,6 @@ class ScrapeTimetable(ScrapeStops):
         cursor = self.conn.cursor()
         cursor.execute(sql)
         rows = cursor.fetchall()
-        #for r in rows:
-            #if "Eilendorf Stapperstraße" in r[1]:
-                #break
-        #rows = [r]
         for r, row in enumerate(rows):
             self.logger.info(
                 f'Looking for Routes at stop "{row[1]}"... '
@@ -150,8 +146,9 @@ class ScrapeTimetable(ScrapeStops):
                         #f"({j+1}/{len(journeys)})")
                 # ToDo: sometimes there is an IndexError in the journey, did
                 # not debug it yet
-                except IndexError:
-                    pass
+                except IndexError as e:
+                    msg = str(e)
+                    self.logger.error(f"{msg} - There might be a change in the HTML structure of the DB-Reiseauskunft")
                 i += 1
             self.logger.info(
                 f"{len(journeys)} Routes processed. {al_i} Routes were skipped (already in database)")
