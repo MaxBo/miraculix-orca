@@ -391,8 +391,8 @@ WHERE
 p.pronamespace = 'public'::regnamespace AND
 p.proname = 'array_accum' AND
 p.prokind = 'a'
-AND p.prorettype = 'anyarray'::regtype::oid
-AND p.proargtypes = ARRAY['anyelement'::regtype]::oidvector
+AND p.prorettype = 'anycompatiblearray'::regtype::oid
+AND p.proargtypes = ARRAY['anycompatible'::regtype]::oidvector
 ;
         '''
         cur = self.conn.cursor()
@@ -400,7 +400,7 @@ AND p.proargtypes = ARRAY['anyelement'::regtype]::oidvector
         # if not exists yet
         if not cur.rowcount:
             sql = """
-CREATE AGGREGATE public.array_accum (anyelement)
+CREATE AGGREGATE public.array_accum (anycompatible)
 (
     sfunc = array_append,
     stype = anycompatiblearray,
