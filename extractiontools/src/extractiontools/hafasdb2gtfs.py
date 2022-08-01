@@ -403,7 +403,7 @@ AND p.proargtypes = ARRAY['anyelement'::regtype]::oidvector
 CREATE AGGREGATE public.array_accum (anyelement)
 (
     sfunc = array_append,
-    stype = anyarray,
+    stype = anycompatiblearray,
     initcond = '{}'
 );
         """
