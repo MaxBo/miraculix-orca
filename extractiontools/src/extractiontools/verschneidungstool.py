@@ -55,14 +55,25 @@ ALTER TABLE {self.schema}.current_scenario
 ADD PRIMARY KEY(scenario);
 ALTER TABLE {self.schema}.scenarios_available
 ADD PRIMARY KEY(scenario);
-ALTER TABLE {self.schema}.areas_available
-ADD PRIMARY KEY(id);
+
 ALTER TABLE {self.schema}.schemata_available
 ADD PRIMARY KEY(name);
+
+CREATE SEQUENCE {self.schema}.areas_available_id_seq
+MAXVALUE 2147483647;
+ALTER TABLE {self.schema}.areas_available
+ADD PRIMARY KEY(id),
+ALTER COLUMN id SET DEFAULT nextval('{self.schema}.areas_available_id_seq'::text);
+
+CREATE SEQUENCE {self.schema}.haltestellen_available_id_seq
+MAXVALUE 2147483647;
 ALTER TABLE {self.schema}.haltestellen_available
-ADD PRIMARY KEY(name);
+ADD PRIMARY KEY(name),
+ALTER COLUMN id SET DEFAULT nextval('{self.schema}.haltestellen_available_id_seq'::text),
+ALTER COLUMN id SET NOT NULL;
 CREATE UNIQUE INDEX haltestellen_available_id_key ON {self.schema}.haltestellen_available
   USING btree (id);
+
 ALTER TABLE {self.schema}.projcs2srid
 ADD PRIMARY KEY(name);
 ALTER TABLE {self.schema}.projections_available
@@ -73,18 +84,35 @@ ADD CONSTRAINT projections_available_srid_fkey FOREIGN KEY (srid)
     ON UPDATE NO ACTION
     NOT DEFERRABLE
 ;
+
+CREATE SEQUENCE {self.schema}.queries_id_seq
+MAXVALUE 2147483647;
 ALTER TABLE {self.schema}.queries
-ADD PRIMARY KEY(id);
+ADD PRIMARY KEY(id),
+ALTER COLUMN id SET DEFAULT nextval('{self.schema}.queries_id_seq'::text);
+
 ALTER TABLE {self.schema}.resulttables_available
 ADD PRIMARY KEY(schema_table);
+
+CREATE SEQUENCE {self.schema}.table_categories_id_seq
+MAXVALUE 2147483647;
 ALTER TABLE {self.schema}.table_categories
-ADD PRIMARY KEY(id);
+ADD PRIMARY KEY(id),
+ALTER COLUMN id SET DEFAULT nextval('{self.schema}.table_categories_id_seq'::text);
 CREATE UNIQUE INDEX table_categories_name_key ON {self.schema}.table_categories
   USING btree (name);
+
+CREATE SEQUENCE {self.schema}.tables_to_download_id_seq
+MAXVALUE 2147483647;
 ALTER TABLE {self.schema}.tables_to_download
-ADD PRIMARY KEY(name);
+ADD PRIMARY KEY(name),
+ALTER COLUMN id SET DEFAULT nextval('{self.schema}.tables_to_download_id_seq'::text),
+ALTER COLUMN id SET NOT NULL;
+
+CREATE SEQUENCE {self.schema}.columns_available_id_seq
 ALTER TABLE {self.schema}.columns_available
 ADD PRIMARY KEY(id),
+ALTER COLUMN id SET DEFAULT nextval('{self.schema}.columns_available_id_seq'::text);
 ADD CONSTRAINT columns_available_fk FOREIGN KEY (table_type)
     REFERENCES {self.schema}.table_categories(name)
     ON DELETE NO ACTION
