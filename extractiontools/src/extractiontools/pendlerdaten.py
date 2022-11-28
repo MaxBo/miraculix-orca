@@ -51,10 +51,17 @@ class ExtractRegionalstatistik(Extract):
         FROM {self.temp}.svb_jahr s,
         {self.gemeindelayer} g
         WHERE
-        g.ags = s.ags
+        g.gf = 4
+        AND g.ags = s.ags
         AND s.jahr=ANY(%s)
         """
         self.run_query(sql, vars=(jahre, ))
+
+        sql = f"""
+        ALTER TABLE {self.schema}.svb_jahr
+        ADD PRIMARY KEY(ags, jahr)
+        """
+        self.run_query(sql)
 
     def extract_kfz(self):
         """
@@ -70,10 +77,17 @@ class ExtractRegionalstatistik(Extract):
         FROM {self.temp}.kfz s,
         {self.gemeindelayer} g
         WHERE
-        g.ags = s.ags
+        g.gf = 4
+        AND g.ags = s.ags
         AND s.jahr=ANY(%s)
         """
         self.run_query(sql, vars=(jahre, ))
+
+        sql = f"""
+        ALTER TABLE {self.schema}.kfz
+        ADD PRIMARY KEY(ags, jahr)
+        """
+        self.run_query(sql)
 
     def extract_arbeitslose(self):
         """
@@ -84,15 +98,22 @@ class ExtractRegionalstatistik(Extract):
         jahre = list(int(j) for j in self.jahre)
         sql = f"""
         SELECT
-          rpad(s.ags, 8, '0') AS ags8, s.*
+          s.*
         INTO {self.schema}.arbeitslose
         FROM {self.temp}.arbeitslose s,
         {self.gemeindelayer} g
         WHERE
-        g.ags = rpad(s.ags, 8, '0')
+        g.gf = 4
+        AND g.ags = s.ags8
         AND s.jahr=ANY(%s)
         """
         self.run_query(sql, vars=(jahre, ))
+
+        sql = f"""
+        ALTER TABLE {self.schema}.arbeitslose
+        ADD PRIMARY KEY(ags8, jahr)
+        """
+        self.run_query(sql)
 
 
 class ExtractPendler(Extract):
