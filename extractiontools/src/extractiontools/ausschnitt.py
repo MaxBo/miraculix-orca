@@ -119,8 +119,8 @@ class Extract(DBApp):
                                              name=self.boundary_name)
                 self.update_boundaries()
                 self.create_schema(self.schema, conn=conn, replace=True)
-                self.create_foreign_schema()
                 self.create_foreign_catalog()
+                self.create_foreign_schema()
                 self.conn.commit()
                 for tn, geom in self.tables.items():
                     self.extract_table(tn, geom=geom)
@@ -265,6 +265,19 @@ FROM {self.temp}.{tn} t;
         description = cur.fetchone()
         return description[0] if description else None
 
+    def get_relkinds(self, schema, foreign=False, conn=None) -> dict:
+        cat = 'temp_pg_catalog' if foreign else 'pg_catalog'
+        sql = f'''
+        SELECT c.relname, c.relkind FROM {cat}.pg_class as c
+        join {cat}.pg_namespace as n on c.relnamespace = n.oid
+        where nspname='{schema}';
+        '''
+        conn = conn or self.conn
+        cur = conn.cursor()
+        cur.execute(sql)
+        relkinds = cur.fetchall()
+        return dict(relkinds)
+
     def get_geometrytype(self, tn, geom):
         sql = """
         SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
@@ -274,8 +287,11 @@ FROM {self.temp}.{tn} t;
         geometrytype = cur.fetchone()[0]
         return geometrytype
 
-    def create_foreign_schema(self, foreign_schema=None, target_schema=None,
-                              tables: list = None, conn=None):
+    def create_foreign_schema(self,
+                              foreign_schema=None,
+                              target_schema=None,
+                              tables: list = None,
+                              conn=None):
         """
         links schema in database to schema on foreign server
         """
@@ -298,7 +314,7 @@ FROM {self.temp}.{tn} t;
         self.create_foreign_schema(
             foreign_schema='pg_catalog',
             target_schema='temp_pg_catalog',
-            tables=['pg_description', 'pg_class', 'pg_namespace']
+            tables=['pg_description', 'pg_class', 'pg_namespace', 'pg_views']
         )
 
     def get_target_boundary(self, boundary_name=None):
@@ -488,15 +504,19 @@ FROM {self.temp}.{tn} t;
         folder = os.path.join(self.folder, 'projekte', self.destination_db)
         self.make_folder(folder)
 
-    def copy_tables_to_target_db(self, schema: str = None, tables: list = None,
-                                 conn=None):
+    def copy_tables_to_target_db(self,
+                                 schema: str = None,
+                                 tables: list = None,
+                                 conn=None,
+                                 skip_views=True):
         schema = schema or self.schema
         conn = conn or self.conn
         temp_schema = f'class_temp'
         self.create_schema(schema, conn=conn)
-        self.create_foreign_schema(foreign_schema=schema,
-                                   target_schema=temp_schema, conn=conn)
         self.create_foreign_catalog()
+        self.create_foreign_schema(foreign_schema=schema,
+                                   target_schema=temp_schema,
+                                   conn=conn)
 
         cur = conn.cursor()
         if not tables:
@@ -509,9 +529,14 @@ FROM {self.temp}.{tn} t;
             rows = cur.fetchall()
             tables = [row[0] for row in rows]
 
+        relkinds = self.get_relkinds(schema=schema, foreign=True)
+
         sql = f'''CREATE SCHEMA IF NOT EXISTS {schema};'''
         self.run_query(sql, conn=conn)
         for table in tables:
+            if skip_views and relkinds[table] == 'v':
+                self.logger.info(f'Skip View "{table}"')
+                continue
             self.logger.info(f'Copying table "{table}" to {schema}.{table}')
             sql = f'''
             DROP TABLE IF EXISTS {schema}.{table};
@@ -529,6 +554,25 @@ FROM {self.temp}.{tn} t;
                 self.run_query(sql, conn=self.conn)
 
         self.cleanup(schema=temp_schema, conn=conn)
+
+    def copy_views_to_target_db(self,
+                                schema: str = None,
+                                views: list = None,
+                                conn=None):
+        """copy the views to the target database"""
+        cat = 'temp_pg_catalog'
+        sql = f'''SELECT viewname,  definition
+        FROM {cat}.pg_views
+        WHERE schemaname = '{schema}';'''
+        conn = conn or self.conn
+        cur = conn.cursor()
+        cur.execute(sql)
+        view_definitions = cur.fetchall()
+        for viewname, definition in view_definitions:
+            sql = f'''CREATE OR REPLACE VIEW {schema}."{viewname}" AS
+            {definition}'''
+            cur.execute(sql)
+
 
 
 if __name__ == '__main__':

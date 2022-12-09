@@ -17,6 +17,7 @@ from extractiontools.pendlerdaten import (ImportPendlerdaten,
                                           CreatePendlerSpinne,
                                           ExportPendlerdaten)
 from extractiontools.verschneidungstool import PrepareVerschneidungstool
+from extractiontools.extract_bast_trafficdata import ExtractBASt
 from osgeo import ogr
 
 import extractiontools.steps.create_db
@@ -275,3 +276,14 @@ def prepare_verschneidungstool(source_db: str, database: str, target_srid: int):
                                         destination_db=database,
                                         logger=orca.logger)
     prepare.extract()
+
+@meta(group='(9) TravelDemandModel', order=2)
+@orca.step()
+def extract_bast(source_db: str, database: str, target_srid: int):
+    """
+    Copy BASt-Network and Traffic counts
+    """
+    extract_bast = ExtractBASt(source_db=source_db,
+                               destination_db=database,
+                               logger=orca.logger)
+    extract_bast.extract()
