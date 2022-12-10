@@ -115,12 +115,12 @@ ADD PRIMARY KEY(id),
 ALTER COLUMN id SET DEFAULT nextval('{self.schema}.columns_available_id_seq'::text);
 ADD CONSTRAINT columns_available_fk FOREIGN KEY (table_type)
     REFERENCES {self.schema}.table_categories(name)
-    ON DELETE NO ACTION
+    ON DELETE CASCADE
     ON UPDATE CASCADE
     NOT DEFERRABLE,
 ADD CONSTRAINT columns_available_fk1 FOREIGN KEY (resulttable)
     REFERENCES {self.schema}.resulttables_available(schema_table)
-    ON DELETE SET NULL
+    ON DELETE CASCADE
     ON UPDATE CASCADE
     NOT DEFERRABLE
 ;
@@ -128,8 +128,8 @@ ALTER TABLE {self.schema}.column_definitions
 ADD PRIMARY KEY(table_category),
 ADD CONSTRAINT column_definitions_fk FOREIGN KEY (table_category)
     REFERENCES {self.schema}.table_categories(name)
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
     NOT DEFERRABLE
 ;
 CREATE UNIQUE INDEX columns_available_column_idx ON {self.schema}.columns_available

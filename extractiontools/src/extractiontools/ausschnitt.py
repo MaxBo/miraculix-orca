@@ -5,8 +5,10 @@ from argparse import ArgumentParser
 
 import sys
 import os
+import re
 import subprocess
 import time
+from typing import List
 from osgeo import ogr
 from psycopg2.sql import Identifier, SQL
 from psycopg2 import errors
@@ -464,13 +466,6 @@ FROM {self.temp}.{tn} t;
                 cursor2.execute(row.sql)
             conn.commit()
 
-        # sql = """
-# update pg_database set datallowconn = 'True' where datname = '{db}';
-        # """.format(db=self.destination_db)
-        # with Connection(login=self.login) as conn:
-            #self.run_query(sql, conn=conn)
-            # conn.commit()
-
     def cleanup(self, schema=None, conn=None):
         """
         remove the temp schema
@@ -568,11 +563,78 @@ FROM {self.temp}.{tn} t;
         cur = conn.cursor()
         cur.execute(sql)
         view_definitions = cur.fetchall()
+
+        # pattern to find casts to geometry in WGS84
+        # ::[public.]geometry(POINT|POLYGON, 4326)
+        pattern = '(\:\:(?:\w+\.)?geometry\(.*,\s*)4326(\s*\))'
+
         for viewname, definition in view_definitions:
+            # replace casts to geometry with the target srid
+            definition = re.sub(pattern,
+                                f'\g<1>{self.target_srid}\g<2>',
+                                definition,
+                                flags=re.M)
+
             sql = f'''CREATE OR REPLACE VIEW {schema}."{viewname}" AS
             {definition}'''
             cur.execute(sql)
 
+
+    def copy_layer_styles(self, schema: str, tables: List[str]):
+        """copy layer styles for tables in schema"""
+        temp_public = 'temp_public'
+        layer_styles = 'layer_styles'
+        self.create_foreign_schema(foreign_schema='public',
+                                   target_schema=temp_public,
+                                   tables=[layer_styles],)
+        # check if layer_styles exists in target_db
+        sql = f"SELECT to_regclass('{layer_styles}')::oid;"
+        cur = self.conn.cursor()
+        cur.execute(sql)
+        oid = cur.fetchone()[0]
+        # if it does not exist, create the table
+        if oid is None:
+            sql = f'''
+            CREATE TABLE {layer_styles} (LIKE {temp_public}.{layer_styles}
+            INCLUDING ALL);
+            ALTER TABLE {layer_styles} ALTER COLUMN id TYPE serial;
+            '''
+            cur.execute(sql)
+
+        # copy the styles
+        sql = f'''
+        INSERT INTO {layer_styles} (
+        f_table_catalog,
+        f_table_schema,
+        f_table_name,
+        f_geometry_column,
+        stylename,
+        styleqml,
+        stylesld,
+        useasdefault,
+        description,
+        ui,
+        update_time,
+        type
+        )
+        SELECT
+        '{self.destination_db}' AS f_table_catalog,
+        l.f_table_schema,
+        l.f_table_name,
+        l.f_geometry_column,
+        l.stylename,
+        l.styleqml,
+        l.stylesld,
+        l.useasdefault,
+        l.description,
+        l.ui,
+        l.update_time,
+        l.type
+        FROM {temp_public}.layer_styles l
+        WHERE l.f_table_schema = %s AND l.f_table_name = ANY(%s);
+        '''
+        cur.execute(sql, (schema, tables))
+        self.cleanup(schema=temp_public, conn=self.conn)
 
 
 if __name__ == '__main__':

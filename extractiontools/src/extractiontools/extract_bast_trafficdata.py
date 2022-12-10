@@ -10,7 +10,6 @@ class ExtractBASt(Extract):
     tables = {'bfstr_netz_nk': 'geom',
               'bfstr_netz_np': 'geom',
               'bfstr_netz_sk': 'geom',
-              #'svz_2021': None,
               }
 
     def final_stuff(self):
@@ -39,3 +38,14 @@ class ExtractBASt(Extract):
 
         self.logger.info(f'Creating views')
         self.copy_views_to_target_db(schema=self.schema)
+
+        self.logger.info(f'copy layer styles')
+        cat = 'temp_pg_catalog'
+        sql = f'''SELECT viewname
+        FROM {cat}.pg_views
+        WHERE schemaname = '{self.schema}';'''
+        cur.execute(sql)
+        views = [row[0] for row in cur.fetchall()]
+
+        tables = [table for table in self.tables] + views
+        self.copy_layer_styles(self.schema, tables)
