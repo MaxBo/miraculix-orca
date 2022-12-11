@@ -74,6 +74,7 @@ class ExtractLanduse(Extract):
             st_intersects(c.geom, tb.source_geom)
             """
             self.run_query(sql, conn=self.conn)
+        self.copy_layer_styles(schema='landuse', tables=self.corine)
 
     def get_corine_raster_name(self, corine):
         corine_raster = '{}_raster'.format(corine)
@@ -241,7 +242,13 @@ class ExtractLanduse(Extract):
         """
         CREATE INDEX
         """
-        self.create_index_oceans()
+        tables = (self.corine +
+                  self.gmes +
+                  [f'{g}_boundary' for g in self.gmes] +
+                  [f'{g}_urban_core' for g in self.gmes] +
+                  ['oceans'])
+        self.copy_constraints_and_indices(self.schema, tables)
+        #self.create_index_oceans()
         self.create_index_corine()
         self.create_index_gmes()
         self.add_raster_index_and_overviews(self.aster_overviews,
@@ -254,13 +261,6 @@ class ExtractLanduse(Extract):
 
         self.logger.info(f'Creating indexes for corine landcover data')
         sql = """
-        ALTER TABLE {schema}.{corine} ADD PRIMARY KEY (ogc_fid);
-        CREATE INDEX {corine}_geom_idx
-          ON {schema}.{corine}
-          USING gist(geom);
-        CREATE INDEX idx_{corine}_code
-          ON {schema}.{corine}
-          USING btree(code);
         ALTER TABLE {schema}.{corine} CLUSTER ON {corine}_geom_idx;
         """
         for corine in self.corine:
@@ -289,13 +289,6 @@ class ExtractLanduse(Extract):
         """
 
         sql_ua = """
-        ALTER TABLE "{schema}"."{gmes}" ADD PRIMARY KEY (ogc_fid);
-        CREATE INDEX {gmes}_geom_idx
-          ON "{schema}"."{gmes}"
-          USING gist(geom);
-        CREATE INDEX idx_{gmes}_code
-          ON "{schema}"."{gmes}"
-          USING btree({code});
         ALTER TABLE {schema}.{gmes} CLUSTER ON {gmes}_geom_idx;
         """
         for gmes in self.gmes:
@@ -305,21 +298,21 @@ class ExtractLanduse(Extract):
                 schema=self.schema, gmes=gmes, code=code),
                 conn=self.conn)
 
-            self.run_query(sql_boundary.format(
-                schema=self.schema, gmes=gmes),
-                conn=self.conn)
-            sql = f"""
-            SELECT EXISTS (SELECT *
-            FROM INFORMATION_SCHEMA.TABLES
-            WHERE TABLE_SCHEMA = '{self.schema}'
-            AND TABLE_NAME = '{gmes}_urban_core')
-            """
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            urban_core_exists = cur.fetchone()[0]
-            if urban_core_exists:
-                self.run_query(sql_urban_core.format(
-                    schema=self.schema, gmes=gmes), conn=self.conn)
+            #self.run_query(sql_boundary.format(
+                #schema=self.schema, gmes=gmes),
+                #conn=self.conn)
+            #sql = f"""
+            #SELECT EXISTS (SELECT *
+            #FROM INFORMATION_SCHEMA.TABLES
+            #WHERE TABLE_SCHEMA = '{self.schema}'
+            #AND TABLE_NAME = '{gmes}_urban_core')
+            #"""
+            #cur = self.conn.cursor()
+            #cur.execute(sql)
+            #urban_core_exists = cur.fetchone()[0]
+            #if urban_core_exists:
+                #self.run_query(sql_urban_core.format(
+                    #schema=self.schema, gmes=gmes), conn=self.conn)
 
             self.tables2cluster.append(f'"{self.schema}"."{gmes}"')
 

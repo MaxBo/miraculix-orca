@@ -312,12 +312,25 @@ FROM {self.temp}.{tn} t;
         sql += f'FROM SERVER {self.foreign_server} INTO {target_schema};'
         self.run_query(sql, conn=conn)
 
+
     def create_foreign_catalog(self):
+        target_schema = 'temp_pg_catalog'
         self.create_foreign_schema(
             foreign_schema='pg_catalog',
-            target_schema='temp_pg_catalog',
-            tables=['pg_description', 'pg_class', 'pg_namespace', 'pg_views']
+            target_schema=target_schema,
+            tables=['pg_description',
+                    'pg_class',
+                    'pg_namespace',
+                    'pg_views',
+                    'pg_sequence',
+                    'pg_depend',
+                    'pg_attrdef',
+                    'pg_type']
         )
+        sql = f'''IMPORT FOREIGN SCHEMA public
+        LIMIT TO (constraint_defs, index_defs, column_defaults, sequence_defs)
+        FROM SERVER {self.foreign_server} INTO {target_schema};'''
+        self.run_query(sql, conn=self.conn)
 
     def get_target_boundary(self, boundary_name=None):
         """
@@ -443,13 +456,6 @@ FROM {self.temp}.{tn} t;
 
     def truncate_db(self):
         """Truncate the database"""
-        # sql = """
-# SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname = '{db}';
-        # """.format(db=self.destination_db)
-        # with Connection(login=self.login) as conn:
-        #self.run_query(sql, conn=conn)
-        # conn.commit()
-
         sql = """
         SELECT 'drop schema if exists "' || schema_name || '" cascade;' AS sql
         FROM (SELECT catalog_name, schema_name
@@ -473,6 +479,7 @@ FROM {self.temp}.{tn} t;
         self.logger.info(f'Cleaning up...')
         sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
             temp=schema or self.temp)
+        #self.logger.info(sql)
         try:
             self.run_query(sql, conn=conn or self.conn)
         except errors.UndefinedTable:
@@ -540,6 +547,8 @@ FROM {self.temp}.{tn} t;
             INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};
             '''
             self.run_query(sql, conn=conn)
+            self.copy_constraints_and_indices('public', [layer_styles])
+
             description = self.get_description(
                 table, self.foreign_schema or schema, foreign=True)
             if description:
@@ -579,6 +588,115 @@ FROM {self.temp}.{tn} t;
             {definition}'''
             cur.execute(sql)
 
+    def copy_constraints_and_indices(self, schema: str, tables: List[str]):
+        """Copy constraints and indices"""
+        cat = 'temp_pg_catalog'
+
+        # add constraints
+        sql_constraints = f'''
+SELECT
+c.tblname,
+c.schema,
+c.conname,
+c.idxname,
+c.condef
+FROM
+{cat}.constraint_defs c
+WHERE c.schema = %s
+AND c.tblname = ANY(%s);
+        '''
+        cur = self.conn.cursor()
+        cur.execute(sql_constraints, (schema, tables))
+        rows = cur.fetchall()
+        for row in rows:
+            sql = f'ALTER TABLE "{schema}"."{row.tblname}" ADD CONSTRAINT "{row.conname}" {row.condef};'
+            cur.execute(sql)
+
+        # add indices not defined by constraints
+        sql_indices = f'''
+        SELECT
+i.tblname,
+i.nspname,
+i.idxname,
+i.idxdef
+FROM
+{cat}.index_defs i
+WHERE i.nspname = %s
+AND i.tblname = ANY(%s);
+        '''
+        cur.execute(sql_indices, (schema, tables))
+        rows = cur.fetchall()
+        for row in rows:
+            sql = f'{row.idxdef};'
+            cur.execute(sql)
+
+        #copy the sequences of serial fields
+        sql_sequence = f'''
+SELECT DISTINCT
+    s.schema,
+    s.sequence_name,
+    s.tablename,
+    s.colname,
+    s.typname,
+    s.seqstart,
+    s.seqincrement,
+    s.seqmin,
+    s.seqmax,
+    s.seqcycle,
+    s.seqcache
+    FROM
+    {cat}.sequence_defs s
+    WHERE s.schema = %s
+    AND s.tablename = ANY(%s);'''
+
+        cur.execute(sql_sequence, (schema, tables))
+        rows = cur.fetchall()
+        for row in rows:
+            minvalue = f'NO MINVALUE' if row.seqmin is None else f'MINVALUE {row.seqmin}'
+            maxvalue = f'NO MAXVALUE' if row.seqmax is None else f'MAXVALUE {row.seqmax}'
+            cycle = ' CYCLE\n' if row.seqcycle else ''
+            sql_create_sequence = f'''
+            CREATE SEQUENCE IF NOT EXISTS "{schema}"."{row.sequence_name}"
+            AS {row.typname}
+            INCREMENT {row.seqincrement}
+            {minvalue}
+            {maxvalue}
+            START WITH {row.seqstart}
+            CACHE {row.seqcache}{cycle}
+            OWNED BY "{schema}"."{row.tablename}"."{row.colname}";
+            '''
+            cur.execute(sql_create_sequence)
+
+        # alter default values
+        sql_defaults = f'''
+        SELECT
+c.tblname,
+c.schema,
+c.colname,
+c.default_value,
+c.attgenerated
+FROM
+{cat}.column_defaults c
+WHERE c.schema = %s
+AND c.tblname = ANY(%s);
+        '''
+        cur.execute(sql_defaults, (schema, tables))
+        rows = cur.fetchall()
+        for row in rows:
+            sql = f'''ALTER TABLE "{schema}"."{row.tblname}"
+            ALTER COLUMN "{row.colname}" SET DEFAULT {row.default_value};'''
+            cur.execute(sql)
+
+        # alter default value for sequence
+        cur.execute(sql_sequence, (schema, tables))
+        rows = cur.fetchall()
+        for row in rows:
+            sql_alter_default_sequence = f'''
+            ALTER TABLE "{schema}"."{row.tablename}"
+            ALTER COLUMN "{row.colname}"
+            SET DEFAULT nextval('"{schema}"."{row.sequence_name}"'::regclass);
+            '''
+            cur.execute(sql_alter_default_sequence)
 
     def copy_layer_styles(self, schema: str, tables: List[str]):
         """copy layer styles for tables in schema"""
@@ -588,22 +706,24 @@ FROM {self.temp}.{tn} t;
                                    target_schema=temp_public,
                                    tables=[layer_styles],)
         # check if layer_styles exists in target_db
-        sql = f"SELECT to_regclass('{layer_styles}')::oid;"
+        sql = f"SELECT to_regclass('public.{layer_styles}')::oid;"
         cur = self.conn.cursor()
         cur.execute(sql)
         oid = cur.fetchone()[0]
         # if it does not exist, create the table
         if oid is None:
+            # clone table including indexes and defaults (referencing the sequence)
             sql = f'''
-            CREATE TABLE {layer_styles} (LIKE {temp_public}.{layer_styles}
-            INCLUDING ALL);
-            ALTER TABLE {layer_styles} ALTER COLUMN id TYPE serial;
+            CREATE TABLE public.{layer_styles} (LIKE {temp_public}.{layer_styles}
+            INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING DEFAULTS);
             '''
             cur.execute(sql)
+            # copy sequence and set serial field
+            self.copy_constraints_and_indices('public', [layer_styles])
 
         # copy the styles
         sql = f'''
-        INSERT INTO {layer_styles} (
+        INSERT INTO public.{layer_styles} (
         f_table_catalog,
         f_table_schema,
         f_table_name,
@@ -631,64 +751,19 @@ FROM {self.temp}.{tn} t;
         l.update_time,
         l.type
         FROM {temp_public}.layer_styles l
-        WHERE l.f_table_schema = %s AND l.f_table_name = ANY(%s);
+        WHERE l.f_table_schema = %s AND l.f_table_name = ANY(%s)
+        ON CONFLICT (f_table_catalog, f_table_schema, f_table_name, f_geometry_column, stylename)
+        DO
+          UPDATE SET
+            styleqml = EXCLUDED.styleqml,
+            stylesld = EXCLUDED.stylesld,
+            useasdefault = EXCLUDED.useasdefault,
+            description = EXCLUDED.description,
+            ui = EXCLUDED.ui,
+            update_time = EXCLUDED.update_time,
+            type = EXCLUDED.type
+        ;
         '''
+        #self.logger.info((sql, schema, tables))
         cur.execute(sql, (schema, tables))
         self.cleanup(schema=temp_public, conn=self.conn)
-
-
-if __name__ == '__main__':
-
-    parser = ArgumentParser(description="Extract Data for Model")
-
-    parser.add_argument("-n", '--name', action="store",
-                        help="Name of destination database",
-                        dest="destination_db", default='extract')
-
-    parser.add_argument("-s", '--srid', action="store",
-                        help="srid of the target database", type=int,
-                        dest="srid", default='31467')
-
-    parser.add_argument("-t", '--top', action="store",
-                        help="top", type=float,
-                        dest="top", default=54.65)
-    parser.add_argument("-b", '--bottom,', action="store",
-                        help="bottom", type=float,
-                        dest="bottom", default=54.6)
-    parser.add_argument("-r", '--right', action="store",
-                        help="right", type=float,
-                        dest="right", default=10.0)
-    parser.add_argument("-l", '--left', action="store",
-                        help="left", type=float,
-                        dest="left", default=9.95)
-
-    parser.add_argument('--host', action="store",
-                        help="host",
-                        dest="host", default='localhost')
-    parser.add_argument("-p", '--port', action="store",
-                        help="port", type=int,
-                        dest="port", default=5432)
-
-    parser.add_argument('--recreate', action="store_true",
-                        help="recreate",
-                        dest="recreate", default=False)
-
-    parser.add_argument("-U", '--user', action="store",
-                        help="database user",
-                        dest="user", default='osm')
-    parser.add_argument('--source-db', action="store",
-                        help="source database",
-                        dest="source_db", default='europe')
-
-    options = parser.parse_args()
-
-    bbox = BBox(top=options.top, bottom=options.bottom,
-                left=options.left, right=options.right)
-    extract = ExtractMeta(source_db=options.source_db,
-                          destination_db=options.destination_db,
-                          target_srid=options.srid)
-    extract.set_login(host=options.host,
-                      port=options.port, user=options.user)
-    extract.add_target_boundary(bbox)
-    extract.extract()
-

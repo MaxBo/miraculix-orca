@@ -15,29 +15,30 @@ class ExtractVerwaltungsgrenzen(Extract):
     role = 'group_osm'
 
     def final_stuff(self):
-        # foreign tables seem not to pass the pkeys
-        # so the pkeys are retrieved from the foreign server directly
-        self.logger.info(f'Creating indexes')
-        with Connection(login=self.foreign_login) as conn:
-            for tn, geom in self.tables.items():
-                self.add_geom_index(tn, geom)
-                pkey = self.get_primary_key(self.schema, tn, conn=conn)
-                if pkey:
-                    self.add_pkey(tn, pkey)
-                else:
-                    self.add_pkey(tn, 'ags')
+        self.copy_constraints_and_indices(self.schema, [t for t in self.tables])
+        ## foreign tables seem not to pass the pkeys
+        ## so the pkeys are retrieved from the foreign server directly
+        #self.logger.info(f'Creating indexes')
+        #with Connection(login=self.foreign_login) as conn:
+            #for tn, geom in self.tables.items():
+                #self.add_geom_index(tn, geom)
+                #pkey = self.get_primary_key(self.schema, tn, conn=conn)
+                #if pkey:
+                    #self.add_pkey(tn, pkey)
+                #else:
+                    #self.add_pkey(tn, 'ags')
 
-    def add_pkey(self, tn, pkey):
-        sql = """
-        ALTER TABLE {sn}.{tn} ADD PRIMARY KEY ({pkey});
-        """.format(sn=self.schema, tn=tn, pkey=pkey)
-        self.run_query(sql, conn=self.conn)
+    #def add_pkey(self, tn, pkey):
+        #sql = """
+        #ALTER TABLE {sn}.{tn} ADD PRIMARY KEY ({pkey});
+        #""".format(sn=self.schema, tn=tn, pkey=pkey)
+        #self.run_query(sql, conn=self.conn)
 
-    def add_geom_index(self, tn, geom):
-        sql = """
-        CREATE INDEX {tn}_geom_idx ON {sn}.{tn} USING gist({geom});
-        """.format(sn=self.schema, tn=tn, geom=geom)
-        self.run_query(sql, conn=self.conn)
+    #def add_geom_index(self, tn, geom):
+        #sql = """
+        #CREATE INDEX {tn}_geom_idx ON {sn}.{tn} USING gist({geom});
+        #""".format(sn=self.schema, tn=tn, geom=geom)
+        #self.run_query(sql, conn=self.conn)
 
 
 class ExtractFirmsNeighbourhoods(ExtractVerwaltungsgrenzen):
