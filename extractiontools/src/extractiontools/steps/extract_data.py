@@ -213,7 +213,8 @@ def import_pendlerdaten(source_db: str,
                         subfolder_pendlerdaten: str,
                         pendlerdaten_years: List[str]):
     """
-    import commutertrips to base database
+    Import neue Pendlerdaten aus Excel-Dateien in Europa-Datenbank
+    Nur zu starten, wenn neue Pendlerdaten-Excel-Dateien auf den Server hochgeladen wurden!!
     """
     import_pendler = ImportPendlerdaten(db=source_db,
                                         subfolder=subfolder_pendlerdaten,
@@ -244,7 +245,7 @@ def create_pendlerspinne(database: str,
                          pendlerspinne_gebiete: str,
                          target_srid: int):
     """
-    Erzeuge Pendlerspinne
+    Erzeugt Pendler-Spinne im GIS
     """
     create_pendlerspinne = CreatePendlerSpinne(
         db=database,
@@ -258,7 +259,7 @@ def create_pendlerspinne(database: str,
 @orca.step()
 def export_pendlerdaten(database: str):
     """
-    Export Pendlerdaten
+    Export Pendlerdaten in Excel-Dateien auf dem Server zum Download
     """
     export = ExportPendlerdaten(
         db=database,

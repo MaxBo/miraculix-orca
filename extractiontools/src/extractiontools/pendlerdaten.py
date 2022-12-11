@@ -195,7 +195,8 @@ WHERE NOT e.ags_wo = e.ags_ao;
 
 class ImportPendlerdaten(DBApp):
     """
-    Import Commuter trips from excel-files to database
+    Import neue Pendlerdaten aus Excel-Dateien in Europa-Datenbank
+    Nur zu starten, wenn neue Pendlerdaten-Excel-Dateien auf den Server hochgeladen wurden!!
     """
     schema = 'pendlerdaten'
     role = 'group_osm'
@@ -359,7 +360,7 @@ class ImportPendlerdaten(DBApp):
 
 class CreatePendlerSpinne(DBApp):
     """
-    Import Commuter trips from excel-files to database
+    Erzeugt Pendler-Spinne im GIS
     """
     schema = 'pendlerdaten'
     role = 'group_osm'
