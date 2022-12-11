@@ -603,7 +603,8 @@ c.condef
 FROM
 {cat}.constraint_defs c
 WHERE c.schema = %s
-AND c.tblname = ANY(%s);
+AND c.tblname = ANY(%s)
+AND c.contype <> 'f'::"char";
         '''
         cur = self.conn.cursor()
         cur.execute(sql_constraints, (schema, tables))
@@ -628,6 +629,28 @@ AND i.tblname = ANY(%s);
         rows = cur.fetchall()
         for row in rows:
             sql = f'{row.idxdef};'
+            cur.execute(sql)
+
+
+        # add foreign keys
+        sql_fk = f'''
+SELECT
+c.tblname,
+c.schema,
+c.conname,
+c.idxname,
+c.condef
+FROM
+{cat}.constraint_defs c
+WHERE c.schema = %s
+AND c.tblname = ANY(%s)
+AND c.contype = 'f'::"char";
+        '''
+        cur = self.conn.cursor()
+        cur.execute(sql_fk, (schema, tables))
+        rows = cur.fetchall()
+        for row in rows:
+            sql = f'ALTER TABLE "{schema}"."{row.tblname}" ADD CONSTRAINT "{row.conname}" {row.condef};'
             cur.execute(sql)
 
         #copy the sequences of serial fields
