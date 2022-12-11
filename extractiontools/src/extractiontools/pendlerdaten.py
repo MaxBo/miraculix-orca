@@ -57,12 +57,6 @@ class ExtractRegionalstatistik(Extract):
         """
         self.run_query(sql, vars=(jahre, ))
 
-        sql = f"""
-        ALTER TABLE {self.schema}.svb_jahr
-        ADD PRIMARY KEY(ags, jahr)
-        """
-        self.run_query(sql)
-
     def extract_kfz(self):
         """
         Extract Kfz
@@ -82,12 +76,6 @@ class ExtractRegionalstatistik(Extract):
         AND s.jahr=ANY(%s)
         """
         self.run_query(sql, vars=(jahre, ))
-
-        sql = f"""
-        ALTER TABLE {self.schema}.kfz
-        ADD PRIMARY KEY(ags, jahr)
-        """
-        self.run_query(sql)
 
     def extract_arbeitslose(self):
         """
@@ -109,11 +97,9 @@ class ExtractRegionalstatistik(Extract):
         """
         self.run_query(sql, vars=(jahre, ))
 
-        sql = f"""
-        ALTER TABLE {self.schema}.arbeitslose
-        ADD PRIMARY KEY(ags8, jahr)
-        """
-        self.run_query(sql)
+
+    def final_stuff(self):
+        self.copy_constraints_and_indices(self.schema, ['svb_jahr', 'kfz', 'arbeitslose'])
 
 
 class ExtractPendler(Extract):
