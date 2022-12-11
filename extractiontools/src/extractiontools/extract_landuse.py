@@ -248,7 +248,6 @@ class ExtractLanduse(Extract):
                   [f'{g}_urban_core' for g in self.gmes] +
                   ['oceans'])
         self.copy_constraints_and_indices(self.schema, tables)
-        #self.create_index_oceans()
         self.create_index_corine()
         self.create_index_gmes()
         self.add_raster_index_and_overviews(self.aster_overviews,
@@ -259,7 +258,7 @@ class ExtractLanduse(Extract):
     def create_index_corine(self):
         """ Corine landcover Index"""
 
-        self.logger.info(f'Creating indexes for corine landcover data')
+        self.logger.info(f'Cluster corine landcover data')
         sql = """
         ALTER TABLE {schema}.{corine} CLUSTER ON {corine}_geom_idx;
         """
@@ -273,21 +272,7 @@ class ExtractLanduse(Extract):
 
     def create_index_gmes(self):
         """ Corine GMES Index"""
-        self.logger.info(f'Creating indexes for GMES landcover data')
-        sql_boundary = """
-        ALTER TABLE "{schema}"."{gmes}_boundary" ADD PRIMARY KEY (ogc_fid);
-        CREATE INDEX {gmes}_boundary_geom_idx
-        ON "{schema}"."{gmes}_boundary"
-        USING gist(geom);
-        """
-
-        sql_urban_core = """
-        ALTER TABLE "{schema}"."{gmes}_urban_core" ADD PRIMARY KEY (ogc_fid);
-        CREATE INDEX {gmes}_urban_core_geom_idx
-        ON "{schema}"."{gmes}_urban_core"
-        USING gist(geom);
-        """
-
+        self.logger.info(f'cluster GMES landcover data')
         sql_ua = """
         ALTER TABLE {schema}.{gmes} CLUSTER ON {gmes}_geom_idx;
         """
@@ -298,35 +283,7 @@ class ExtractLanduse(Extract):
                 schema=self.schema, gmes=gmes, code=code),
                 conn=self.conn)
 
-            #self.run_query(sql_boundary.format(
-                #schema=self.schema, gmes=gmes),
-                #conn=self.conn)
-            #sql = f"""
-            #SELECT EXISTS (SELECT *
-            #FROM INFORMATION_SCHEMA.TABLES
-            #WHERE TABLE_SCHEMA = '{self.schema}'
-            #AND TABLE_NAME = '{gmes}_urban_core')
-            #"""
-            #cur = self.conn.cursor()
-            #cur.execute(sql)
-            #urban_core_exists = cur.fetchone()[0]
-            #if urban_core_exists:
-                #self.run_query(sql_urban_core.format(
-                    #schema=self.schema, gmes=gmes), conn=self.conn)
-
             self.tables2cluster.append(f'"{self.schema}"."{gmes}"')
-
-    def create_index_oceans(self):
-        """Oceans Index"""
-        self.logger.info(f'Creating indexes for oceans')
-        sql = """
-        -- oceans
-        ALTER TABLE {schema}.oceans ADD PRIMARY KEY (gid);
-        CREATE INDEX oceans_geom_idx
-        ON {schema}.oceans
-        USING gist(geom);
-        """
-        self.run_query(sql.format(schema=self.schema), conn=self.conn)
 
     def create_corine_raster_index(self):
         """
