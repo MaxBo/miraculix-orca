@@ -612,6 +612,7 @@ AND c.contype <> 'f'::"char";
         for row in rows:
             sql = f'ALTER TABLE "{schema}"."{row.tblname}" ADD CONSTRAINT "{row.conname}" {row.condef};'
             cur.execute(sql)
+            self.logger.info(sql)
 
         # add indices not defined by constraints
         sql_indices = f'''
@@ -630,7 +631,7 @@ AND i.tblname = ANY(%s);
         for row in rows:
             sql = f'{row.idxdef};'
             cur.execute(sql)
-
+            self.logger.info(sql)
 
         # add foreign keys
         sql_fk = f'''
@@ -652,7 +653,8 @@ AND c.contype = 'f'::"char";
         for row in rows:
             sql = f'ALTER TABLE "{schema}"."{row.tblname}" ADD CONSTRAINT "{row.conname}" {row.condef};'
             cur.execute(sql)
-
+            self.logger.info(sql)
+            
         #copy the sequences of serial fields
         sql_sequence = f'''
 SELECT DISTINCT
