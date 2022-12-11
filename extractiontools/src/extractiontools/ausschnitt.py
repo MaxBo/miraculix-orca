@@ -547,7 +547,6 @@ FROM {self.temp}.{tn} t;
             INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};
             '''
             self.run_query(sql, conn=conn)
-            self.copy_constraints_and_indices('public', [layer_styles])
 
             description = self.get_description(
                 table, self.foreign_schema or schema, foreign=True)
@@ -557,6 +556,8 @@ FROM {self.temp}.{tn} t;
                 '''
                 self.run_query(sql, conn=self.conn)
 
+        self.copy_constraints_and_indices(schema, tables)
+        self.copy_layer_styles(schema, tables)
         self.cleanup(schema=temp_schema, conn=conn)
 
     def copy_views_to_target_db(self,
