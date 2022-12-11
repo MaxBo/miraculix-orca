@@ -393,7 +393,7 @@ class ExtractOSM(Extract):
         Copy the osm classifications and osm-view in wgs84
         to destination database
         """
-        self.copy_tables_to_target_db(schema='classifications')
+        self.copy_tables_to_target_db(schema='classifications', skip_views=False)
 
 
 if __name__ == '__main__':
