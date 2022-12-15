@@ -1,5 +1,6 @@
 import time
 import os
+import logging
 from shutil import move
 from argparse import ArgumentParser
 from subprocess import Popen, call, PIPE
@@ -22,6 +23,7 @@ class OTPServer:
         self.routers = routers
         self.ports = ports
         self.start_analyst = start_analyst
+        self.logger = logger or logging.getLogger(self.__module__)
 
 
     @property
@@ -63,7 +65,7 @@ class OTPServer:
         print(process_args)
         p2 = Popen(process_args)
 
-        print("Server started")
+        self.logger.info("Server started")
 
     def stop(self):
         for port in self.ports.values():
@@ -88,7 +90,10 @@ class OTPServer:
                       target_folder: str,
                      ):
         """create OTP router"""
-        call([JAVA, '-Xmx12G', '-jar', OTP_JAR, '--build', build_folder])
+        callargs = [JAVA, '-Xmx12G', '-jar', OTP_JAR, '--build', build_folder]
+        cmd = ' '.join(callargs)
+        self.logger.info(cmd)
+        call(callargs)
 
         graph_file = os.path.join(build_folder, "Graph.obj")
         if not os.path.exists(target_folder):
@@ -98,7 +103,7 @@ class OTPServer:
             os.remove(dst_file)
             print("overwriting old file...")
         move(graph_file, dst_file)
-        print(f"Graph moved to {dst_file}")
+        self.logger.info(f"Graph moved to {dst_file}")
 
 
 def main():
