@@ -15,7 +15,8 @@ class OTPServer:
                  base_path: str='',
                  graph_subfolder: str='otp_graphs',
                  routers: Dict[str, str]=None,
-                 start_analyst: bool=True
+                 start_analyst: bool=True,
+                 logger: logging.Logger=None,
                  ):
         """"""
         self.base_path = base_path.replace('~', os.environ['HOME'])
@@ -23,7 +24,7 @@ class OTPServer:
         self.routers = routers
         self.ports = ports
         self.start_analyst = start_analyst
-        self.logger = logging.getLogger(self.__module__)
+        self.logger = logger or logging.getLogger(self.__module__)
 
 
     @property

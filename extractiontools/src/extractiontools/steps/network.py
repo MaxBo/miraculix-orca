@@ -338,7 +338,8 @@ def start_otp_router(otp_ports: Dict[str, int],
                            base_path=base_path,
                            graph_subfolder=otp_graph_subfolder,
                            routers=otp_routers,
-                           start_analyst=start_otp_analyst)
+                           start_analyst=start_otp_analyst,
+                           logger=orca.logger)
     otp_server.start()
 
 
@@ -346,7 +347,8 @@ def start_otp_router(otp_ports: Dict[str, int],
 @orca.step()
 def stop_otp_router(otp_ports: Dict[str, int]):
     """Stop the running otp routers on the ports giben in `otp_ports`"""
-    otp_server = OTPServer(ports=otp_ports)
+    otp_server = OTPServer(ports=otp_ports,
+                           logger=orca.logger)
     otp_server.stop()
 
 
@@ -360,7 +362,8 @@ def create_router(otp_routers: Dict[str, str],
     otp_server = OTPServer(ports=None,
                            base_path=base_path,
                            graph_subfolder='otp_graphs',
-                           routers=otp_routers)
+                           routers=otp_routers,
+                           logger=orca.logger)
     for router_name, subfolder in otp_routers.items():
         build_folder = otp_server.get_otp_build_folder(database, subfolder)
         target_folder = os.path.join(otp_server.graph_folder, router_name)
