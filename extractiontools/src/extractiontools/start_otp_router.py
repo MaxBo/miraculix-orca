@@ -23,7 +23,7 @@ class OTPServer:
         self.routers = routers
         self.ports = ports
         self.start_analyst = start_analyst
-        self.logger = logger or logging.getLogger(self.__module__)
+        self.logger = logging.getLogger(self.__module__)
 
 
     @property
