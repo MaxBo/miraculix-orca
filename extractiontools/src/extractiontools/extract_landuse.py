@@ -64,14 +64,20 @@ class ExtractLanduse(Extract):
                              f'{self.schema}.{corine}')
             sql = f"""
             SELECT
-              c.ogc_fid, c.code, c.id, c.remark,
-              st_transform(c.geom, {self.target_srid})::geometry('MULTIPOLYGON',
+            row_number() OVER() AS ogc_fid,
+            a.code,
+            a.id,
+            a.remark,
+            st_multi(st_transform(a.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
               {self.target_srid}) AS geom
             INTO {self.schema}.{corine}
+            FROM (
+            SELECT
+               c.code, c.id, c.remark, st_subdivide(c.geom)
             FROM {self.temp}.{corine} c,
             (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
             WHERE
-            st_intersects(c.geom, tb.source_geom)
+            st_intersects(c.geom, tb.source_geom)) AS a(code, id, remark, geom)
             """
             self.run_query(sql, conn=self.conn)
         self.copy_layer_styles(schema='landuse', tables=self.corine)
