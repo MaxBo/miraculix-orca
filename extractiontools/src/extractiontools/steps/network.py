@@ -388,7 +388,7 @@ def network_layers() -> Dict[str, str]:
 def network_fr_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
     layers = {'links': 'network_fr',
-              'unaccessible_links': 'network_car',
+              'unaccessible_links': 'network_fr',
               }
     return layers
 
