@@ -48,6 +48,7 @@ class ScrapeStops(Extract):
         ALTER TABLE "{self.schema}".haltestellen ADD PRIMARY KEY ("H_ID");
         CREATE INDEX idx_haltestellen_geom
         ON "{self.schema}".haltestellen USING gist(geom);
+        ALTER TABLE "{self.schema}".route_types DROP CONSTRAINT IF EXISTS route_types_pkey;
         ALTER TABLE "{self.schema}".route_types ADD PRIMARY KEY (typ);
         """
         self.run_query(sql, self.conn)
