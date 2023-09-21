@@ -100,8 +100,7 @@ def dummy_polygon():
 @orca.injectable()
 def project_area() -> ogr.Geometry:
     """The default area of the project"""
-    geom = dummy_polygon()
-    return geom
+    return None
 
 
 @meta(group='(1) Project', order=2)
@@ -353,9 +352,9 @@ def places_search_radius() -> int:
 @meta(group='(3) Network', order=1)
 @orca.injectable()
 def detailed_network_area() -> ogr.Geometry:
-    """The area in which the network will be detailed"""
-    geom = dummy_polygon()
-    return geom
+    """The area in which the network will be detailed.
+    Leave empty to default it to the project area in the calculations."""
+    return
 
 
 @meta(group='(3) Network', order=3, refresh='always')
@@ -366,21 +365,17 @@ def detailed_area(detailed_network_area: ogr.Geometry,
     The area in which the network will be detailed,
     defaults to the project area, if no detailed_network_area is given
     """
-    dummy_geom = dummy_polygon()
-    # compare the geometry to the default dummy_area
-    if detailed_network_area.SymmetricDifference(dummy_geom).Area():
-        #  if its different, the area of the symmetric difference is > 0
+    if detailed_network_area:
         return detailed_network_area
-    #  otherwise, use the project_area instead
     return project_area
 
 
 @meta(group='(3) Network', order=2)
 @orca.injectable()
 def larger_network_area() -> ogr.Geometry:
-    """The area where the network will only cover main roads"""
-    geom = dummy_polygon()
-    return geom
+    """The area where the network will only cover main roads.
+    Leave empty to default it to the project area in the calculations."""
+    return
 
 
 @meta(group='(3) Network', order=4, refresh='always')
@@ -391,10 +386,6 @@ def larger_area(larger_network_area: ogr.Geometry,
     The area in which the network will only cover main roads,
     defaults to the project area, if no larger_network_area is given
     """
-    dummy_geom = dummy_polygon()
-    # compare the geometry to the default dummy_area
-    if larger_network_area.SymmetricDifference(dummy_geom).Area():
-        #  if its different, the area of the symmetric difference is > 0
+    if larger_network_area:
         return larger_network_area
-    #  otherwise, use the project_area instead
     return project_area

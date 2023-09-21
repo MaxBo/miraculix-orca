@@ -9,7 +9,7 @@ __parent_modules__ = [
 ]
 
 
-@meta(group='(1) Project', order=1)
+@meta(group='(1) Project', order=1, title='Datenbank erstellen')
 @orca.step()
 def create_db(target_srid: str, project_area: ogr.Geometry, database: str):
     """
