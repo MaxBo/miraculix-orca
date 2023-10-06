@@ -35,7 +35,7 @@ class ExtractOSM(Extract):
 
     def get_timestamp(self):
         sql = f'''
-        SELECT max(latest_timestamp) FROM {self.temp}.replication_changes;
+        SELECT max(latest_timestamp) FROM {self.temp_schema}.replication_changes;
         '''
         cursor = self.conn.cursor()
         cursor.execute(sql)
@@ -62,7 +62,7 @@ class ExtractOSM(Extract):
         sql = """
         CREATE TABLE "{schema}".relation_members AS
         (SELECT * FROM {temp}.relation_members) WITH NO DATA;
-        """.format(temp=self.temp, schema=self.schema)
+        """.format(temp=self.temp_schema, schema=self.schema)
         self.run_query(sql, conn=self.conn)
         self.conn.commit()
 
@@ -103,14 +103,14 @@ class ExtractOSM(Extract):
             sql = f'''
             INSERT INTO {self.schema}.relations
             SELECT id, version, user_id, tstamp, changeset_id, tags
-            FROM {self.temp}.relations WHERE id = ANY(ARRAY[{arr}])
+            FROM {self.temp_schema}.relations WHERE id = ANY(ARRAY[{arr}])
             '''
             self.logger.debug(sql)
             cur.execute(sql)
 
             sql = f'''
             SELECT DISTINCT rm.relation_id AS id
-            FROM {self.temp}.relation_members rm
+            FROM {self.temp_schema}.relation_members rm
             WHERE rm.member_id = ANY(ARRAY[{arr}])
             AND rm.member_type = 'R';
             '''
@@ -135,7 +135,7 @@ class ExtractOSM(Extract):
             -- INSERT Relation members
             INSERT INTO {self.schema}.relation_members
             SELECT rm.*
-            FROM {self.temp}.relation_members rm
+            FROM {self.temp_schema}.relation_members rm
             WHERE rm.relation_id = ANY(ARRAY[{arr}]);
             """
             self.run_query(sql, conn=self.conn)
@@ -162,7 +162,7 @@ class ExtractOSM(Extract):
         sql = '''
         SELECT DISTINCT wn.node_id FROM "{schema}".way_nodes wn
         WHERE NOT EXISTS (SELECT 1 FROM "{schema}".nodes tn WHERE wn.node_id = tn.id);
-        '''.format(temp=self.temp, schema=self.schema)
+        '''.format(temp=self.temp_schema, schema=self.schema)
 
         cur = self.conn.cursor()
         cur.execute(sql)
@@ -176,7 +176,7 @@ class ExtractOSM(Extract):
         SELECT
           n.id, n.version, n.user_id, n.tstamp, n.changeset_id, n.tags,
           st_transform(n.geom, {self.target_srid}) AS geom
-        FROM {self.temp}.nodes n
+        FROM {self.temp_schema}.nodes n
         WHERE n.id = ANY(ARRAY[{arr}]);
         '''
         self.run_query(sql, conn=self.conn)
@@ -216,7 +216,7 @@ class ExtractOSM(Extract):
             INTO {self.schema}.users
             (id, name)
             SELECT id, name
-            FROM {self.temp}.users
+            FROM {self.temp_schema}.users
             WHERE id = ANY(ARRAY[{arr}]);
             """
             self.run_query(sql, conn=self.conn)
@@ -277,17 +277,19 @@ class ExtractOSM(Extract):
     def extract_nodes(self):
         """
         """
+        self.recreate_table('nodes')
+
         sql = """
+        INSERT INTO "{schema}".nodes
         SELECT
-          n.id, n.version, n.user_id, n.tstamp, n.changeset_id, n.tags,
-          st_transform(n.geom, {target_srid})::geometry('POINT', {target_srid}) AS geom
-        INTO "{schema}".nodes
+         (n.id, n.version, n.user_id, n.tstamp, n.changeset_id, n.tags,
+          st_transform(n.geom, {target_srid})::geometry('POINT', {target_srid}) AS geom)
         FROM {temp_meta}.osm_nodes n
         WHERE n.session_id='{session_id}';
         ANALYZE "{schema}".nodes;
         """
         self.logger.info(f'Extracting nodes into {self.schema}.nodes')
-        self.run_query(sql.format(temp=self.temp, schema=self.schema,
+        self.run_query(sql.format(temp=self.temp_schema, schema=self.schema,
                                   target_srid=self.target_srid,
                                   temp_meta=self.temp_meta,
                                   session_id=self.session_id),
@@ -305,7 +307,7 @@ class ExtractOSM(Extract):
         SELECT *
         INTO "{schema}".schema_info
         FROM {temp}.schema_info;
-        """.format(temp=self.temp, schema=self.schema)
+        """.format(temp=self.temp_schema, schema=self.schema)
         self.logger.info('Copying schema info')
         self.run_query(sql, self.conn)
 

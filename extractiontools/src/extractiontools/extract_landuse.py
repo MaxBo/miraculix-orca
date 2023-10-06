@@ -43,12 +43,22 @@ class ExtractLanduse(Extract):
         Extract OSM oceans and transform into target srid
         """
         self.logger.info(f'Extracting oceans to {self.schema}.oceans')
+        exists = self.conn.table_exists('oceans', self.schema)
+        if not exists:
+            sql = f"""
+            CREATE TABLE {self.schema}.oceans
+            (gid serial PRIMARY KEY,
+            geom geometry(MULTIPOLYGON, {self.target_srid}));
+            """
+            self.new_tables.append('oceans')
+        else:
+            self.truncate_table('oceans', self.schema)
         sql = f"""
+        INSERT INTO {self.schema}.oceans (gid, geom)
         SELECT
           c.gid,
           st_transform(c.geom, {self.target_srid})::geometry(MULTIPOLYGON, {self.target_srid}) AS geom
-        INTO {self.schema}.oceans
-        FROM {self.temp}.oceans c,
+        FROM {self.temp_schema}.oceans c,
         (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
         WHERE
         st_intersects(c.geom, tb.source_geom)
@@ -62,19 +72,29 @@ class ExtractLanduse(Extract):
         for corine in self.corine:
             self.logger.info(f'Extracting corine landcover data into '
                              f'{self.schema}.{corine}')
+            exists = self.conn.table_exists('oceans', self.schema)
+            if not exists:
+                sql = f"""
+                CREATE TABLE {self.schema}.{corine}
+                (gid serial PRIMARY KEY,
+                geom geometry(MULTIPOLYGON, {self.target_srid}));
+                """
+                self.new_tables.append(corine)
+            else:
+                self.truncate_table(corine, self.schema)
             sql = f"""
+            INSERT INTO {self.schema}.{corine} (ogc_fid, code, id, remark, geom)
             SELECT
             row_number() OVER() AS ogc_fid,
             a.code,
             a.id,
             a.remark,
             st_multi(st_transform(a.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
-              {self.target_srid}) AS geom
-            INTO {self.schema}.{corine}
+              {self.target_srid})
             FROM (
             SELECT
                c.code, c.id, c.remark, st_subdivide(c.geom)
-            FROM {self.temp}.{corine} c,
+            FROM {self.temp_schema}.{corine} c,
             (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
             WHERE
             st_intersects(c.geom, tb.source_geom)) AS a(code, id, remark, geom)
@@ -119,7 +139,7 @@ class ExtractLanduse(Extract):
             SELECT
               rast,
               r.filename
-            FROM {self.temp}.{tn} r,
+            FROM {self.temp_schema}.{tn} r,
             (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
             WHERE
             st_intersects(r.rast, st_transform(tb.source_geom, {corine_raster_srid}));
@@ -150,7 +170,7 @@ class ExtractLanduse(Extract):
             SELECT
               rast,
               r.filename
-            FROM {self.temp}.{tn} r,
+            FROM {self.temp_schema}.{tn} r,
             (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
             WHERE
             st_intersects(r.rast, tb.source_geom);
@@ -167,7 +187,7 @@ class ExtractLanduse(Extract):
                    FROM {temp}.aster AS aster) b
         WITH NO DATA;
         """
-        self.run_query(sql.format(temp=self.temp,
+        self.run_query(sql.format(temp=self.temp_schema,
                                   schema=self.schema,
                                   target_srid=self.target_srid),
                        conn=self.conn)
@@ -180,7 +200,7 @@ class ExtractLanduse(Extract):
             self.logger.info(f'Extracting GMES Urban Atlas boundaries into '
                              f'{self.schema}.{gmes}_boundary')
             columns = self.conn.get_column_dict(
-                f'{gmes}_boundary', self.temp)
+                f'{gmes}_boundary', self.temp_schema)
             columns.pop('geom')
             cols = ', '.join([f'c."{col}"' for col in columns])
             sql = f"""
@@ -189,7 +209,7 @@ class ExtractLanduse(Extract):
               st_multi(st_transform(c.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
               {self.target_srid}) AS geom
             INTO "{self.schema}"."{gmes}_boundary"
-            FROM "{self.temp}"."{gmes}_boundary" c,
+            FROM "{self.temp_schema}"."{gmes}_boundary" c,
             (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
             WHERE
             st_intersects(c.geom, tb.source_geom)
@@ -198,7 +218,7 @@ class ExtractLanduse(Extract):
 
             self.logger.info(f'Extracting GMES Urban Atlas landcover data into '
                              f'"{self.schema}"."{gmes}"')
-            columns = self.conn.get_column_dict(gmes, self.temp)
+            columns = self.conn.get_column_dict(gmes, self.temp_schema)
             columns.pop('geom')
             cols = ', '.join([f'c."{col}"' for col in columns])
             sql = f"""
@@ -207,7 +227,7 @@ class ExtractLanduse(Extract):
               st_multi(st_transform(c.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
               {self.target_srid}) AS geom
             INTO "{self.schema}"."{gmes}"
-            FROM "{self.temp}"."{gmes}" c,
+            FROM "{self.temp_schema}"."{gmes}" c,
             (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
             WHERE
             st_intersects(c.geom, tb.source_geom)
@@ -217,7 +237,7 @@ class ExtractLanduse(Extract):
             sql = f"""
             SELECT EXISTS (SELECT *
             FROM INFORMATION_SCHEMA.TABLES
-            WHERE TABLE_SCHEMA = '{self.temp}'
+            WHERE TABLE_SCHEMA = '{self.temp_schema}'
             AND TABLE_NAME = '{gmes}_urban_core')
             """
             cur = self.conn.cursor()
@@ -228,7 +248,7 @@ class ExtractLanduse(Extract):
                 self.logger.info(f'Extracting GMES Urban Atlas urban core into '
                                  f'{self.schema}.{gmes}_urban_core')
                 columns = self.conn.get_column_dict(f'{gmes}_urban_core',
-                                                    self.temp)
+                                                    self.temp_schema)
                 columns.pop('geom')
                 cols = ', '.join([f'c."{col}"' for col in columns])
                 sql = f"""
@@ -237,7 +257,7 @@ class ExtractLanduse(Extract):
                   st_multi(st_transform(c.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
                   {self.target_srid}) AS geom
                 INTO "{self.schema}"."{gmes}_urban_core"
-                FROM "{self.temp}"."{gmes}_urban_core" c,
+                FROM "{self.temp_schema}"."{gmes}_urban_core" c,
                 (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
                 WHERE
                 st_intersects(c.geom, tb.source_geom)

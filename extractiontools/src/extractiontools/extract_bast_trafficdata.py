@@ -27,7 +27,7 @@ class ExtractBASt(Extract):
         sql = f'''
         SELECT v.*
         INTO {self.schema}.svz_2021
-        FROM {self.temp}.svz_2021 v WHERE (v.vonnk, v.nachnk) = ANY(ARRAY[{rows_to_compare}]);
+        FROM {self.temp_schema}.svz_2021 v WHERE (v.vonnk, v.nachnk) = ANY(ARRAY[{rows_to_compare}]);
         '''
         self.logger.debug(sql)
         cur.execute(sql)

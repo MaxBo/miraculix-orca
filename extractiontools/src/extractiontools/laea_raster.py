@@ -72,7 +72,7 @@ class ExtractLAEA(Extract):
 
         INSERT INTO {self.schema}.zensus_ew_hectar(id, einwohner)
         SELECT z.id, z.einwohner
-        FROM {self.temp}.ew_zensus2011_gitter z,
+        FROM {self.temp_schema}.ew_zensus2011_gitter z,
         {self.schema}.laea_vector_100 v
         WHERE v.cellcode = z.id;
         """
@@ -117,7 +117,7 @@ class ExtractLAEA(Extract):
           z.leerstandsquote,
           z.wohnfl_bew_d,
           z.wohnfl_wohnung
-        FROM {self.temp}.zensus2011_gitter1000m_spitze z,
+        FROM {self.temp_schema}.zensus2011_gitter1000m_spitze z,
         {self.schema}.laea_vector_1000 v
         WHERE v.cellcode = z.id;
         """
@@ -138,7 +138,7 @@ class ExtractLAEA(Extract):
           einwohner)
         SELECT z.grid_id AS id,
           z.tot_p AS einwohner
-        FROM {self.temp}.geostat_2011_pop_1km2 z,
+        FROM {self.temp_schema}.geostat_2011_pop_1km2 z,
         {self.schema}.laea_vector_1000 v
         WHERE v.cellcode = z.grid_id;
         """

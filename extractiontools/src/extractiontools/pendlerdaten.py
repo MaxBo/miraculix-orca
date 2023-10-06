@@ -48,7 +48,7 @@ class ExtractRegionalstatistik(Extract):
         SELECT
           s.*
         INTO {self.schema}.svb_jahr
-        FROM {self.temp}.svb_jahr s,
+        FROM {self.temp_schema}.svb_jahr s,
         {self.gemeindelayer} g
         WHERE
         g.gf = 4
@@ -68,7 +68,7 @@ class ExtractRegionalstatistik(Extract):
         SELECT
           s.*
         INTO {self.schema}.kfz
-        FROM {self.temp}.kfz s,
+        FROM {self.temp_schema}.kfz s,
         {self.gemeindelayer} g
         WHERE
         g.gf = 4
@@ -88,7 +88,7 @@ class ExtractRegionalstatistik(Extract):
         SELECT
           s.*
         INTO {self.schema}.arbeitslose
-        FROM {self.temp}.arbeitslose s,
+        FROM {self.temp_schema}.arbeitslose s,
         {self.gemeindelayer} g
         WHERE
         g.gf = 4
@@ -135,7 +135,7 @@ class ExtractPendler(Extract):
         SELECT
           p.*
         INTO {self.schema}.ein_auspendler
-        FROM {self.temp}.ein_auspendler p,
+        FROM {self.temp_schema}.ein_auspendler p,
         {self.gemeindelayer} g
         WHERE
         (g.ags = p.ags_wo AND p."Ein_Aus" = 'Auspendler Gemeinden') OR

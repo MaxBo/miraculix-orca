@@ -75,7 +75,7 @@ class Extract(DBApp):
         self.srid = 4326
         self.logger = logger or logging.getLogger(self.__module__)
         self.session_id = f'{destination_db}{round(time.time() * 100)}'
-        self.temp = temp or 'temp'  # f'temp{self.session_id}'
+        self.temp_schema = temp or 'temp'  # f'temp{self.session_id}'
         self.foreign_server = foreign_server
         self.source_db = source_db or os.environ.get(
             'FOREIGN_NAME', 'europe')
@@ -111,8 +111,32 @@ class Extract(DBApp):
         self.create_foreign_server()
         self.create_serverside_folder()
 
+    def recreate_table(self, table, target_schema=None, origin_schema=None,
+                       srid=None) -> bool:
+        '''
+        create table if not exists like origin table of same name in origin_schema
+        (defaults to the temp schema) and converting geom to target srid,
+        else truncates table
+        returns True if table was created, False if existed and truncated
+        '''
+        target_schema = target_schema or self.schema
+        origin_schema = origin_schema or self.temp_schema
+
+        exists = self.conn.table_exists(table, target_schema)
+        if exists:
+            self.truncate_table(table, target_schema)
+        else:
+            self.create_table(table, target_schema, like=(table, origin_schema))
+            self.new_tables.append(table)
+        cols = self.conn.get_column_dict(table, target_schema)
+        if 'geom' in cols:
+            self.update_srid(table, target_schema, self.target_srid)
+        return exists
+
     def extract(self):
         self.set_pg_path()
+        # stores of newly created tables
+        self.new_tables = []
         try:
             with Connection(login=self.login) as conn:
                 self.conn = conn
@@ -120,7 +144,7 @@ class Extract(DBApp):
                     self.set_target_boundary(self.boundary,
                                              name=self.boundary_name)
                 self.update_boundaries()
-                self.create_schema(self.schema, conn=conn, replace=True)
+                self.create_schema(self.schema, conn=conn, replace=False)
                 self.create_foreign_catalog()
                 self.create_foreign_schema()
                 self.conn.commit()
@@ -210,33 +234,35 @@ class Extract(DBApp):
         """
         extracts a single table
         """
-        cols = self.conn.get_column_dict(tn, self.temp)
+        cols = self.conn.get_column_dict(tn, self.temp_schema)
+        created = self.recreate_table(tn)
+        if created and geom and geom != 'geom':
+            sql = f'''
+            ALTER TABLE '{tn}.{self.schema}'
+            RENAME COLUMN {geom} TO geom;
+            '''
+            self.run_query(sql, conn=self.conn)
 
         if geom is None:
-            cols = ('t."{}"'.format(c)
-                    for c in cols)
-            col_str = ', '.join(cols)
+            t_table_cols = ('t."{}"'.format(c) for c in cols)
             sql = f"""
-SELECT {col_str}
-INTO {self.schema}.{tn}
-FROM {self.temp}.{tn} t;
+            INSERT INTO {self.schema}.{tn} ({','.join(cols)})
+            SELECT {','.join(t_table_cols)}
+            FROM {self.temp_schema}.{tn} t;
             """
         else:
-
             wkt = self.get_target_boundary(
                 boundary_name=boundary_name or self.boundary_name)
             geometrytype = self.get_geometrytype(tn, geom)
-            cols_without_geom = ('t."{}"'.format(c)
-                                 for c in cols if c != geom)
-            col_str = ', '.join(cols_without_geom)
-
+            cols_without_geom = [c for c in cols if c != geom]
+            t_table_cols = ('t."{}"'.format(c) for c in cols_without_geom)
             sql = f"""
+            INSERT INTO {self.schema}.{tn} ({','.join(cols_without_geom)}, geom)
             SELECT
-              {col_str},
+              {','.join(t_table_cols)},
               st_transform(t.{geom}, {self.target_srid})::geometry({geometrytype},
-              {self.target_srid}) as geom
-            INTO {self.schema}.{tn}
-            FROM {self.temp}.{tn} t,
+              {self.target_srid})
+            FROM {self.temp_schema}.{tn} t,
             (SELECT ST_GeomFromEWKT('SRID={self.srid};{wkt}') AS source_geom) tb
             WHERE
             st_intersects(t.{geom}, tb.source_geom);
@@ -283,7 +309,7 @@ FROM {self.temp}.{tn} t;
     def get_geometrytype(self, tn, geom):
         sql = """
         SELECT geometrytype({geom}) FROM {sn}.{tn} LIMIT 1;
-        """.format(geom=geom, sn=self.temp, tn=tn)
+        """.format(geom=geom, sn=self.temp_schema, tn=tn)
         cur = self.conn.cursor()
         cur.execute(sql)
         geometrytype = cur.fetchone()[0]
@@ -299,7 +325,7 @@ FROM {self.temp}.{tn} t;
         """
         conn = conn or self.conn
         foreign_schema = foreign_schema or self.foreign_schema or self.schema
-        target_schema = target_schema or self.temp
+        target_schema = target_schema or self.temp_schema
         sql = f"""
         DROP SCHEMA IF EXISTS {target_schema} CASCADE;
         CREATE SCHEMA {target_schema};
@@ -478,7 +504,7 @@ FROM {self.temp}.{tn} t;
         """
         self.logger.info(f'Cleaning up...')
         sql = '''DROP SCHEMA IF EXISTS {temp} CASCADE'''.format(
-            temp=schema or self.temp)
+            temp=schema or self.temp_schema)
         #self.logger.info(sql)
         try:
             self.run_query(sql, conn=conn or self.conn)
@@ -591,6 +617,8 @@ FROM {self.temp}.{tn} t;
 
     def copy_constraints_and_indices(self, schema: str, tables: List[str]):
         """Copy constraints and indices"""
+        if not tables:
+            return
         cat = 'temp_pg_catalog'
 
         # add constraints

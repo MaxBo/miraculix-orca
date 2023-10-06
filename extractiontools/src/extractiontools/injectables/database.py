@@ -56,6 +56,7 @@ def get_foreign_tables(database, schema) -> dict:
 
 
 @meta(group='(1) Project', unique=True, order=1,
+      title="Datenbank",
       regex="^[A-Za-z_@#]{1}[A-Za-z0-9_\-]{0,127}$",
       regex_help="The first character can be a letter, @ , _ , or # . "
       "The rest is letters, numbers or @ , _ , - . "
@@ -96,14 +97,14 @@ def dummy_polygon():
     return geom
 
 
-@meta(group='(1) Project', order=3)
+@meta(group='(1) Project', order=3, title='Projektgebiet')
 @orca.injectable()
 def project_area() -> ogr.Geometry:
     """The default area of the project"""
     return None
 
 
-@meta(group='(1) Project', order=2)
+@meta(group='(1) Project', order=2, title='EPSG-Code')
 @orca.injectable()
 def target_srid() -> int:
     """The EPSG-Code of the geodata to be created"""

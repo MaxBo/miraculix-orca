@@ -60,6 +60,7 @@ class Connection:
         self.conn = conn
         self.conn.get_dict_cursor = self.get_dict_cursor
         self.conn.get_column_dict = self.get_column_dict
+        self.conn.table_exists = self.table_exists
         self.conn.get_colums = self.get_columns
         self.set_copy_command_format()
         return conn
@@ -129,6 +130,19 @@ class Connection:
             table = f'"{tablename}"'
         descr = self.get_columns(table)
         return OrderedDict(((d.name, d) for d in descr))
+
+    def table_exists(self, tablename: str, schema: str) -> bool:
+        cur = self.get_dict_cursor()
+        sql = f'''
+        SELECT EXISTS (
+        SELECT 1
+        FROM pg_tables
+        WHERE tablename = '{tablename}'
+        AND schemaname = '{schema}'
+        ) AS table_exists;
+        '''
+        cur.execute(sql)
+        return cur.fetchone()[0]
 
 
 class DBApp:
@@ -333,6 +347,26 @@ DROP DATABASE IF EXISTS {dbname};
         cur.execute(sql)
         conn.set_isolation_level(1)
         conn.commit()
+
+    def truncate_table(self, tablename: str, schema: str,
+                       conn: NamedTupleConnection = None):
+        sql = f'TRUNCATE TABLE "{schema}"."{tablename}";'
+        self.run_query(sql, conn=conn or self.conn)
+
+    def create_table(self, tablename: str, schema: str, like: Tuple = None,
+                     conn: NamedTupleConnection = None):
+        sql = f'CREATE TABLE "{schema}"."{tablename}"'
+        if like:
+            sql += f' (LIKE "{like[1]}"."{like[0]}")'
+        sql += ";"
+        self.run_query(sql, conn=conn or self.conn)
+
+    def update_srid(self, table: str, schema: str, target_srid: int):
+        srid_sql = f'''
+        SELECT UpdateGeometrySRID('{self.schema}','{table}',
+        'geom',{target_srid});
+        '''
+        self.run_query(srid_sql, conn=self.conn)
 
     def add_raster_index(self,
                          schema: str,

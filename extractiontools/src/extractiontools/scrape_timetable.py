@@ -265,7 +265,7 @@ class ScrapeTimetable(ScrapeStops):
             INSERT INTO "{self.schema}".haltestellen
             ("H_ID", "H_Name", geom, kreis)
             SELECT "H_ID", "H_Name", st_transform(geom, {self.target_srid}) AS geom, kreis
-            FROM "{self.temp}".haltestellen
+            FROM "{self.temp_schema}".haltestellen
             WHERE "H_ID" = ANY(ARRAY[{arr}]);
             """
             self.run_query(sql, conn=self.conn)
