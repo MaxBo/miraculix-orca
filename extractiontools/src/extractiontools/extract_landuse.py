@@ -43,14 +43,9 @@ class ExtractLanduse(Extract):
         Extract OSM oceans and transform into target srid
         """
         self.logger.info(f'Extracting oceans to {self.schema}.oceans')
-        exists = self.conn.table_exists('oceans', self.schema)
+        exists = self.conn.relation_exists('oceans', self.schema)
         if not exists:
-            sql = f"""
-            CREATE TABLE {self.schema}.oceans
-            (gid serial PRIMARY KEY,
-            geom geometry(MULTIPOLYGON, {self.target_srid}));
-            """
-            self.new_tables.append('oceans')
+            self.recreate_table('oceans', columns=['gid', 'geom'])
         else:
             self.truncate_table('oceans', self.schema)
         sql = f"""
@@ -72,16 +67,8 @@ class ExtractLanduse(Extract):
         for corine in self.corine:
             self.logger.info(f'Extracting corine landcover data into '
                              f'{self.schema}.{corine}')
-            exists = self.conn.table_exists('oceans', self.schema)
-            if not exists:
-                sql = f"""
-                CREATE TABLE {self.schema}.{corine}
-                (gid serial PRIMARY KEY,
-                geom geometry(MULTIPOLYGON, {self.target_srid}));
-                """
-                self.new_tables.append(corine)
-            else:
-                self.truncate_table(corine, self.schema)
+
+            self.recreate_table(corine)
             sql = f"""
             INSERT INTO {self.schema}.{corine} (ogc_fid, code, id, remark, geom)
             SELECT
@@ -129,12 +116,8 @@ class ExtractLanduse(Extract):
         for tn in tables:
             self.logger.info(f'Extracting corine raster data '
                              f'into {self.schema}.{tn}')
+            self.recreate_table(tn, columns=['rast', 'filename'])
             sql = f"""
-            CREATE TABLE {self.schema}.{tn}
-            (rid serial PRIMARY KEY,
-              rast raster,
-              filename text);
-
             INSERT INTO {self.schema}.{tn} (rast, filename)
             SELECT
               rast,
@@ -160,12 +143,8 @@ class ExtractLanduse(Extract):
         for tn in tables:
             self.logger.info(f'Extracting Aster elevation data into '
                              f'{self.schema}.{tn}')
+            self.recreate_table(tn, columns=['rast', 'filename'])
             sql = f"""
-            CREATE TABLE {self.schema}.{tn}
-            (rid serial PRIMARY KEY,
-              rast raster,
-              filename text);
-
             INSERT INTO {self.schema}.{tn} (rast, filename)
             SELECT
               rast,
@@ -178,19 +157,23 @@ class ExtractLanduse(Extract):
             self.run_query(sql, conn=self.conn)
 
         self.logger.info(f'Creating view {self.schema}.aster_centroids')
-        # raster points
-        sql = """
-        CREATE MATERIALIZED VIEW {schema}.aster_centroids AS
-         SELECT DISTINCT st_transform((b.a).geom, {target_srid})::geometry(POINT, {target_srid}) AS geom,
-            (b.a).val AS val
-           FROM ( SELECT st_pixelascentroids(aster.rast) AS a
-                   FROM {temp}.aster AS aster) b
-        WITH NO DATA;
-        """
-        self.run_query(sql.format(temp=self.temp_schema,
-                                  schema=self.schema,
-                                  target_srid=self.target_srid),
-                       conn=self.conn)
+        if self.conn.relation_exists('aster_centroids', self.schema,
+                                     relation='view'):
+            self.refresh_mat_view('aster_centroids', self.schema)
+        else:
+            # raster points
+            sql = """
+            CREATE MATERIALIZED VIEW {schema}.aster_centroids AS
+             SELECT DISTINCT st_transform((b.a).geom, {target_srid})::geometry(POINT, {target_srid}) AS geom,
+                (b.a).val AS val
+               FROM ( SELECT st_pixelascentroids(aster.rast) AS a
+                       FROM {temp}.aster AS aster) b
+            WITH NO DATA;
+            """
+            self.run_query(sql.format(temp=self.temp_schema,
+                                      schema=self.schema,
+                                      target_srid=self.target_srid),
+                           conn=self.conn)
 
     def extract_gmes_vector(self):
         """
@@ -199,34 +182,36 @@ class ExtractLanduse(Extract):
         for gmes in self.gmes:
             self.logger.info(f'Extracting GMES Urban Atlas boundaries into '
                              f'{self.schema}.{gmes}_boundary')
+            self.recreate_table(f'{gmes}_boundary')
             columns = self.conn.get_column_dict(
                 f'{gmes}_boundary', self.temp_schema)
             columns.pop('geom')
             cols = ', '.join([f'c."{col}"' for col in columns])
             sql = f"""
+            INSERT INTO "{self.schema}"."{gmes}_boundary"
             SELECT
               {cols},
               st_multi(st_transform(c.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
               {self.target_srid}) AS geom
-            INTO "{self.schema}"."{gmes}_boundary"
             FROM "{self.temp_schema}"."{gmes}_boundary" c,
             (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
             WHERE
             st_intersects(c.geom, tb.source_geom)
-                """
+            """
             self.run_query(sql, conn=self.conn)
 
             self.logger.info(f'Extracting GMES Urban Atlas landcover data into '
                              f'"{self.schema}"."{gmes}"')
+            self.recreate_table(gmes)
             columns = self.conn.get_column_dict(gmes, self.temp_schema)
             columns.pop('geom')
             cols = ', '.join([f'c."{col}"' for col in columns])
             sql = f"""
+            INSERT INTO "{self.schema}"."{gmes}"
             SELECT
               {cols},
               st_multi(st_transform(c.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
               {self.target_srid}) AS geom
-            INTO "{self.schema}"."{gmes}"
             FROM "{self.temp_schema}"."{gmes}" c,
             (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
             WHERE
@@ -251,12 +236,13 @@ class ExtractLanduse(Extract):
                                                     self.temp_schema)
                 columns.pop('geom')
                 cols = ', '.join([f'c."{col}"' for col in columns])
+                self.recreate_table(f'{gmes}_urban_core')
                 sql = f"""
+                INSERT INTO "{self.schema}"."{gmes}_urban_core"
                 SELECT
                   {cols},
                   st_multi(st_transform(c.geom, {self.target_srid}))::geometry('MULTIPOLYGON',
                   {self.target_srid}) AS geom
-                INTO "{self.schema}"."{gmes}_urban_core"
                 FROM "{self.temp_schema}"."{gmes}_urban_core" c,
                 (SELECT ST_GeomFromEWKT('SRID={self.srid};{self.wkt}') AS source_geom) tb
                 WHERE
@@ -268,17 +254,18 @@ class ExtractLanduse(Extract):
         """
         CREATE INDEX
         """
-        tables = (self.corine +
+        tables = [t for t in (self.corine +
                   self.gmes +
                   [f'{g}_boundary' for g in self.gmes] +
                   [f'{g}_urban_core' for g in self.gmes] +
-                  ['oceans'])
+                  ['oceans']) if t in self.new_tables]
         self.copy_constraints_and_indices(self.schema, tables)
         self.create_index_corine()
         self.create_index_gmes()
-        self.add_raster_index_and_overviews(self.aster_overviews,
-                                            self.schema,
-                                            self.raster_table)
+        if self.raster_table in self.new_tables:
+            self.add_raster_index_and_overviews(self.aster_overviews,
+                                                self.schema,
+                                                self.raster_table)
         self.create_corine_raster_index()
 
     def create_index_corine(self):
@@ -289,7 +276,8 @@ class ExtractLanduse(Extract):
         ALTER TABLE {schema}.{corine} CLUSTER ON {corine}_geom_idx;
         """
         for corine in self.corine:
-
+            if corine not in self.new_tables:
+                continue
             self.run_query(sql.format(schema=self.schema,
                                       corine=corine), conn=self.conn)
             self.tables2cluster.append('{schema}.{corine}'.format(
@@ -303,6 +291,8 @@ class ExtractLanduse(Extract):
         ALTER TABLE {schema}.{gmes} CLUSTER ON {gmes}_geom_idx;
         """
         for gmes in self.gmes:
+            if gmes not in self.new_tables:
+                continue
             cols = self.conn.get_column_dict(gmes, self.schema)
             code = [col for col in cols if col.startswith('code')][0]
             self.run_query(sql_ua.format(
@@ -318,6 +308,8 @@ class ExtractLanduse(Extract):
         self.logger.info(f'Creating indexes for corine raster data')
         for corine in self.corine:
             corine_raster = self.get_corine_raster_name(corine)
+            if corine_raster not in self.new_tables:
+                continue
             self.add_raster_index_and_overviews(overviews=self.corine_overviews,
                                                 schema=self.schema,
                                                 tablename=corine_raster)

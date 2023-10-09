@@ -60,7 +60,7 @@ class Connection:
         self.conn = conn
         self.conn.get_dict_cursor = self.get_dict_cursor
         self.conn.get_column_dict = self.get_column_dict
-        self.conn.table_exists = self.table_exists
+        self.conn.relation_exists = self.relation_exists
         self.conn.get_colums = self.get_columns
         self.set_copy_command_format()
         return conn
@@ -131,13 +131,14 @@ class Connection:
         descr = self.get_columns(table)
         return OrderedDict(((d.name, d) for d in descr))
 
-    def table_exists(self, tablename: str, schema: str) -> bool:
+    def relation_exists(self, tablename: str, schema: str, relation='table') -> bool:
+        '''check if relation ("table" or "view", "table" by default)'''
         cur = self.get_dict_cursor()
         sql = f'''
         SELECT EXISTS (
         SELECT 1
-        FROM pg_tables
-        WHERE tablename = '{tablename}'
+        FROM pg_{relation}s
+        WHERE {relation}name = '{tablename}'
         AND schemaname = '{schema}'
         ) AS table_exists;
         '''
@@ -348,6 +349,13 @@ DROP DATABASE IF EXISTS {dbname};
         conn.set_isolation_level(1)
         conn.commit()
 
+    def refresh_mat_view(self, viewname: str, schema: str,
+                         conn: NamedTupleConnection = None):
+        sql = f'''
+        REFRESH MATERIALIZED VIEW "{schema}"."{tablename}";
+        '''
+        self.run_query(sql, conn=conn or self.conn)
+
     def truncate_table(self, tablename: str, schema: str,
                        conn: NamedTupleConnection = None):
         sql = f'TRUNCATE TABLE "{schema}"."{tablename}";'
@@ -357,7 +365,7 @@ DROP DATABASE IF EXISTS {dbname};
                      conn: NamedTupleConnection = None):
         sql = f'CREATE TABLE "{schema}"."{tablename}"'
         if like:
-            sql += f' (LIKE "{like[1]}"."{like[0]}")'
+            sql += f' (LIKE "{like[1]}"."{like[0]}" INCLUDING COMMENTS)'
         sql += ";"
         self.run_query(sql, conn=conn or self.conn)
 

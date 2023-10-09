@@ -111,8 +111,8 @@ class Extract(DBApp):
         self.create_foreign_server()
         self.create_serverside_folder()
 
-    def recreate_table(self, table, target_schema=None, origin_schema=None,
-                       srid=None) -> bool:
+    def recreate_table(self, table: str, columns: list=None, target_schema: str=None,
+                       origin_schema: str=None, srid: int=None) -> bool:
         '''
         create table if not exists like origin table of same name in origin_schema
         (defaults to the temp schema) and converting geom to target srid,
@@ -122,20 +122,27 @@ class Extract(DBApp):
         target_schema = target_schema or self.schema
         origin_schema = origin_schema or self.temp_schema
 
-        exists = self.conn.table_exists(table, target_schema)
+        exists = self.conn.relation_exists(table, target_schema)
         if exists:
             self.truncate_table(table, target_schema)
         else:
             self.create_table(table, target_schema, like=(table, origin_schema))
             self.new_tables.append(table)
         cols = self.conn.get_column_dict(table, target_schema)
-        if 'geom' in cols:
+        drop_columns = []
+        if columns:
+            drop_columns = [c for c in cols if c not in columns]
+            if drop_columns:
+                sql = f'ALTER TABLE "{target_schema}"."{table}" '
+                sql += ','.join(f'DROP COLUMN "{c}"' for c in drop_columns) + ';'
+                self.run_query(sql, conn=self.conn)
+        if 'geom' in cols and 'geom' not in drop_columns:
             self.update_srid(table, target_schema, self.target_srid)
         return exists
 
     def extract(self):
         self.set_pg_path()
-        # stores of newly created tables
+        # remember newly created tables (for indices and stuff)
         self.new_tables = []
         try:
             with Connection(login=self.login) as conn:
