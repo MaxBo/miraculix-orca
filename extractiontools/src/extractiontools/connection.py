@@ -131,14 +131,17 @@ class Connection:
         descr = self.get_columns(table)
         return OrderedDict(((d.name, d) for d in descr))
 
-    def relation_exists(self, tablename: str, schema: str, relation='table') -> bool:
-        '''check if relation ("table" or "view", "table" by default)'''
+    def relation_exists(self, name: str, schema: str, relation='table') -> bool:
+        '''
+        check if relation ("table", "view" or "matview", "table" by default)
+        exists
+        '''
         cur = self.get_dict_cursor()
         sql = f'''
         SELECT EXISTS (
         SELECT 1
         FROM pg_{relation}s
-        WHERE {relation}name = '{tablename}'
+        WHERE {relation}name = '{name}'
         AND schemaname = '{schema}'
         ) AS table_exists;
         '''
@@ -391,9 +394,9 @@ DROP DATABASE IF EXISTS {dbname};
             raise ValueError('please define schema')
         conn = conn or self.conn
         sql = """
-CREATE INDEX idx_{tn}_geom ON {schema}.{tn} USING gist(st_convexhull({rast}));
-SELECT AddRasterConstraints('{schema}', '{tn}', '{rast}', TRUE, TRUE, TRUE, TRUE,
-                            TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE);
+        CREATE INDEX IF NOT EXISTS idx_{tn}_geom ON {schema}.{tn} USING gist(st_convexhull({rast}));
+        SELECT AddRasterConstraints('{schema}', '{tn}', '{rast}', TRUE, TRUE, TRUE, TRUE,
+                                    TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE);
         """
         self.run_query(sql.format(schema=schema, tn=tablename, rast=raster_column),
                        conn=conn)

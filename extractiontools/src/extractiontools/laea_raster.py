@@ -26,21 +26,24 @@ class ExtractLAEA(Extract):
         add a geometry index to views
         """
         self.logger.info(f'Creating zensus view {self.schema}.ew_hectar')
-        sql = f"""
-        CREATE MATERIALIZED VIEW
-        {self.schema}.ew_hectar AS
-        SELECT
-        row_number() OVER(ORDER BY v.cellcode)::integer AS id,
-        v.geom,
-        v.pnt,
-        z.einwohner
-        FROM
-        {self.schema}.zensus_ew_hectar z,
-        {self.schema}.laea_vector_100 v
-        WHERE v.cellcode = z.id;
+        if not self.conn.relation_exists('ew_hectar', self.schema, relation='matview'):
+            sql = f"""
+            CREATE MATERIALIZED VIEW
+            {self.schema}.ew_hectar AS
+            SELECT
+            row_number() OVER(ORDER BY v.cellcode)::integer AS id,
+            v.geom,
+            v.pnt,
+            z.einwohner
+            FROM
+            {self.schema}.zensus_ew_hectar z,
+            {self.schema}.laea_vector_100 v
+            WHERE v.cellcode = z.id;
 
-        CREATE INDEX ew_hectar_geom_idx ON {self.schema}.ew_hectar USING gist(geom);
-        """
+            CREATE INDEX ew_hectar_geom_idx ON {self.schema}.ew_hectar USING gist(geom);
+            """
+        else:
+            sql = f'REFRESH MATERIALIZED VIEW {self.schema}.ew_hectar;'
         self.run_query(sql, conn=self.conn)
 
     def add_laea_raster_constraint(self, pixelsize):
@@ -66,9 +69,9 @@ class ExtractLAEA(Extract):
         self.logger.info(f'Extracting inhabitants per hectar into '
                          f'{self.schema}.zensus_ew_hectar')
         sql = f"""
-        DROP TABLE IF EXISTS {self.schema}.zensus_ew_hectar CASCADE;
-        CREATE TABLE {self.schema}.zensus_ew_hectar
+        CREATE TABLE IF NOT EXISTS {self.schema}.zensus_ew_hectar
         (id text primary key, einwohner integer);
+        TRUNCATE TABLE {self.schema}.zensus_ew_hectar CASCADE;
 
         INSERT INTO {self.schema}.zensus_ew_hectar(id, einwohner)
         SELECT z.id, z.einwohner
@@ -83,8 +86,7 @@ class ExtractLAEA(Extract):
         self.logger.info(f'Extracting inhabitants per square kilometer into '
                          f'{self.schema}.zensus_km2')
         sql = f"""
-        DROP TABLE IF EXISTS {self.schema}.zensus_km2 CASCADE;
-        CREATE TABLE {self.schema}.zensus_km2
+        CREATE TABLE IF NOT EXISTS {self.schema}.zensus_km2
         ( id text primary key,
           einwohner integer,
           alter_d double precision,
@@ -95,6 +97,7 @@ class ExtractLAEA(Extract):
           leerstandsquote double precision,
           wohnfl_bew_d double precision,
           wohnfl_wohnung double precision);
+        TRUNCATE TABLE {self.schema}.zensus_km2 CASCADE;
 
         INSERT INTO {self.schema}.zensus_km2(
           id,
@@ -128,10 +131,10 @@ class ExtractLAEA(Extract):
         self.logger.info(f'Extracting geostat data (square kilometer) into '
                          f'{self.schema}.geostat_km2')
         sql = f"""
-        DROP TABLE IF EXISTS {self.schema}.geostat_km2 CASCADE;
-        CREATE TABLE {self.schema}.geostat_km2
+        CREATE TABLE IF NOT EXISTS {self.schema}.geostat_km2
         ( id text primary key,
           einwohner integer);
+        TRUNCATE TABLE {self.schema}.geostat_km2 CASCADE;
 
         INSERT INTO {self.schema}.geostat_km2(
           id,
@@ -163,9 +166,9 @@ class ExtractLAEA(Extract):
         tilesize = self.get_tilesize(pixelsize)
         default = 1
         sql = f"""
-        DROP TABLE IF EXISTS {self.schema}.laea_raster_{pixelsize} CASCADE;
-        CREATE TABLE {self.schema}.laea_raster_{pixelsize}
+        CREATE TABLE IF NOT EXISTS {self.schema}.laea_raster_{pixelsize}
         (rid serial primary key, rast raster);
+        TRUNCATE TABLE {self.schema}.laea_raster_{pixelsize} CASCADE;
 
         WITH b AS (SELECT
           floor(st_xmin(a.geom) / {pixelsize}) * {pixelsize} AS left,
@@ -199,13 +202,13 @@ class ExtractLAEA(Extract):
         str_pixelsize = self.str_pixelsize(pixelsize)
         srid = self.target_srid
         sql = f"""
-        DROP TABLE IF EXISTS {self.schema}.laea_vector_{pixelsize} CASCADE;
-        CREATE TABLE {self.schema}.laea_vector_{pixelsize} (
+        CREATE TABLE IF NOT EXISTS {self.schema}.laea_vector_{pixelsize} (
           cellcode text primary key,
           geom Geometry(Polygon, {srid}),
           pnt Geometry(Point, {srid}),
           pnt_laea Geometry(Point, 3035)
           );
+        TRUNCATE TABLE {self.schema}.laea_vector_{pixelsize};
 
         INSERT INTO {self.schema}.laea_vector_{pixelsize}
         SELECT
@@ -224,9 +227,9 @@ class ExtractLAEA(Extract):
           FROM {self.schema}.laea_raster_{pixelsize} l) b
         ;
 
-        CREATE INDEX laea_vector_{pixelsize}_geom_idx
+        CREATE INDEX IF NOT EXISTS laea_vector_{pixelsize}_geom_idx
         ON {self.schema}.laea_vector_{pixelsize} USING gist(geom);
-        CREATE INDEX laea_vector_{pixelsize}_pnt_idx
+        CREATE INDEX IF NOT EXISTS laea_vector_{pixelsize}_pnt_idx
         ON {self.schema}.laea_vector_{pixelsize} USING gist(pnt_laea);
         ANALYZE {self.schema}.laea_vector_{pixelsize};
 
