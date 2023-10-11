@@ -357,22 +357,25 @@ DROP DATABASE IF EXISTS {dbname};
         self.run_query(sql, conn=conn or self.conn)
 
     def truncate_table(self, tablename: str, schema: str,
-                       conn: NamedTupleConnection = None):
-        sql = f'TRUNCATE TABLE "{schema}"."{tablename}";'
+                       conn: NamedTupleConnection = None, cascade=True):
+        sql = f'TRUNCATE TABLE "{schema}"."{tablename}"{" CASCADE" if cascade else ""};'
         self.run_query(sql, conn=conn or self.conn)
 
     def create_table(self, tablename: str, schema: str, like: Tuple = None,
-                     conn: NamedTupleConnection = None):
+                     conn: NamedTupleConnection = None, primary_keys: list = None):
         sql = f'CREATE TABLE "{schema}"."{tablename}"'
         if like:
             sql += f' (LIKE "{like[1]}"."{like[0]}" INCLUDING COMMENTS)'
         sql += ";"
         self.run_query(sql, conn=conn or self.conn)
+        if primary_keys:
+            sql = f'ALTER TABLE  "{schema}"."{tablename}" ADD PRIMARY KEY ({",".join(primary_keys)});'
+            self.run_query(sql, conn=conn or self.conn)
 
-    def update_srid(self, table: str, schema: str, target_srid: int):
+    def update_srid(self, table: str, schema: str, target_srid: int, geom='geom'):
         srid_sql = f'''
         SELECT UpdateGeometrySRID('{self.schema}','{table}',
-        'geom',{target_srid});
+        '{geom}',{target_srid});
         '''
         self.run_query(srid_sql, conn=self.conn)
 

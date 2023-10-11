@@ -59,18 +59,17 @@ class ExtractOSM(Extract):
         """
         self.logger.info(f'Copying relation members to '
                          f'{self.schema}.relation_members')
-        sql = """
-        CREATE TABLE "{schema}".relation_members AS
-        (SELECT * FROM {temp}.relation_members) WITH NO DATA;
-        """.format(temp=self.temp_schema, schema=self.schema)
-        self.run_query(sql, conn=self.conn)
-        self.conn.commit()
+
+        self.recreate_table('relation_members',
+                            primary_keys=['relation_id', 'sequence_id'])
 
         self.logger.info(f'Copying relations to {self.schema}.relations')
+        self.recreate_table('relations', origin_table='osm_relations',
+                            origin_schema=self.temp_meta, primary_keys=['id'])
         sql = f"""
         -- copy relations for ways and nodes
+        INSERT INTO {self.schema}.relations
         SELECT id, version, user_id, tstamp, changeset_id, tags
-        INTO {self.schema}.relations
         FROM {self.temp_meta}.osm_relations
         WHERE session_id='{self.session_id}';
         ;"""
@@ -146,13 +145,16 @@ class ExtractOSM(Extract):
         """
 
         self.logger.info(f'Copying way nodes to {self.schema}.way_nodes')
+        self.recreate_table('way_nodes', origin_table='osm_way_nodes',
+                            origin_schema=self.temp_meta,
+                            primary_keys=['way_id', 'sequence_id'])
         sql = """
         -- copy way nodes
+        INSERT INTO "{schema}".way_nodes
         SELECT
           wn.way_id,
           wn.node_id,
           wn.sequence_id
-        INTO "{schema}".way_nodes
         FROM {temp_meta}.osm_way_nodes wn
         WHERE session_id='{session_id}';
         """.format(temp_meta=self.temp_meta, schema=self.schema,
@@ -202,11 +204,17 @@ class ExtractOSM(Extract):
             return
         chunksize = 1000
 
-        sql = f'''
-        CREATE TABLE {self.schema}.users
-        (id INTEGER NOT NULL,
-        name TEXT NOT NULL);'''
-        self.run_query(sql, conn=self.conn)
+        if not self.conn.relation_exists('users', self.schema):
+            sql = f'''
+            CREATE TABLE {self.schema}.users
+            (id INTEGER NOT NULL,
+            name TEXT NOT NULL);
+            ALTER TABLE "{self.schema}".users ADD PRIMARY KEY (id);
+            '''
+            self.run_query(sql, conn=self.conn)
+            self.new_tables.append('users')
+        else:
+            self.truncate_table('users', self.schema)
 
         for i in range(0, len(ids), chunksize):
             cur_ids = ids[i: i + chunksize]
@@ -257,13 +265,14 @@ class ExtractOSM(Extract):
     def extract_ways(self):
         """
         """
-        self.recreate_table('ways')
+        self.recreate_table('ways', geometries=['bbox', 'linestring'],
+                            primary_keys=['id'])
         sql = """
         INSERT INTO "{schema}".ways
         SELECT
-          (w.id, w.version, w.user_id, w.tstamp, w.changeset_id, w.tags, w.nodes,
+          w.id, w.version, w.user_id, w.tstamp, w.changeset_id, w.tags, w.nodes,
           st_transform(st_setsrid(Box2D(w.linestring), {source_srid}), {target_srid})::geometry(GEOMETRY, {target_srid}) AS bbox,
-          st_transform(w.linestring, {target_srid})::geometry(LINESTRING, {target_srid}) AS linestring)
+          st_transform(w.linestring, {target_srid})::geometry(LINESTRING, {target_srid}) AS linestring
         FROM "{temp_meta}".osm_ways w
         WHERE w.session_id='{session_id}';
         ANALYZE "{schema}".ways;
@@ -278,13 +287,13 @@ class ExtractOSM(Extract):
     def extract_nodes(self):
         """
         """
-        self.recreate_table('nodes')
+        self.recreate_table('nodes', primary_keys=['id'])
 
         sql = """
         INSERT INTO "{schema}".nodes
         SELECT
-         (n.id, n.version, n.user_id, n.tstamp, n.changeset_id, n.tags,
-          st_transform(n.geom, {target_srid})::geometry('POINT', {target_srid}) AS geom)
+          n.id, n.version, n.user_id, n.tstamp, n.changeset_id, n.tags,
+          st_transform(n.geom, {target_srid})::geometry('POINT', {target_srid}) AS geom
         FROM {temp_meta}.osm_nodes n
         WHERE n.session_id='{session_id}';
         ANALYZE "{schema}".nodes;
@@ -300,15 +309,15 @@ class ExtractOSM(Extract):
         """
         copy schema and actions
         """
+        self.recreate_table('actions', primary_keys=['data_type', 'id'])
+        self.recreate_table('schema_info', primary_keys=['version'])
         sql = """
-        INSERT INTO
-
-        INTO "{schema}".actions
+        INSERT INTO "{schema}".actions
         SELECT *
         FROM {temp}.actions;
 
+        INSERT INTO "{schema}".schema_info
         SELECT *
-        INTO "{schema}".schema_info
         FROM {temp}.schema_info;
         """.format(temp=self.temp_schema, schema=self.schema)
         self.logger.info('Copying schema info')
@@ -318,53 +327,58 @@ class ExtractOSM(Extract):
         """
         CREATE INDEX
         """
+
+        if 'nodes' in self.new_tables:
+            sql = f'''
+            CREATE INDEX idx_nodes_geom
+              ON "{self.schema}".nodes
+              USING gist
+              (geom);
+            ALTER TABLE "{self.schema}".nodes CLUSTER ON idx_nodes_geom;
+            CLUSTER "{self.schema}".nodes;
+            '''
+            self.run_query(sql)
+
+        if 'ways' in self.new_tables:
+            sql = f'''
+            CREATE INDEX idx_ways_linestring
+              ON "{self.schema}".ways
+              USING gist
+              (linestring);
+            ALTER TABLE "{self.schema}".ways CLUSTER ON idx_ways_linestring;
+            CLUSTER "{self.schema}".ways;
+            '''
+            self.run_query(sql)
+
+
         sql = """
-        ALTER TABLE "{schema}".actions ADD PRIMARY KEY (data_type, id);
-        ALTER TABLE "{schema}".nodes ADD PRIMARY KEY (id);
-        CREATE INDEX idx_nodes_geom
-          ON "{schema}".nodes
-          USING gist
-          (geom);
-        ALTER TABLE "{schema}".nodes CLUSTER ON idx_nodes_geom;
-        CLUSTER "{schema}".nodes;
-        ALTER TABLE "{schema}".relation_members ADD PRIMARY KEY (relation_id, sequence_id);
-        CREATE INDEX idx_relation_members_member_id_and_type
-          ON "{schema}".relation_members
-          USING btree
-          (member_id, member_type COLLATE pg_catalog."default");
-        ALTER TABLE "{schema}".relations ADD PRIMARY KEY (id);
-        ALTER TABLE "{schema}".schema_info ADD PRIMARY KEY (version);
-        ALTER TABLE "{schema}".users ADD PRIMARY KEY (id);
-        ALTER TABLE "{schema}".way_nodes ADD PRIMARY KEY (way_id, sequence_id);
-        CREATE INDEX idx_way_nodes_node_id
+        CREATE INDEX IF NOT EXISTS idx_relation_members_member_id_and_type
+        ON "{schema}".relation_members
+        USING btree
+        (member_id, member_type COLLATE pg_catalog."default");
+
+        CREATE INDEX IF NOT EXISTS idx_way_nodes_node_id
           ON "{schema}".way_nodes
           USING btree
           (node_id);
         ANALYZE osm.way_nodes;
-        ALTER TABLE "{schema}".ways ADD PRIMARY KEY (id);
-        CREATE INDEX idx_ways_bbox
+
+        CREATE INDEX IF NOT EXISTS idx_ways_bbox
           ON "{schema}".ways
           USING gist
           (bbox);
 
-        CREATE INDEX idx_ways_linestring
-          ON "{schema}".ways
-          USING gist
-          (linestring);
-        ALTER TABLE "{schema}".ways CLUSTER ON idx_ways_linestring;
-        CLUSTER "{schema}".ways;
-
-        CREATE INDEX way_tags_idx
+        CREATE INDEX IF NOT EXISTS way_tags_idx
         ON osm.ways
         USING gist(tags);
 
         -- Partial index for nodes
-        CREATE INDEX node_tags_idx
+        CREATE INDEX IF NOT EXISTS node_tags_idx
         ON osm.nodes
         USING gist(tags)
         WHERE tags <> ''::hstore;
 
-        CREATE INDEX relations_tags_idx
+        CREATE INDEX IF NOT EXISTS relations_tags_idx
         ON osm.relations
         USING gist(tags);
         ANALYZE osm.relations;

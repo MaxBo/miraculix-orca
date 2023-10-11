@@ -111,8 +111,11 @@ class Extract(DBApp):
         self.create_foreign_server()
         self.create_serverside_folder()
 
-    def recreate_table(self, table: str, columns: list=None, target_schema: str=None,
-                       origin_schema: str=None, srid: int=None) -> bool:
+    def recreate_table(self, table: str, columns: list=None,
+                       target_schema: str = None,
+                       origin_table: str = None, origin_schema: str=None,
+                       geometries: list=['geom'], srid: int=None,
+                       primary_keys: list = None) -> bool:
         '''
         create table if not exists like origin table of same name in origin_schema
         (defaults to the temp schema) and converting geom to target srid,
@@ -121,12 +124,15 @@ class Extract(DBApp):
         '''
         target_schema = target_schema or self.schema
         origin_schema = origin_schema or self.temp_schema
+        origin_table = origin_table or table
 
         exists = self.conn.relation_exists(table, target_schema)
         if exists:
             self.truncate_table(table, target_schema)
         else:
-            self.create_table(table, target_schema, like=(table, origin_schema))
+            self.create_table(table, target_schema,
+                              like=(origin_table, origin_schema),
+                              primary_keys=primary_keys)
             self.new_tables.append(table)
         cols = self.conn.get_column_dict(table, target_schema)
         drop_columns = []
@@ -136,8 +142,9 @@ class Extract(DBApp):
                 sql = f'ALTER TABLE "{target_schema}"."{table}" '
                 sql += ','.join(f'DROP COLUMN "{c}"' for c in drop_columns) + ';'
                 self.run_query(sql, conn=self.conn)
-        if 'geom' in cols and 'geom' not in drop_columns:
-            self.update_srid(table, target_schema, self.target_srid)
+        for geom in geometries:
+            if geom in cols and geom not in drop_columns:
+                self.update_srid(table, target_schema, self.target_srid, geom=geom)
         return exists
 
     def extract(self):
@@ -573,13 +580,19 @@ class Extract(DBApp):
                 self.logger.info(f'Skip View "{table}"')
                 continue
             self.logger.info(f'Copying table "{table}" to {schema}.{table}')
-            sql = f'''
-            DROP TABLE IF EXISTS {schema}.{table};
-            CREATE TABLE {schema}.{table} (LIKE {temp_schema}.{table}
-            INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING DEFAULTS);
-            INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};
-            '''
-            self.run_query(sql, conn=conn)
+            if not self.conn.relation_exists(table, schema):
+                sql = f'''
+                CREATE TABLE {schema}.{table} (LIKE {temp_schema}.{table}
+                INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING DEFAULTS);
+                '''
+                self.run_query(sql, conn=conn)
+                self.new_tables.append(table)
+            else:
+                self.truncate_table(table, schema)
+                f'''
+                INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};
+                '''
+                self.run_query(sql, conn=conn)
 
             description = self.get_description(
                 table, self.foreign_schema or schema, foreign=True)
@@ -589,7 +602,8 @@ class Extract(DBApp):
                 '''
                 self.run_query(sql, conn=self.conn)
 
-        self.copy_constraints_and_indices(schema, tables)
+        nt = [t for t in tables if t in self.new_tables]
+        self.copy_constraints_and_indices(schema, nt)
         self.copy_layer_styles(schema, tables)
         self.cleanup(schema=temp_schema, conn=conn)
 
