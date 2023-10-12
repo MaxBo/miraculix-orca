@@ -575,11 +575,13 @@ class Extract(DBApp):
 
         sql = f'''CREATE SCHEMA IF NOT EXISTS {schema};'''
         self.run_query(sql, conn=conn)
+
         for table in tables:
             if skip_views and relkinds[table] == 'v':
                 self.logger.info(f'Skip View "{table}"')
                 continue
             self.logger.info(f'Copying table "{table}" to {schema}.{table}')
+
             if not self.conn.relation_exists(table, schema):
                 sql = f'''
                 CREATE TABLE {schema}.{table} (LIKE {temp_schema}.{table}
@@ -589,10 +591,15 @@ class Extract(DBApp):
                 self.new_tables.append(table)
             else:
                 self.truncate_table(table, schema)
-                f'''
-                INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};
-                '''
-                self.run_query(sql, conn=conn)
+
+
+            # disable constraint triggers during inserting data to avoid
+            # errors on (yet) non-existing foreign keys
+            sql = f'''
+            ALTER TABLE {schema}.{table} DISABLE TRIGGER ALL;
+            INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};
+            '''
+            self.run_query(sql, conn=conn)
 
             description = self.get_description(
                 table, self.foreign_schema or schema, foreign=True)
@@ -601,6 +608,13 @@ class Extract(DBApp):
                 COMMENT ON TABLE {schema}.{table} IS '{description}';
                 '''
                 self.run_query(sql, conn=self.conn)
+
+        # reenable the triggers
+        for table in tables:
+            sql = f'''
+            ALTER TABLE {schema}.{table} ENABLE TRIGGER ALL;
+            '''
+            self.run_query(sql, conn=conn)
 
         nt = [t for t in tables if t in self.new_tables]
         self.copy_constraints_and_indices(schema, nt)
