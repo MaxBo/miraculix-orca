@@ -411,10 +411,10 @@ FROM {self.temp}.{tn} t;
                     self.logger.info(f'granting access to schema "{schema}" to '
                                      f'user "{user}"')
                     sql = f'''
-                    GRANT USAGE ON SCHEMA {schema} TO {user};
-                    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA {schema} TO {user};
-                    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA {schema} TO {user};
-                    ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT INSERT, SELECT, UPDATE, DELETE, TRUNCATE ON TABLES TO {user};
+                    GRANT USAGE ON SCHEMA "{schema}" TO {user};
+                    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA "{schema}" TO {user};
+                    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA "{schema}" TO {user};
+                    ALTER DEFAULT PRIVILEGES IN SCHEMA "{schema}" GRANT INSERT, SELECT, UPDATE, DELETE, TRUNCATE ON TABLES TO {user};
                     '''
                     self.run_query(sql, conn)
 
