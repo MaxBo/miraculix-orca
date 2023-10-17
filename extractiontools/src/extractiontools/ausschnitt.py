@@ -133,6 +133,10 @@ class Extract(DBApp):
             self.create_table(table, target_schema,
                               like=(origin_table, origin_schema),
                               primary_keys=primary_keys)
+            cols = self.conn.get_column_dict(table, target_schema)
+            for geom in geometries:
+                if geom in cols:
+                    self.update_srid(table, target_schema, self.target_srid, geom=geom)
             self.new_tables.append(table)
         cols = self.conn.get_column_dict(table, target_schema)
         drop_columns = []
@@ -142,9 +146,6 @@ class Extract(DBApp):
                 sql = f'ALTER TABLE "{target_schema}"."{table}" '
                 sql += ','.join(f'DROP COLUMN "{c}"' for c in drop_columns) + ';'
                 self.run_query(sql, conn=self.conn)
-        for geom in geometries:
-            if geom in cols and geom not in drop_columns:
-                self.update_srid(table, target_schema, self.target_srid, geom=geom)
         return exists
 
     def extract(self):
