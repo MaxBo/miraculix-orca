@@ -27,7 +27,8 @@ default_login = Login(
 )
 
 
-@meta(group='(3) Networks', required=['extract_osm', 'extract_landuse'])
+@meta(group='(3) Netzwerk', required=['extract_osm', 'extract_landuse'],
+      title='Netzwerk Auto bauen')
 @orca.step()
 def build_network_car(database: str,
                       chunksize: int,
@@ -48,7 +49,10 @@ def build_network_car(database: str,
     build_network.build()
 
 
-@meta(group='(3) Networks', required=['extract_osm', 'extract_landuse'])
+@meta(group='(3) Netzwerk', required=['extract_osm', 'extract_landuse'],
+      title='abgestuftes Netzwerk Auto bauen', description='ein Netzwerk für '
+      'den Modus Auto bauen mit Abstufung in ein Gebiet mit feiner Auflösung '
+      'und ein größeres Gebiet mit grober Auflösung ')
 @orca.step()
 def build_graduated_network_car(database: str,
                                 chunksize: int,
@@ -74,7 +78,9 @@ def build_graduated_network_car(database: str,
     build_network.build()
 
 
-@meta(group='(3) Networks', required=['extract_osm', 'extract_landuse'])
+@meta(group='(3) Netzwerk', required=['extract_osm', 'extract_landuse'],
+      title='Netzwerk Fahrrad/zu Fuß bauen', description='ein Netzwerk für die '
+      'Modi Fahrrad und optional zu Fuß (Parameter) bauen')
 @orca.step()
 def build_network_fr(database: str,
                      chunksize: int,
@@ -102,7 +108,9 @@ def build_network_fr(database: str,
     build_network.build()
 
 
-@meta(group='(4) Public Transport', order=1, required='create_db')
+@meta(group='(4) ÖPNV', order=1, required='create_db',
+      title='Haltestellen extrahieren',
+      description='ÖPNV-Haltestellen aus der Quelldatenbank extrahieren')
 @orca.step()
 def extract_stops(database: str):
     """
@@ -112,7 +120,9 @@ def extract_stops(database: str):
     scrape.extract()
 
 
-@meta(group='(4) Public Transport', order=2, required='create_db')
+@meta(group='(4) ÖPNV', order=2, required='create_db',
+      title='Haltestellen scrapen', description='Zieht die Haltestellen von der '
+      'Deutsche Bahn-Website')
 @orca.step()
 def scrape_stops(database: str):
     """
@@ -122,7 +132,16 @@ def scrape_stops(database: str):
     scrape.scrape()
 
 
-@meta(group='(4) Public Transport', order=5, required='scrape_stops or extract_stops')
+@meta(group='(4) ÖPNV', order=5, required='scrape_stops or extract_stops',
+      title='schnellste Verbindungen suchen', description='Zieht die '
+      'schnellsten Verbindungen zwischen den Haltestellen und Zielpunkten von der Deutsche '
+      'Bahn-Website. Dabei werden alle Verbindungen am gegebenen Tag zu den gegebenen Uhrzeiten '
+      'zwischen allen zuvor gescrapten Haltestellen aus der Tabelle "haltestellen" als '
+      'Abfahrtsorte und den nächsten Haltestellen der Punkte der gegebenen '
+      'Tabelle innerhalb des gegebenen Radius als Zielorte abgefragt. Die Ergebnisse '
+      'werden in der Tabelle "db_{datum}_{Name der Tabelle mit den Zielen}" '
+      'in demselben Schema mit "H_ID" als Abfahrtshaltestellen, Primärschlüssel '
+      'der Zielhaltestellen und den schnellsten Verbindungen in Minuten.')
 @orca.step()
 def scrape_db_fastest_routes(database: str, destinations_db_routing: str,
                              date_db_routing: date, times_db_routing: List[int],
@@ -140,7 +159,11 @@ def scrape_db_fastest_routes(database: str, destinations_db_routing: str,
     routing.scrape(destinations_db_routing, max_distance=distance_db_routing)
 
 
-@meta(group='(4) Public Transport')
+@meta(group='(4) ÖPNV', title='Tabelle mit den Zielen',
+      description='Tabelle mit den Zielpunkten für das Scrapen der schnellsten '
+      'Verbindungen. Bitte Schema und Tabellenname angeben (Muster: '
+      '{Schemaname}.{Tabellenname}). Es muss ein einzelner(!) Schlüssel in der '
+      'Tabelle definiert sein')
 @orca.injectable()
 def destinations_db_routing() -> str:
     """destination table ({schema}.{tablename}) for DB routing.
@@ -149,7 +172,9 @@ def destinations_db_routing() -> str:
     return 'timetables.haltestellen'
 
 
-@meta(group='(4) Public Transport')
+@meta(group='(4) ÖPNV', title='Zielradius',
+      description='Maximale Distanz (Luftlinie in Metern) zwischen '
+      'Zielpunkten und der nächst gelegenen Haltestelle.')
 @orca.injectable()
 def distance_db_routing() -> int:
     """max. distance (beelines in meters) between origin
@@ -157,14 +182,16 @@ def distance_db_routing() -> int:
     return 1000000000
 
 
-@meta(group='(4) Public Transport')
+@meta(group='(4) ÖPNV', title='Datum (schnellste Verbindungen)',
+      description='Datum, für das die schnellsten Verbindungen gesucht werden')
 @orca.injectable()
 def date_db_routing() -> date:
     """date for the Deutsche Bahn routing"""
     return date.today()
 
 
-@meta(group='(4) Public Transport')
+@meta(group='(4) ÖPNV', title='Uhrzeiten', description='Uhrzeiten (volle Stunde!) '
+      'für die Suche nach den schnellsten Verbindungen')
 @orca.injectable()
 def times_db_routing() -> List[int]:
     """list of times (full hours) for the Deutsche Bahn routing on the day of
@@ -172,22 +199,26 @@ def times_db_routing() -> List[int]:
     return [9, 13, 17]
 
 
-@meta(group='(4) Public Transport')
+@meta(group='(4) ÖPNV', title='Datum (Zeittabellen)',
+      description='Datum für das die Zeittabellen gezogen werden')
 @orca.injectable()
 def date_timetable() -> date:
     """date for the timetable"""
     return date.today()
 
 
-@meta(group='(4) Public Transport')
+@meta(group='(4) ÖPNV', title='Zeittabellen überschreiben',
+      description='sollen die bestehenden Daten gelöscht (ja) '
+      'oder die neuen Daten angehängt werden (nein)')
 @orca.injectable()
 def recreate_timetable_tables() -> bool:
     """recreate tables for timetables"""
     return False
 
 
-@meta(group='(4) Public Transport', order=3,
-      required='scrape_stops or extract_stops')
+@meta(group='(4) ÖPNV', order=3, required='scrape_stops or extract_stops',
+      title='Zeittabellen scrapen', description='Zieht die Fahrten aller '
+      'Haltestellen von der Deutsche Bahn-Website')
 @orca.step()
 def scrape_timetables(database: str, source_db: str,
                       date_timetable: str,
@@ -201,21 +232,26 @@ def scrape_timetables(database: str, source_db: str,
     scrape.scrape()
 
 
-@meta(group='(4) Public Transport')
+@meta(group='(4) ÖPNV', title='GTFS für einen Tag',
+      description='Sollen die Fahrten nur in der GTFS nur für den einen Tag '
+      'gelten (ja) oder für alle Tage (nein)')
 @orca.injectable()
 def gtfs_only_one_day() -> bool:
     """gtfs valid only on the given day?"""
     return False
 
 
-@meta(group='(4) Public Transport')
+@meta(group='(4) ÖPNV', title='Kreise',
+      description='Tabelle mit den Geometrien der Kreise')
 @orca.injectable()
 def tbl_kreise() -> str:
     """table with the county geometries"""
     return 'verwaltungsgrenzen.krs_2018_12'
 
 
-@meta(group='(4) Public Transport', order=4, required=scrape_timetables)
+@meta(group='(4) ÖPNV', order=4, required=scrape_timetables,
+      title='Zeittabellen als GTFS',
+      description='Exportiert die Zeittabellen als GTFS-Dateien')
 @orca.step()
 def timetables_gtfs(database: str,
                     date_timetable: str,
@@ -370,7 +406,9 @@ def create_router(otp_routers: Dict[str, str],
         otp_server.create_router(build_folder, target_folder)
 
 
-@meta(group='(3) Network', editable_keys=True)
+@meta(group='(3) Netzwerk', editable_keys=True, title='Netzwerk-Layer',
+      description='Die Netzwerklayer, die in das korrespondierende Schema der '
+      'FGDB exportiert werden sollen')
 @orca.injectable()
 def network_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
@@ -383,7 +421,9 @@ def network_layers() -> Dict[str, str]:
     return layers
 
 
-@meta(group='(3) Network', editable_keys=True)
+@meta(group='(3) Netzwerk', editable_keys=True, title='Netzwerk-Layer Fuß/Fahrrad',
+      description='Die Netzwerklayer der Modi zu Fuß und Fahrrad, die in das korrespondierende Schema der '
+      'FGDB exportiert werden sollen')
 @orca.injectable()
 def network_fr_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
@@ -393,7 +433,7 @@ def network_fr_layers() -> Dict[str, str]:
     return layers
 
 
-@meta(group='(5) Export')
+@meta(group='(5) Export', hidden=True)
 @orca.injectable()
 def gdbname(database) -> str:
     """the name of the File Geodatabase"""
