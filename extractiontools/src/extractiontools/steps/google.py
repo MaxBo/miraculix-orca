@@ -7,7 +7,10 @@ from extractiontools.connection import Connection
 from extractiontools.utils.google_api import GooglePlacesAPI
 
 
-@meta(group='(7) Google', required='create_db')
+@meta(group='(7) Google', required='create_db', title='Google-Places-Suche',
+      description='Nach Standorten mit der Google-Places-API suchen. Standorte '
+      'sind in der Google-Places-API als Einrichtungen, geografische Orte oder '
+      'prominente Punkte von Interesse definiert.')
 @orca.step()
 def google_places(database: str, google_key: str, places_table: str,
                   places_type: str, places_keyword: str,

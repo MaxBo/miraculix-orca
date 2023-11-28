@@ -273,7 +273,9 @@ def timetables_gtfs(database: str,
     hafas.export_gtfs()
 
 
-@meta(group='(6) OTP', editable_keys=True)
+@meta(group='(6) OTP', editable_keys=True, title='Netzwerkordner',
+      description='Zuordnung der Schemata der Netzwerke (Schlüssel) zu '
+      'lokalen Unterordnern der PBF-Dateien auf dem Server (Werte)')
 @orca.injectable()
 def otp_networks() -> Dict[str, str]:
     """
@@ -286,7 +288,9 @@ def otp_networks() -> Dict[str, str]:
             }
 
 
-@meta(group='(5) Export', required=[build_network_car, build_network_fr])
+@meta(group='(5) Export', required=[build_network_car, build_network_fr],
+      title='Netzwerk nach PBF', description='Exportiert die Netzwerkdaten als '
+      'PBF-Dateien in die angegebenen Ordner')
 @orca.step()
 def copy_network_pbf(database: str,
                      otp_networks: Dict[str, str]):
@@ -299,7 +303,9 @@ def copy_network_pbf(database: str,
         copy2pbf.copy()
 
 
-@meta(group='(5) Export', required=[build_network_car, build_network_fr])
+@meta(group='(5) Export', required=[build_network_car, build_network_fr],
+      title='Netzwerk nach PBF und XML', description='Exportiert die '
+      'Netzwerkdaten als PBF- und XML-Dateien in die angegebenen Ordner')
 @orca.step()
 def copy_network_pbf_xml(database: str,
                          otp_networks: Dict[str, str]):
@@ -313,7 +319,10 @@ def copy_network_pbf_xml(database: str,
         copy2pbf.copy()
 
 
-@meta(group='(5) Export', required=[build_network_car, build_network_fr])
+@meta(group='(5) Export', required=[build_network_car, build_network_fr],
+      title='getaggted Netzwerk nach PBF und XML', description='Exportiert die '
+      'Netzwerkdaten getaggt mit Höhendaten als PBF- und XML-Dateien in die '
+      'angegebenen Ordner')
 @orca.step()
 def copy_tagged_nw_pbf_xml(database: str,
                            otp_networks: Dict[str, str]):
@@ -329,7 +338,8 @@ def copy_tagged_nw_pbf_xml(database: str,
         copy2pbf.copy()
 
 
-@meta(group='(6) OTP')
+@meta(group='(6) OTP', title='OTP-Ports',
+      description='Ports, auf denen OTP auf dem Server läuft')
 @orca.injectable()
 def otp_ports() -> Dict[str, int]:
     """A dict with the OTP Ports"""
@@ -337,14 +347,18 @@ def otp_ports() -> Dict[str, int]:
             'secure_port': 7788, }
 
 
-@meta(group='(6) OTP')
+@meta(group='(6) OTP', title='Graph-Ordner',
+      description='Unterordner auf dem Server, in dem die Graphen abgelegt '
+      'werden')
 @orca.injectable()
 def otp_graph_subfolder() -> str:
     """subfolder with the otp graphs"""
     return 'otp_graphs'
 
 
-@meta(group='(6) OTP')
+@meta(group='(6) OTP', title='Router-Ordner',
+      description='Unterordner auf dem Server, in dem die Router abgelegt '
+      'werden')
 @orca.injectable()
 def otp_routers(database) -> Dict[str, str]:
     """subfolder with the otp graphs"""
@@ -354,14 +368,16 @@ def otp_routers(database) -> Dict[str, str]:
     return routers
 
 
-@meta(group='(6) OTP')
+@meta(group='(6) OTP', title='OTP-Analyst',
+      description='OTP-Router inklusive Analyst (ja) oder ohne starten (nein)')
 @orca.injectable()
 def start_otp_analyst() -> bool:
     """start otp router with analyst"""
     return True
 
 
-@meta(group='(6) OTP', order=2)
+@meta(group='(6) OTP', order=2, title='OTP-Router starten',
+      description='OTP-Router an den gegebenen Ports starten')
 @orca.step()
 def start_otp_router(otp_ports: Dict[str, int],
                      base_path: str,
@@ -379,7 +395,8 @@ def start_otp_router(otp_ports: Dict[str, int],
     otp_server.start()
 
 
-@meta(group='(6) OTP', order=4)
+@meta(group='(6) OTP', order=4, title='OTP-Router stoppen',
+      description='OTP-Router stoppen')
 @orca.step()
 def stop_otp_router(otp_ports: Dict[str, int]):
     """Stop the running otp routers on the ports giben in `otp_ports`"""
@@ -388,7 +405,8 @@ def stop_otp_router(otp_ports: Dict[str, int]):
     otp_server.stop()
 
 
-@meta(group='(6) OTP', order=1)
+@meta(group='(6) OTP', order=1, title='OTP-Router erzeugen',
+      description='OTP-Router erzeugen')
 @orca.step()
 def create_router(otp_routers: Dict[str, str],
                   database: str,
@@ -422,8 +440,8 @@ def network_layers() -> Dict[str, str]:
 
 
 @meta(group='(3) Netzwerk', editable_keys=True, title='Netzwerk-Layer Fuß/Fahrrad',
-      description='Die Netzwerklayer der Modi zu Fuß und Fahrrad, die in das korrespondierende Schema der '
-      'FGDB exportiert werden sollen')
+      description='Die Netzwerklayer der Modi zu Fuß und Fahrrad, die in das '
+      'korrespondierende Schema der FGDB exportiert werden sollen')
 @orca.injectable()
 def network_fr_layers() -> Dict[str, str]:
     """the network layers to export to the corresponding schema in a FGDB"""
@@ -440,7 +458,9 @@ def gdbname(database) -> str:
     return f'{database}.gdb'
 
 
-@meta(group='(5) Export', required=build_network_car)
+@meta(group='(5) Export', required=build_network_car,
+      title='Netzwerk Auto nach FGDB', description='Exportiert das '
+      'Netzwerk Auto in eine FGDB-Datei')
 @orca.step()
 def copy_network_car_fgdb(database: str,
                           network_layers: Dict[str, str]):
@@ -452,7 +472,9 @@ def copy_network_car_fgdb(database: str,
     copy2fgdb.copy_layers('FileGDB')
 
 
-@meta(group='(5) Export', required=build_network_fr)
+@meta(group='(5) Export', required=build_network_fr,
+      title='Netzwerk Fahrrad/zu Fuß nach FGDB', description='Exportiert das '
+      'Netzwerk Fahrrad/zu Fuß in eine FGDB-Datei')
 @orca.step()
 def copy_network_fr_fgdb(database: str,
                          network_fr_layers: Dict[str, str]):

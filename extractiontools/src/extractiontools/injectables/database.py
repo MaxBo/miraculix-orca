@@ -383,7 +383,14 @@ def places_type() -> str:
     return 'no restriction'
 
 
-@meta(group='(7) Google Places', title='Places-Suchradius')
+@meta(group='(7) Google Places', title='Places-Suchradius',
+      description='Suchradius pro Google-Places-Abfrage in Metern '
+      '(max. 50000 Meter). Das Projektgebiet wird in mehrere Abschnitte '
+      'unterteilt, um es komplett mit Kreisen mit dem definierten Radius '
+      'abdecken zu können. Je kleiner der Radius, desto mehr Abfragen müssen '
+      'durchgeführt werden. <br>Grund für dieses Vorgehen ist, dass die Places-API '
+      '<b>max. 60 Features pro Abfrage</b> zurückliefert. Wenn du viele '
+      'Features in der Suche erwartest, setze den Radius entsprechend klein')
 @orca.injectable()
 def places_search_radius() -> int:
     '''Search radius per Google Places query in meters (max. 50000 meters).
