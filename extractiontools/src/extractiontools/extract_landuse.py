@@ -80,6 +80,14 @@ class ExtractLanduse(Extract):
             st_intersects(c.geom, tb.source_geom)) AS a(code, id, remark, geom)
             """
             self.run_query(sql, conn=self.conn)
+
+            # cleanup corine data
+            sel = f"""
+            UPDATE {self.schema}.{corine}
+            SET geom = st_makevalid(geom)
+            WHERE NOT st_isvalid(geom);
+            """
+            self.run_query(sql, conn=self.conn)
         self.copy_layer_styles(schema='landuse', tables=self.corine)
 
     def get_corine_raster_name(self, corine):
