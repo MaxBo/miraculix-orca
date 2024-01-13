@@ -81,7 +81,7 @@ class ExtractLanduse(Extract):
             """
             self.run_query(sql, conn=self.conn)
 
-            self.logger.info(f'clean invalid geometries for'
+            self.logger.info(f'clean invalid geometries for '
                              f'{self.schema}.{corine}')
             # cleanup corine data
             sql = f"""
