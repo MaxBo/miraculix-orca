@@ -27,7 +27,7 @@ def create_db(target_srid: str, project_area: ogr.Geometry, database: str):
 
 
 @meta(group='(1) Project', order=2, title='Datenbank löschen',
-      description='Zieldatenbank und ihre Inhalte löschen.')
+      description='Löscht Zieldatenbank und ihre Inhalte komplett.')
 @orca.step()
 def drop_db(database: str):
     """
