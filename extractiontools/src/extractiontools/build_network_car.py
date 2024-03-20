@@ -82,11 +82,11 @@ class BuildNetwork(DBApp):
             self.create_edge_reached()
             self.conn.commit()
             # search accessible links including links reached by planned roads
-            self.try_startvertices(n=20)
+            self.try_startvertices(n=20, k=20)
             self.copy_edge_reached_with_planned()
             # search links accessible only by existing roads
             self.update_edge_table_with_construction()
-            self.try_startvertices(n=20)
+            self.try_startvertices(n=20, k=20)
 
             # create the final views
             self.create_view_accessible_links()
