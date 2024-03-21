@@ -273,14 +273,15 @@ def timetables_gtfs(database: str,
     hafas.export_gtfs()
 
 
-@meta(group='(4) ÖPNV', description='GTFS-Inputdatei')
+@meta(group='(4) ÖPNV', title='GTFS-Inputdatei',
+      description='GTFS-Datei mit Feed, der verschnitten werden soll')
 @orca.injectable()
 def gtfs_input() -> str:
     """gtfs input file"""
     return r'/root/gis/gtfsde_latest.zip'
 
 
-@meta(group='(4) ÖPNV', order=6, required=scrape_timetables,
+@meta(group='(4) ÖPNV', order=6, title='GTFS verschneiden',
       description='Verschneide Feed aus GTFS-Datei mit dem Projektgebiet und '
       'gebe ihn als GTFS-Datei wieder aus')
 @orca.step()
