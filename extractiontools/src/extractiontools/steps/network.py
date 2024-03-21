@@ -250,8 +250,7 @@ def tbl_kreise() -> str:
     return 'verwaltungsgrenzen.krs_2018_12'
 
 
-@meta(group='(4) ÖPNV', order=4, required=scrape_timetables,
-      title='Zeittabellen als GTFS',
+@meta(group='(4) ÖPNV', order=4, title='Zeittabellen als GTFS',
       description='Exportiert die Zeittabellen als GTFS-Dateien')
 @orca.step()
 def timetables_gtfs(database: str,
@@ -274,14 +273,14 @@ def timetables_gtfs(database: str,
     hafas.export_gtfs()
 
 
-@meta(group='(4) Public Transport', description='GTFS-Inputdatei')
+@meta(group='(4) ÖPNV', description='GTFS-Inputdatei')
 @orca.injectable()
 def gtfs_input() -> str:
     """gtfs input file"""
-    return r'~/gis/gtfsde_latest.zip'
+    return r'/root/gis/gtfsde_latest.zip'
 
 
-@meta(group='(4) Public Transport', order=6, required=scrape_timetables,
+@meta(group='(4) ÖPNV', order=6, required=scrape_timetables,
       description='Verschneide Feed aus GTFS-Datei mit dem Projektgebiet und '
       'gebe ihn als GTFS-Datei wieder aus')
 @orca.step()
