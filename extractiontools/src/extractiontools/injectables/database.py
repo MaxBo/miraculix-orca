@@ -206,7 +206,7 @@ def corine() -> List[str]:
 @orca.injectable()
 def base_path() -> str:
     """The basepath on the Miraculix-Server where the data is exported to"""
-    return r'~/gis/projekte'
+    return r'/root/gis/projekte'
 
 
 @meta(group='(5) Export', title='TIFF-Ordner', description='Unterordner des '

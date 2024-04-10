@@ -17,6 +17,7 @@ from extractiontools.hafasdb2gtfs import HafasDB2GTFS
 from extractiontools.network2pbf import CopyNetwork2Pbf, CopyNetwork2PbfTagged
 from extractiontools.stop_otp_router import OTPServer
 from extractiontools.copy2fgdb import Copy2FGDB
+from extractiontools.extract_gtfs import ExtractGTFS
 from typing import List
 
 default_login = Login(
@@ -249,8 +250,7 @@ def tbl_kreise() -> str:
     return 'verwaltungsgrenzen.krs_2018_12'
 
 
-@meta(group='(4) ÖPNV', order=4, required=scrape_timetables,
-      title='Zeittabellen als GTFS',
+@meta(group='(4) ÖPNV', order=4, title='Zeittabellen als GTFS',
       description='Exportiert die Zeittabellen als GTFS-Dateien')
 @orca.step()
 def timetables_gtfs(database: str,
@@ -272,6 +272,31 @@ def timetables_gtfs(database: str,
     hafas.convert()
     hafas.export_gtfs()
 
+
+@meta(group='(4) ÖPNV', title='GTFS-Inputdatei',
+      description='GTFS-Datei mit Feed, der verschnitten werden soll')
+@orca.injectable()
+def gtfs_input() -> str:
+    """gtfs input file"""
+    return r'/root/gis/gtfsde_latest.zip'
+
+
+@meta(group='(4) ÖPNV', order=6, title='GTFS verschneiden',
+      description='Verschneide Feed aus GTFS-Datei mit dem Projektgebiet und '
+      'gebe ihn als GTFS-Datei wieder aus')
+@orca.step()
+def extract_gtfs(database: str,
+                 base_path: str,
+                 subfolder_otp: str,
+                 gtfs_input: str,
+                 project_area: 'ogr.Geometry'):
+    """
+    Intersect Feed from GTFS file with project area and write clipped GTFS file
+    """
+    out_path = os.path.join(base_path, database,subfolder_otp)
+    extract = ExtractGTFS(project_area, gtfs_input, out_path,
+                          logger=orca.logger)
+    extract.extract()
 
 @meta(group='(6) OTP', editable_keys=True, title='Netzwerkordner',
       description='Zuordnung der Schemata der Netzwerke (Schlüssel) zu '
