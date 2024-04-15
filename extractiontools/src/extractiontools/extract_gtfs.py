@@ -24,5 +24,13 @@ class ExtractGTFS():
         area = gp.GeoDataFrame(geometry=gp.GeoSeries.from_wkt([wkt], crs=4326))
         feed = gk.read_feed(self.gtfs_input, dist_units='km')
         clip = gk.miscellany.restrict_to_area(feed, area)
+        del(feed)
+        # restrict_to_area keeps too many stops -> manually removing them
+        # if not in stop times
+        timetable = clip.get_stop_times()
+        stop_ids_in_tt = timetable['stop_id'].unique()
+        stops = clip.get_stops()
+        is_in_tt = stops['stop_id'].isin(stop_ids_in_tt)
+        clip.stops = stops[is_in_tt]
         self.logger.info(f'Schreibe beschnittenen Feed nach {self.gtfs_output}')
         clip.write(self.gtfs_output)
