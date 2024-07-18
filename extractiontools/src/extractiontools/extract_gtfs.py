@@ -14,7 +14,7 @@ class ExtractGTFS():
         """"""
         self.gtfs_input = gtfs_input
         self.out_path = out_path
-        self.gtfs_output = os.path.join(out_path, 'gtfs_clipped.zip')
+        self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.project_area = project_area
         self.logger = logger or logging.getLogger(self.__module__)
 
@@ -31,6 +31,10 @@ class ExtractGTFS():
         stop_ids_in_tt = timetable['stop_id'].unique()
         stops = clip.get_stops()
         is_in_tt = stops['stop_id'].isin(stop_ids_in_tt)
-        clip.stops = stops[is_in_tt]
+        clipped_stops = stops[is_in_tt]
+        # keep the parent stations as well
+        parent_ids = clipped_stops['parent_station']
+        are_parents = stops['stop_id'].isin(parent_ids)
+        clip.stops = stops[is_in_tt | are_parents]
         self.logger.info(f'Schreibe beschnittenen Feed nach {self.gtfs_output}')
         clip.write(self.gtfs_output)
