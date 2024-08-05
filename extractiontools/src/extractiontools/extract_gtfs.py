@@ -38,6 +38,7 @@ class ExtractGTFS():
         self.logger.info(f'Lade Feed aus der GTFS-Datei {self.gtfs_input}')
         area = gp.GeoDataFrame(geometry=gp.GeoSeries.from_wkt([wkt], crs=4326))
         feed = gk.read_feed(self.gtfs_input, dist_units='km')
+        self.logger.info(f'Beschneide Feed')
         clip = gk.miscellany.restrict_to_area(feed, area)
         del(feed)
         self.logger.info('Entferne unbenutzte Stops')
