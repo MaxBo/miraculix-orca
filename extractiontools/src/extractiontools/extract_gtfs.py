@@ -2,6 +2,7 @@ import gtfs_kit as gk
 import geopandas as gp
 import logging
 import os
+import math
 
 '''
 0 - Tram, Streetcar, Light rail. Any light rail or street level system within a metropolitan area.
@@ -27,8 +28,8 @@ class ExtractGTFS():
         """"""
         self.gtfs_input = gtfs_input
         self.out_path = out_path
-        #self.out_path = "D:\\Downloads"
-        #self.gtfs_input = os.path.join(self.out_path, 'gtfsde_latest.zip')
+        self.out_path = "D:\\Downloads"
+        self.gtfs_input = os.path.join(self.out_path, 'gtfsde_latest.zip')
         self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.project_area = project_area
         self.logger = logger or logging.getLogger(self.__module__)
@@ -72,14 +73,17 @@ class ExtractGTFS():
                          'Namen und Routentypen zusammen '
                          '(ausgenommen aufeinanderfolgende Stops) ')
         # find stations roughly at same location with same name and serving
-        # same route type
-        typed_stops['stop_lat_rnd'] = (typed_stops['stop_lat'] * 100
-                                       ).apply(round) / 100
-        typed_stops['stop_lon_rnd'] = (typed_stops['stop_lon'] * 100
-                                       ).apply(round) / 100
-        # should get the duplicated rows without the original line with
-        # lowest stop id to keep because sorted by stop_id
-        subset = ['stop_name', 'route_type', 'stop_lat_rnd', 'stop_lon_rnd']
+        # same route type by putting lat/lon in seperate classes formed by 0.01
+        # differences
+        typed_stops = typed_stops.sort_values('stop_lat')
+        typed_stops['lat_cl'] = typed_stops[
+            'stop_lat'].diff().fillna(0).abs().gt(0.01).cumsum().values
+        typed_stops = typed_stops.sort_values('stop_lon')
+        typed_stops['lon_cl'] = typed_stops[
+            'stop_lon'].diff().fillna(0).abs().gt(0.01).cumsum().values
+
+        typed_stops = typed_stops.sort_values('stop_int')
+        subset = ['stop_name', 'route_type', 'lat_cl', 'lon_cl']
         duplicated = typed_stops[typed_stops.duplicated(
             subset=subset, keep='first')]
         # merge stops without the duplicated ones (= with first rows of
@@ -103,7 +107,8 @@ class ExtractGTFS():
                ~(tt['stop_id'] == tt['next_stop_id'])]
         # exclude those stops from merging with other stops
         excluded_merge = chained_dup['stop_id'].unique()
-        stops_to_remove = duplicated[~(duplicated['stop_id'].isin(excluded_merge))]
+        stops_to_remove = duplicated[
+            ~(duplicated['stop_id'].isin(excluded_merge))]
         remove_ids = stops_to_remove['stop_id']
         # remove duplicated stops
         revised_stops = typed_stops.drop(
@@ -142,14 +147,34 @@ class ExtractGTFS():
         revised_stops.loc[revised_stops['parent_id_revised'].isna(),
                           'parent_id_revised'] = revised_stops['parent_station']
 
-        clip.stops = revised_stops.drop(
-            columns=['stop_int', 'stop_lat_rnd', 'stop_lon_rnd',
-                     'parent_id_revised'])
-        clip.stop_times = tt_revised.drop(columns='stop_id_revised')
 
-        # ToDo: identify and slightly move split stops
+        self.logger.info('Versetze Stops mit gleicher ID und gleichen Koordinaten')
+        # identify stops at same position with same id and scatter them slightly
         duplicated = revised_stops[revised_stops.duplicated(
-            subset='stop_id', keep=False)]
+            subset=['stop_id'], keep=False)]
+        grp = duplicated.groupby('stop_id')
+        duplicated['grp_idx'] = grp.cumcount()
+        duplicated = duplicated.reset_index().merge(
+            grp.size().reset_index(name='grp_count'),
+            on='stop_id', how='left').set_index('index')
+        shift_x_y = 0.0001
+        duplicated['shift_angle'] = ((2 * math.pi) / duplicated['grp_count'] *
+                                     duplicated['grp_idx'])
+        duplicated['stop_lat_shifted'] = (
+            duplicated['stop_lat'] +
+            duplicated['shift_angle'].apply(math.sin) * shift_x_y)
+        duplicated['stop_lon_shifted'] = (
+            duplicated['stop_lon'] +
+            duplicated['shift_angle'].apply(math.cos) * shift_x_y)
+
+        revised_stops.loc[duplicated.index,
+                          'stop_lat'] = duplicated['stop_lat_shifted']
+        revised_stops.loc[duplicated.index,
+                          'stop_lon'] = duplicated['stop_lon_shifted']
+
+        clip.stops = revised_stops.drop(
+            columns=['stop_int', 'lat_cl', 'lon_cl', 'parent_id_revised'])
+        clip.stop_times = tt_revised.drop(columns='stop_id_revised')
 
         self.logger.info(f'Schreibe verarbeiteten Feed nach {self.gtfs_output}')
         clip.write(self.gtfs_output)
