@@ -60,10 +60,11 @@ class ExtractGTFS():
 
         self.logger.info('Finde Routentypen und spalte Stops nach '
                          'Routentypen auf')
-        tr = clip.trips.merge(clip.routes, how='left', on='route_id')
+        tr = clip.get_trips().merge(clip.routes, how='left', on='route_id')
+        tt_with_rt = clip.get_stop_times().merge(tr[['trip_id', 'route_type']],
+                                                 how='left', on='trip_id')
         # stops with all route types stopping there
-        st = (clip.stop_times.merge(tr, how='left', on='trip_id')
-              [['stop_id', 'route_type']]).drop_duplicates()
+        st = tt_with_rt[['stop_id', 'route_type']].drop_duplicates()
         st['route_type'] = st['route_type'].astype(int)
         typed_stops = stops.merge(st, how='left', on='stop_id')
         typed_stops['stop_int'] = typed_stops['stop_id'].astype(int)
@@ -126,19 +127,20 @@ class ExtractGTFS():
         revised_stops['type_stop_id'] = new_ids
 
         # replace removed ids in timetable and stops with remaining ones
-        timetable = clip.get_stop_times()
         reassign_map = dict(zip(stops_to_remove['stop_id'],
                                 stops_to_remove['stop_id_remain']))
-        timetable['stop_id_revised'] = timetable['stop_id'].map(reassign_map)
-        timetable.loc[timetable['stop_id_revised'].isna(),
-                      'stop_id_revised'] = timetable['stop_id']
-        timetable['stop_id'] = timetable['stop_id_revised']
+        tt_with_rt['stop_id_revised'] = tt_with_rt['stop_id'].map(reassign_map)
+        tt_with_rt.loc[tt_with_rt['stop_id_revised'].isna(),
+                      'stop_id_revised'] = tt_with_rt['stop_id']
+        tt_with_rt['stop_id'] = tt_with_rt['stop_id_revised']
         #for i, row in stops_to_remove.iterrows():
             #timetable.loc[timetable['stop_id'] == row.stop_id,
                           #'stop_id'] = row.stop_id_remain
         # adding new stop ids
-        tt_revised = timetable.merge(revised_stops[['stop_id', 'type_stop_id']],
-                                     how='left', on='stop_id')
+        tt_revised = tt_with_rt.merge(
+            revised_stops[['stop_id', 'type_stop_id', 'route_type']].drop_duplicates(),
+            how='left', on=['stop_id', 'route_type'])
+        tt_revised = tt_revised.sort_values(['trip_id', 'stop_sequence'])
 
         # same with parent ids in stops (don't know if it can even happen
         # that parents are duplicated)
@@ -174,7 +176,8 @@ class ExtractGTFS():
 
         clip.stops = revised_stops.drop(
             columns=['stop_int', 'lat_cl', 'lon_cl', 'parent_id_revised'])
-        clip.stop_times = tt_revised.drop(columns='stop_id_revised')
+        clip.stop_times = tt_revised.drop(
+            columns=['stop_id_revised', 'route_type'])
 
         self.logger.info(f'Schreibe verarbeiteten Feed nach {self.gtfs_output}')
         clip.write(self.gtfs_output)
