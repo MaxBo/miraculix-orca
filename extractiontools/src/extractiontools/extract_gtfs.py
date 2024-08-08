@@ -149,7 +149,7 @@ class ExtractGTFS():
         revised_stops.loc[revised_stops['parent_id_revised'].isna(),
                           'parent_id_revised'] = revised_stops['parent_station']
 
-
+        revised_stops['parent_station'] = revised_stops['parent_id_revised']
         self.logger.info('Versetze Stops mit gleicher ID und gleichen Koordinaten')
         # identify stops at same position with same id and scatter them slightly
         duplicated = revised_stops[revised_stops.duplicated(
