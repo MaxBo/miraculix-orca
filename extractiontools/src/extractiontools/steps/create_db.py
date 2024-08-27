@@ -12,7 +12,8 @@ __parent_modules__ = [
 @meta(group='(1) Project', order=1, title='Datenbank erstellen',
       description='Erstellen der Zieldatenbank.')
 @orca.step()
-def create_db(target_srid: str, project_area: ogr.Geometry, database: str):
+def create_db(target_srid: str, project_area: ogr.Geometry, database: str,
+              db_status):
     """
     (re)create the target database
     and copy the selected files
@@ -29,7 +30,7 @@ def create_db(target_srid: str, project_area: ogr.Geometry, database: str):
 @meta(group='(1) Project', order=2, title='Datenbank löschen',
       description='Löscht Zieldatenbank und ihre Inhalte komplett.')
 @orca.step()
-def drop_db(database: str):
+def drop_db(database: str, db_status):
     """
     drop the database and its contents
     """
