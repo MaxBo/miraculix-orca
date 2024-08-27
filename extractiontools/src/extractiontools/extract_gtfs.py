@@ -230,6 +230,8 @@ class ExtractGTFS():
         tt_revised.rename(columns={'type_stop_id': 'stop_id'}, inplace=True)
         tt_revised = tt_revised.sort_values(['trip_id', 'stop_sequence'])
 
+        # ToDo: remove unused parent stations
+
         self.logger.info('Versetze Stops mit gleicher ID und '
                          'gleichen Koordinaten')
         # stops with same original id indicate that they are split and at same

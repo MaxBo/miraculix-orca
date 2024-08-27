@@ -5,8 +5,18 @@ import os
 import re
 
 from extractiontools.connection import Login, Connection
-from orcadjango.decorators import meta
 from extractiontools.utils.google_api import GooglePlacesAPI
+
+try:
+    from orcadjango.decorators import meta
+except:
+    def meta(**kwargs):
+        '''
+        mockup decorator if extractiontools are used outside of orcadjango
+        '''
+        def decorator(func):
+            pass
+        return decorator
 
 
 def create_foreign_login(database='postgres'):
@@ -68,6 +78,38 @@ def database() -> str:
     return ''
 
 
+@meta(group='(1) Projekt', refresh='always', order=2,
+      title='Datenbankstatus', description='Status der Datenbank')
+@orca.injectable()
+def db_status(database) -> dict:
+    if not database:
+        return  {'existiert': False}
+    login = create_login()
+    status = {}
+    with Connection(login=login) as conn:
+        cursor = conn.cursor()
+        sql = 'SELECT datname FROM pg_catalog.pg_database WHERE datname = %s;'
+        cursor = conn.cursor()
+        cursor.execute(sql, (database, ))
+        rows = cursor.fetchall()
+        exists = len(rows) > 0
+        status['existiert'] = exists
+        if exists:
+            sql = 'SELECT pg_size_pretty(pg_database_size(%s));'
+            cursor.execute(sql, (database, ))
+            r = cursor.fetchone()
+            status['Datenbankgröße'] = r.pg_size_pretty
+    if exists:
+        login.db = database
+        with Connection(login=login) as conn:
+            sql = 'select schema_name from information_schema.schemata;'
+            cursor = conn.cursor()
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            status['Schemas'] = ', '.join([r.schema_name for r in rows])
+    return status
+
+
 @meta(hidden=True, refresh='always')
 @orca.injectable()
 def user_choices(source_db) -> List[str]:
@@ -80,7 +122,7 @@ def user_choices(source_db) -> List[str]:
     return [r.rolname for r in rows if not r.rolname.startswith('pg_')]
 
 
-@meta(group='(1) Projekt', order=4, choices=user_choices,
+@meta(group='(1) Projekt', order=6, choices=user_choices,
       title='Datenbanknutzer:innen', description='Diesen Nutzer:innen wird Zugriff auf '
       'die Datenbank und ihre Tabellen gewährt. Die Auswahl beschränkt sich '
       'auf bereits angelegte Rollen.')
@@ -101,7 +143,7 @@ def dummy_polygon():
     return geom
 
 
-@meta(group='(1) Projekt', order=3,
+@meta(group='(1) Projekt', order=4,
       title='Projektgebiet',
       description='Das Projektgebiet. Die Daten werden auf dieses '
       'Gebiet zugeschnitten.')
@@ -111,7 +153,7 @@ def project_area() -> ogr.Geometry:
     return None
 
 
-@meta(group='(1) Projekt', order=2, title='Projektion',
+@meta(group='(1) Projekt', order=3, title='Projektion',
       description='EPSG-Code des Koordinatenreferenzsystems, in das alle '
       'Geodaten transformiert werden, die in der Zieldatenbank abgelegt werden.')
 @orca.injectable()
@@ -120,7 +162,7 @@ def target_srid() -> int:
     return 25832
 
 
-@meta(group='(1) Projekt', order=4, choices=['europe'], title='Quelldatenbank',
+@meta(group='(1) Projekt', order=5, choices=['europe'], title='Quelldatenbank',
       description='Der Name der Datenbank, aus der die Daten extrahiert werden.')
 @orca.injectable()
 def source_db() -> str:
