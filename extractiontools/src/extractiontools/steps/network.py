@@ -284,7 +284,7 @@ def local_gtfs_files() -> List[str]:
 
 @meta(group='(4) ÖPNV', title='GTFS-Inputdatei',
       description='GTFS-Datei mit Feed, der verschnitten werden soll',
-      choices=local_gtfs_files)
+      choices=local_gtfs_files, scope='step')
 @orca.injectable()
 def gtfs_input() -> str:
     """gtfs input file"""
