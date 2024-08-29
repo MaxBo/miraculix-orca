@@ -2,6 +2,7 @@
 
 from typing import Dict
 import os
+import glob
 import orca
 from osgeo import ogr
 from datetime import date
@@ -272,13 +273,22 @@ def timetables_gtfs(database: str,
     hafas.convert()
     hafas.export_gtfs()
 
+GTFS_DIR = r'/root/gis/gtfs'
+
+@meta(hidden=True, refresh='always')
+@orca.injectable()
+def local_gtfs_files() -> List[str]:
+    fns = glob.glob(os.path.join(GTFS_DIR, '*.zip'))
+    return [os.path.join(GTFS_DIR, fn) for fn in fns]
+
 
 @meta(group='(4) ÖPNV', title='GTFS-Inputdatei',
-      description='GTFS-Datei mit Feed, der verschnitten werden soll')
+      description='GTFS-Datei mit Feed, der verschnitten werden soll',
+      choices=local_gtfs_files)
 @orca.injectable()
 def gtfs_input() -> str:
     """gtfs input file"""
-    return r'/root/gis/gtfsde_latest.zip'
+    return r'/root/gis/gtfs/gtfsde_latest.zip'
 
 
 @meta(group='(4) ÖPNV', order=6, title='GTFS verschneiden',
