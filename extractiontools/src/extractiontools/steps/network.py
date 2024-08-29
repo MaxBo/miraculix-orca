@@ -278,8 +278,8 @@ GTFS_DIR = r'/root/gis/gtfs'
 @meta(hidden=True, refresh='always')
 @orca.injectable()
 def local_gtfs_files() -> List[str]:
-    fns = glob.glob(os.path.join(GTFS_DIR, '*.zip'))
-    return fns
+    fps = glob.glob(os.path.join(GTFS_DIR, '*.zip'))
+    return [os.path.split(fp)[-1] for fp in fps]
 
 
 @meta(group='(4) ÖPNV', title='GTFS-Inputdatei',
