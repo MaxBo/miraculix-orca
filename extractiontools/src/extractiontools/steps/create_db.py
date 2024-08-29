@@ -9,7 +9,7 @@ __parent_modules__ = [
 ]
 
 
-@meta(group='(1) Project', order=1, title='Datenbank erstellen',
+@meta(group='(1) Projekt', order=1, title='Datenbank erstellen',
       description='Erstellen der Zieldatenbank.')
 @orca.step()
 def create_db(target_srid: str, project_area: ogr.Geometry, database: str,
@@ -27,7 +27,7 @@ def create_db(target_srid: str, project_area: ogr.Geometry, database: str,
     extract.update_boundaries()
 
 
-@meta(group='(1) Project', order=2, title='Datenbank löschen',
+@meta(group='(1) Projekt', order=2, title='Datenbank löschen',
       description='Löscht Zieldatenbank und ihre Inhalte komplett.')
 @orca.step()
 def drop_db(database: str, db_status):
@@ -38,7 +38,7 @@ def drop_db(database: str, db_status):
     extract.extract()
 
 
-@meta(group='(1) Project', order=3, requires=create_db, title='Zugriff gewähren',
+@meta(group='(1) Projekt', order=3, requires=create_db, title='Zugriff gewähren',
       description='''Gewährt <b>Lese- und Schreibrechte</b> in der Zieldatenbank für
       ausgewählte Nutzer:innen. Dies wirkt sich nur auf <b>bestehende Schemata</b> aus.
       Der Schritt sollte daher zum Schluss ausgeführt werden. <br>
