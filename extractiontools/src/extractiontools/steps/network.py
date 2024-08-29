@@ -279,7 +279,7 @@ GTFS_DIR = r'/root/gis/gtfs'
 @orca.injectable()
 def local_gtfs_files() -> List[str]:
     fns = glob.glob(os.path.join(GTFS_DIR, '*.zip'))
-    return [os.path.join(GTFS_DIR, fn) for fn in fns]
+    return fns
 
 
 @meta(group='(4) ÖPNV', title='GTFS-Inputdatei',
@@ -288,7 +288,7 @@ def local_gtfs_files() -> List[str]:
 @orca.injectable()
 def gtfs_input() -> str:
     """gtfs input file"""
-    return r'/root/gis/gtfs/gtfsde_latest.zip'
+    return r'gtfsde_latest.zip'
 
 
 @meta(group='(4) ÖPNV', order=6, title='GTFS verschneiden',
@@ -303,8 +303,9 @@ def extract_gtfs(database: str,
     """
     Intersect Feed from GTFS file with project area and write clipped GTFS file
     """
-    out_path = os.path.join(base_path, database,subfolder_otp)
-    extract = ExtractGTFS(project_area, gtfs_input, out_path,
+    out_path = os.path.join(base_path, database, subfolder_otp)
+    gtfs_path = os.path.join(GTFS_DIR, gtfs_input)
+    extract = ExtractGTFS(project_area, gtfs_path, out_path,
                           logger=orca.logger)
     extract.extract()
 
