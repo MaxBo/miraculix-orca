@@ -134,8 +134,8 @@ def scrape_stops(database: str):
     scrape.scrape()
 
 
-@meta(group='(4) ÖPNV', order=5, required='scrape_stops or extract_stops',
-      title='schnellste Verbindungen suchen', description='Zieht die '
+@meta(group='(4) ÖPNV', order=5, required=['scrape_stops', 'extract_stops'],
+      title='Schnellste Verbindungen suchen', description='Zieht die '
       'schnellsten Verbindungen zwischen den Haltestellen und Zielpunkten von der Deutsche '
       'Bahn-Website. Dabei werden alle Verbindungen am gegebenen Tag zu den gegebenen Uhrzeiten '
       'zwischen allen zuvor gescrapten Haltestellen aus der Tabelle "haltestellen" als '
@@ -143,7 +143,9 @@ def scrape_stops(database: str):
       'Tabelle innerhalb des gegebenen Radius als Zielorte abgefragt. Die Ergebnisse '
       'werden in der Tabelle "db_{datum}_{Name der Tabelle mit den Zielen}" '
       'in demselben Schema mit "H_ID" als Abfahrtshaltestellen, Primärschlüssel '
-      'der Zielhaltestellen und den schnellsten Verbindungen in Minuten.')
+      'der Zielhaltestellen und den schnellsten Verbindungen in Minuten. <br> '
+      '<b>Einer</b> der beiden Schritte ("scrape_stops" oder "extract_stops") '
+      'muss vorher ausgeführt worden sein (nicht beide)')
 @orca.step()
 def scrape_db_fastest_routes(database: str, destinations_db_routing: str,
                              date_db_routing: date, times_db_routing: List[int],
@@ -218,9 +220,11 @@ def recreate_timetable_tables() -> bool:
     return False
 
 
-@meta(group='(4) ÖPNV', order=3, required='scrape_stops or extract_stops',
+@meta(group='(4) ÖPNV', order=3, required=['scrape_stops', 'extract_stops'],
       title='Zeittabellen scrapen', description='Zieht die Fahrten aller '
-      'Haltestellen von der Deutsche Bahn-Website')
+      'Haltestellen von der Deutsche Bahn-Website. <br> '
+      '<b>Einer</b> der beiden Schritte ("scrape_stops" oder "extract_stops") '
+      'muss vorher ausgeführt worden sein (nicht beide)')
 @orca.step()
 def scrape_timetables(database: str, source_db: str,
                       date_timetable: str,
@@ -252,7 +256,8 @@ def tbl_kreise() -> str:
 
 
 @meta(group='(4) ÖPNV', order=4, title='Zeittabellen als GTFS',
-      description='Exportiert die Zeittabellen als GTFS-Dateien')
+      description='Exportiert die Zeittabellen als GTFS-Dateien',
+      required='scrape_timetables')
 @orca.step()
 def timetables_gtfs(database: str,
                     date_timetable: str,
@@ -293,7 +298,9 @@ def gtfs_input() -> str:
 
 @meta(group='(4) ÖPNV', order=6, title='GTFS verschneiden',
       description='Verschneide Feed aus GTFS-Datei mit dem Projektgebiet und '
-      'gebe ihn als GTFS-Datei wieder aus')
+      'gebe ihn als GTFS-Datei wieder aus. <br>'
+      'Der Schritt greift nicht auf die Datenbank zu. Der Datenbankname wird '
+      'lediglich für die Zusammensetzung des Pfades der Ausgabedatei benötigt')
 @orca.step()
 def extract_gtfs(database: str,
                  base_path: str,
