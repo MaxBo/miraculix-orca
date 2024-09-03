@@ -29,7 +29,7 @@ class ExtractGTFS():
         self.gtfs_input = gtfs_input
         self.out_path = out_path
         #self.out_path = "D:\\Downloads"
-        #self.gtfs_input = os.path.join(self.out_path, 'gtfsde_latest.zip')
+        #self.gtfs_input = os.path.join(self.out_path, '20240826_fahrplaene_gesamtdeutschland_gtfs.zip')
         self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.project_area = project_area
         self.logger = logger or logging.getLogger(self.__module__)
@@ -48,6 +48,7 @@ class ExtractGTFS():
         timetable = clip.get_stop_times()
         stop_ids_in_tt = timetable['stop_id'].unique()
         stops = clip.get_stops()
+        stops['idx'] = stops.index
         is_in_tt = stops['stop_id'].isin(stop_ids_in_tt)
         clipped_stops = stops[is_in_tt]
 
@@ -66,7 +67,6 @@ class ExtractGTFS():
         # stops with all route types stopping there
         st = tt_with_rt[['stop_id', 'route_type']].drop_duplicates()
         typed_stops = stops.merge(st, how='left', on='stop_id')
-        typed_stops['stop_int'] = typed_stops['stop_id'].astype(int)
 
         self.logger.info('Führe aneinander liegende Stationen mit gleichem '
                          'Namen und Routentypen zusammen '
@@ -81,15 +81,16 @@ class ExtractGTFS():
         typed_stops['lon_cl'] = typed_stops[
             'stop_lon'].diff().fillna(0).abs().gt(0.003).cumsum()
 
-        typed_stops = typed_stops.sort_values('stop_int')
+        # restore old order
+        typed_stops = typed_stops.sort_values('idx').drop(columns=['idx'])
 
-        # new ids with leading route type or old one if no routes are served
-        new_ids = (typed_stops['stop_int'] +
-                   (typed_stops['route_type'] * 1000000))
+        # new ids with trailing route type or old one if no routes are served
         no_route = typed_stops['route_type'].isna()
-        new_ids.loc[no_route] = 0
-        # convert to string and fill with leading zeros (in case route_type is 0)
-        new_ids = new_ids.astype(int).astype(str).apply(lambda a: a.zfill(7))
+        typed_stops['route_int'] = typed_stops['route_type']
+        typed_stops.loc[no_route, 'route_int'] = -1
+        typed_stops['route_int'] = typed_stops['route_int'].astype(int)
+        new_ids = (typed_stops['stop_id'].astype('str') + '_t' +
+                   typed_stops['route_int'].astype('str'))
         new_ids.loc[no_route] = typed_stops.loc[no_route, 'stop_id']
         typed_stops['type_stop_id'] = new_ids
 
@@ -259,7 +260,7 @@ class ExtractGTFS():
                           'stop_lon'] = duplicated['stop_lon_shifted']
 
         clip.stops = revised_stops.drop(
-            columns=['stop_int', 'lat_cl', 'lon_cl', 'stop_id_1',
+            columns=['route_int', 'lat_cl', 'lon_cl', 'stop_id_1',
                      'type_stop_id_1'])
 
         clip.stop_times = tt_revised.drop(
