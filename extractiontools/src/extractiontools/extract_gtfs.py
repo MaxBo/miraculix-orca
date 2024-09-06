@@ -30,8 +30,8 @@ class ExtractGTFS():
         self.gtfs_input = gtfs_input
         self.out_path = out_path
         self.do_postprocessing = do_postprocessing
-        self.out_path = "D:\\Downloads"
-        self.gtfs_input = os.path.join(self.out_path, '20240826_fahrplaene_gesamtdeutschland_gtfs.zip')
+        #self.out_path = "D:\\Downloads"
+        #self.gtfs_input = os.path.join(self.out_path, '20240826_fahrplaene_gesamtdeutschland_gtfs.zip')
         self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.project_area = project_area
         self.logger = logger or logging.getLogger(self.__module__)
