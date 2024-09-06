@@ -296,6 +296,18 @@ def gtfs_input() -> str:
     return r'gtfsde_latest.zip'
 
 
+@meta(group='(4) ÖPNV', title='Nachbearbeitung',
+      description='Soll der Feed nachbearbeitet werden?<br>Wenn ja, werden nach '
+      'der Beschneidung des Feeds Haltestellen nach Routentyp aufgesplittet,'
+      'Duplikate zusammengefasst und neue IDs vergeben.<br>Wenn nein, wird der '
+      'Feed nur auf den Projektbereich zugeschnitten und ungenutzte '
+      'Stops entfernt.', scope='step')
+@orca.injectable()
+def gtfs_postprocessing() -> bool:
+    """do the preprocessing if True, if False only clipping"""
+    return True
+
+
 @meta(group='(4) ÖPNV', order=6, title='GTFS verschneiden',
       description='Verschneide Feed aus GTFS-Datei mit dem Projektgebiet und '
       'gebe ihn als GTFS-Datei wieder aus. <br>'
@@ -306,6 +318,7 @@ def extract_gtfs(database: str,
                  base_path: str,
                  subfolder_otp: str,
                  gtfs_input: str,
+                 gtfs_postprocessing: bool,
                  project_area: 'ogr.Geometry'):
     """
     Intersect Feed from GTFS file with project area and write clipped GTFS file
@@ -313,6 +326,7 @@ def extract_gtfs(database: str,
     out_path = os.path.join(base_path, database, subfolder_otp)
     gtfs_path = os.path.join(GTFS_DIR, gtfs_input)
     extract = ExtractGTFS(project_area, gtfs_path, out_path,
+                          do_postprocessing=gtfs_postprocessing,
                           logger=orca.logger)
     extract.extract()
 

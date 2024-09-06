@@ -24,12 +24,14 @@ class ExtractGTFS():
                  project_area: 'ogr.Geometry',
                  gtfs_input: str,
                  out_path: str,
+                 do_postprocessing: bool = True,
                  logger=None):
         """"""
         self.gtfs_input = gtfs_input
         self.out_path = out_path
-        #self.out_path = "D:\\Downloads"
-        #self.gtfs_input = os.path.join(self.out_path, '20240826_fahrplaene_gesamtdeutschland_gtfs.zip')
+        self.do_postprocessing = do_postprocessing
+        self.out_path = "D:\\Downloads"
+        self.gtfs_input = os.path.join(self.out_path, '20240826_fahrplaene_gesamtdeutschland_gtfs.zip')
         self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.project_area = project_area
         self.logger = logger or logging.getLogger(self.__module__)
@@ -48,7 +50,6 @@ class ExtractGTFS():
         timetable = clip.get_stop_times()
         stop_ids_in_tt = timetable['stop_id'].unique()
         stops = clip.get_stops()
-        stops['idx'] = stops.index
         is_in_tt = stops['stop_id'].isin(stop_ids_in_tt)
         clipped_stops = stops[is_in_tt]
 
@@ -58,6 +59,17 @@ class ExtractGTFS():
         are_parents = stops['stop_id'].isin(parent_ids)
         stops['is_parent'] = are_parents
         stops = stops[is_in_tt | are_parents]
+        clip.stops = stops
+
+        if self.do_postprocessing:
+            self.postprocess(clip)
+
+        self.logger.info(f'Schreibe verarbeiteten Feed nach {self.gtfs_output}')
+        clip.write(self.gtfs_output)
+
+    def postprocess(self, clip):
+        stops = clip.get_stops()
+        stops['idx'] = stops.index
 
         self.logger.info('Finde Routentypen und spalte Stops nach '
                          'Routentypen auf')
@@ -121,19 +133,24 @@ class ExtractGTFS():
                               on='stop_id')
         # should be sorted already but better be safe
         tt = tt.sort_values(['trip_id', 'stop_sequence'])
-        # set first stop in every trip to None so when shifting we won't get
-        # stop ids and names from next trip
-        tt.loc[tt['stop_sequence'] == 0, ['stop_name', 'stop_id']] = None
+
         tt['next_stop_name'] = tt['stop_name'].shift(-1)
+        tt['next_trip_id'] = tt['trip_id'].shift(-1)
         tt['next_stop_id'] = tt['stop_id'].shift(-1)
-        # get stops in timetable where next stop name is the same
+        # get stops in timetable where next stop name and trip is the same
         # but id is different
-        chained_dup = tt[(tt['stop_name'] == tt['next_stop_name']) &
-               ~(tt['stop_id'] == tt['next_stop_id'])]
+        first_dup_idx = ((tt['stop_name'] == tt['next_stop_name']) &
+                         (tt['trip_id'] == tt['next_trip_id']) &
+                         ~(tt['stop_id'] == tt['next_stop_id']))
+        # get the next stops as well
+        second_dup_idx = first_dup_idx.shift(1).fillna(False)
+        chained_dup = tt[second_dup_idx | first_dup_idx]
         # exclude those stops from merging with other stops
         # paying attention to route type
         exclude = chained_dup.groupby(
-            ['stop_id','route_type']).size().reset_index()[['stop_id','route_type']]
+            ['stop_id','route_type']).size().reset_index()[
+                ['stop_id','route_type']]
+
         ex_idx = [False] * len(duplicated)
         # that seems a little excessive, no idea how to do it without a loop
         # it isn't a thing that happens a lot though
@@ -259,12 +276,17 @@ class ExtractGTFS():
         revised_stops.loc[duplicated.index,
                           'stop_lon'] = duplicated['stop_lon_shifted']
 
+        # set all appearances of locations with types other than 0 (platform)
+        # or 1 (station) (meaning entrance or exit to station)
+        # most likely caused by faulty input feed, as trips only hold at
+        # location_type 0 and we only keep those and the parents (should always
+        # be 1)
+        revised_stops.loc[revised_stops['location_type'] > 1,
+                          'location_type'] = 0
+
         clip.stops = revised_stops.drop(
             columns=['route_int', 'lat_cl', 'lon_cl', 'stop_id_1',
                      'type_stop_id_1'])
 
         clip.stop_times = tt_revised.drop(
             columns=['stop_id_revised', 'route_type'])
-
-        self.logger.info(f'Schreibe verarbeiteten Feed nach {self.gtfs_output}')
-        clip.write(self.gtfs_output)
