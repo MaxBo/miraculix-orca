@@ -72,7 +72,7 @@ class ExtractLAEA(Extract):
         (id text primary key, einwohner integer, einwohner2022 integer);
 
         INSERT INTO {self.schema}.zensus_ew_hectar(id, einwohner, einwohner2022)
-        SELECT z.id,
+        SELECT v.cellcode AS id,
                COALESCE(z2011.einwohner, 0) as einwohner,
                COALESCE(z2022.einwohner, 0) as einwohner2022
         FROM {self.schema}.laea_vector_100 v
