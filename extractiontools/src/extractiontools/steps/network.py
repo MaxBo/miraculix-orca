@@ -296,14 +296,26 @@ def gtfs_input() -> str:
     return r'gtfsde_latest.zip'
 
 
-@meta(group='(4) ÖPNV', title='Nachbearbeitung',
-      description='Soll der Feed nachbearbeitet werden?<br>Wenn ja, werden nach '
-      'der Beschneidung des Feeds Haltestellen nach Routentyp aufgesplittet,'
-      'Duplikate zusammengefasst und neue IDs vergeben.<br>Wenn nein, wird der '
-      'Feed nur auf den Projektbereich zugeschnitten und ungenutzte '
-      'Stops entfernt.', scope='step')
+@meta(group='(4) ÖPNV', title='Visum Nachbearbeitung',
+      description='Soll der Feed nachbearbeitet werden (speziell, um ihn in '
+      'Visum einzubinden)?<br>Wenn ja, werden nach der Beschneidung des Feeds '
+      'Haltestellen nach Routentyp aufgesplittet, Duplikate zusammengefasst '
+      'und neue IDs vergeben.<br>Wenn nein, wird der Feed nur auf den '
+      'Projektbereich zugeschnitten und ungenutzte Stops entfernt.',
+      scope='step')
 @orca.injectable()
 def gtfs_postprocessing() -> bool:
+    """do the preprocessing if True, if False only clipping"""
+    return True
+
+@meta(group='(4) ÖPNV', title='Transferergänzung',
+      description='Sollen fehlende Transfers ergänzt werden?<br>Wenn ja, '
+      'werden die Transfers ergänzt mit Relationen zwischen Stops, die 200m '
+      'Luftlinie auseinander liegen und noch nicht in den Transfers enthalten '
+      'sind. Bei den Umstiegszeiten wird mit 3km/h Luftlinie plus 2 Minuten '
+      'gerechnet.', scope='step')
+@orca.injectable()
+def gtfs_transferprocessing() -> bool:
     """do the preprocessing if True, if False only clipping"""
     return True
 
@@ -319,6 +331,7 @@ def extract_gtfs(database: str,
                  subfolder_otp: str,
                  gtfs_input: str,
                  gtfs_postprocessing: bool,
+                 gtfs_transferprocessing: bool,
                  project_area: 'ogr.Geometry'):
     """
     Intersect Feed from GTFS file with project area and write clipped GTFS file
@@ -327,6 +340,7 @@ def extract_gtfs(database: str,
     gtfs_path = os.path.join(GTFS_DIR, gtfs_input)
     extract = ExtractGTFS(project_area, gtfs_path, out_path,
                           do_postprocessing=gtfs_postprocessing,
+                          do_transferprocessing=gtfs_transferprocessing,
                           logger=orca.logger)
     extract.extract()
 
