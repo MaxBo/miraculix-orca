@@ -339,7 +339,7 @@ def extract_gtfs(database: str,
     out_path = os.path.join(base_path, database, subfolder_otp)
     gtfs_path = os.path.join(GTFS_DIR, gtfs_input)
     extract = ExtractGTFS(project_area, gtfs_path, out_path,
-                          do_postprocessing=gtfs_postprocessing,
+                          do_visum_postproc=gtfs_postprocessing,
                           do_transferprocessing=gtfs_transferprocessing,
                           logger=orca.logger)
     extract.extract()

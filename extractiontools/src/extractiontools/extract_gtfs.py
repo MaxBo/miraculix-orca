@@ -1,6 +1,7 @@
 import gtfs_kit as gk
 import geopandas as gp
 import pandas as pd
+import numpy as np
 import logging
 import os
 import math
@@ -25,6 +26,30 @@ TRANSFER_MAX_DISTANCE = 200
 12 - Monorail. Railway in which the track consists of a single rail or a beam.
 '''
 
+# bulk assign ranges of numbers of extended types to simple types
+ROUTE_TYPE_MAP = dict(list(zip(list(range(100, 118)), [2]*18)) +
+                      list(zip(list(range(200, 210)), [3]*10)) +
+                      list(zip(list(range(700, 717)), [3]*17)) +
+                      list(zip(list(range(900, 907)), [0]*7)) +
+                      list(zip(list(range(1300, 1307)), [6]*7)) +
+                      list(zip(list(range(1500, 1508)), [3]*8)))
+
+ROUTE_TYPE_MAP.update({
+    400: 0,
+    401: 1,
+    402: 1,
+    403: 0,
+    404: 0,
+    405: 0,
+    800: 3,
+    1000: 4,
+    1100: 6,
+    1200: 4,
+    1400: 7,
+    1700: 0,
+    1702: 0,
+})
+
 
 class ExtractGTFS():
 
@@ -32,17 +57,17 @@ class ExtractGTFS():
                  project_area: 'ogr.Geometry',
                  gtfs_input: str,
                  out_path: str,
-                 do_postprocessing: bool = True,
+                 do_visum_postproc: bool = True,
                  do_transferprocessing: bool = True,
                  logger=None):
         """"""
         self.gtfs_input = gtfs_input
         self.out_path = out_path
-        self.do_postprocessing = do_postprocessing
+        self.do_visum_postproc = do_visum_postproc
         self.do_transferprocessing = do_transferprocessing
-        #self.out_path = "D:\\Downloads"
-        #self.gtfs_input = os.path.join(
-            #self.out_path, '20240826_fahrplaene_gesamtdeutschland_gtfs.zip')
+        self.out_path = "D:\\Downloads"
+        self.gtfs_input = os.path.join(
+            self.out_path, '20240826_fahrplaene_gesamtdeutschland_gtfs.zip')
         self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.project_area = project_area
         self.logger = logger or logging.getLogger(self.__module__)
@@ -64,7 +89,7 @@ class ExtractGTFS():
         is_in_tt = stops['stop_id'].isin(stop_ids_in_tt)
         clipped_stops = stops[is_in_tt]
 
-        self.logger.info('Füge fehlende Elternstops hinzu')
+        self.logger.info('Füge fehlende Elternstops aus dem Originalfeed hinzu')
         # keep the parent stations as well
         parent_ids = clipped_stops['parent_station']
         are_parents = stops['stop_id'].isin(parent_ids)
@@ -72,11 +97,15 @@ class ExtractGTFS():
         stops = stops[is_in_tt | are_parents]
         clip.stops = stops
 
-        if self.do_postprocessing:
+        self.simplify_route_types(clip)
+
+        if self.do_visum_postproc:
             self.postprocess(clip)
+            self.complement_parent_stations(clip)
+            self.rename_stops(clip)
 
         if self.do_transferprocessing:
-            self.process_transfers(clip)
+            self.complement_transfers(clip)
 
         self.logger.info(f'Schreibe verarbeiteten Feed nach {self.gtfs_output}')
         clip.write(self.gtfs_output)
@@ -97,18 +126,6 @@ class ExtractGTFS():
         self.logger.info('Führe aneinander liegende Stationen mit gleichem '
                          'Namen und Routentypen zusammen '
                          '(ausgenommen aufeinanderfolgende Stops) ')
-        # find stations roughly at same location with same name and serving
-        # same route type by putting lat/lon in seperate classes formed by 0.01
-        # differences
-        typed_stops = typed_stops.sort_values('stop_lat')
-        typed_stops['lat_cl'] = typed_stops[
-            'stop_lat'].diff().fillna(0).abs().gt(0.003).cumsum()
-        typed_stops = typed_stops.sort_values('stop_lon')
-        typed_stops['lon_cl'] = typed_stops[
-            'stop_lon'].diff().fillna(0).abs().gt(0.003).cumsum()
-
-        # restore old order
-        typed_stops = typed_stops.sort_values('idx').drop(columns=['idx'])
 
         # new ids with trailing route type or old one if no routes are served
         no_route = typed_stops['route_type'].isna()
@@ -124,7 +141,24 @@ class ExtractGTFS():
             typed_stops, geometry=gp.points_from_xy(
                 typed_stops['stop_lon'], typed_stops['stop_lat']),
             crs="EPSG:4326")
-        subset = ['stop_name', 'route_type', 'lat_cl', 'lon_cl']
+        gdf_stops.to_crs(3857, inplace=True)
+        gdf_stops['stop_lon'] = gdf_stops['geometry'].apply(lambda geom: geom.x)
+        gdf_stops['stop_lat'] = gdf_stops['geometry'].apply(lambda geom: geom.y)
+
+        # find stations roughly at same location with same name and serving
+        # same route type by putting lat/lon in seperate classes formed by 50m
+        # (chained) differences
+        gdf_stops = gdf_stops.sort_values('stop_lat')
+        gdf_stops['lat_cl'] = gdf_stops[
+            'stop_lat'].diff().fillna(0).abs().gt(50).cumsum()
+        gdf_stops = gdf_stops.sort_values('stop_lon')
+        gdf_stops['lon_cl'] = gdf_stops[
+            'stop_lon'].diff().fillna(0).abs().gt(50).cumsum()
+
+        # restore old order
+        gdf_stops = gdf_stops.sort_values('idx').drop(columns=['idx'])
+
+        subset = ['stop_name', 'route_type', 'lat_cl', 'lon_cl', 'level_id']
         duplicated = gdf_stops[gdf_stops.duplicated(
             subset=subset, keep='first')]
 
@@ -135,12 +169,12 @@ class ExtractGTFS():
             gdf_stops[~gdf_stops['stop_id'].isin(duplicated['stop_id'])],
             how='left', on=subset, suffixes=['', '_remain'])
 
-        # exclude stops that are too distant to each other (the lat/lon above
-        # classification is not accurate enough in high density areas)
-        duplicated['distance'] = duplicated.apply(
-            lambda row: row['geometry'].distance(row['geometry_remain']),
-            axis=1)
-        duplicated = duplicated[duplicated['distance'] < 0.003]
+        ## exclude stops that are too distant to each other (the lat/lon above
+        ## classification is not accurate enough in high density areas)
+        #duplicated['distance'] = duplicated.apply(
+            #lambda row: row['geometry'].distance(row['geometry_remain']),
+            #axis=1)
+        #duplicated = duplicated[duplicated['distance'] < 50]
 
         # exclude stops from removal that are adjacent in trips
         tt = tt_with_rt.merge(stops[['stop_id', 'stop_name']], how='left',
@@ -301,18 +335,19 @@ class ExtractGTFS():
                           'location_type'] = 0
 
         clip.stops = revised_stops.drop(
-            columns=['route_int', 'lat_cl', 'lon_cl', 'stop_id_1',
-                     'type_stop_id_1', 'type_stop_id'])
+            columns=['route_int', 'stop_id_1', 'type_stop_id_1',
+                     'type_stop_id'])
 
         clip.stop_times = tt_revised.drop(
             columns=['stop_id_revised', 'route_type', 'type_stop_id'])
 
         clip.transfers = revised_transfers
 
-    def process_transfers(self, clip):
+    def complement_transfers(self, clip):
         self.logger.info('Berechne Distanzen und Transferzeiten zwischen '
                          'den Stops')
         stops_df = clip.get_stops()
+        stops_df = stops_df[~stops_df['is_parent']]
         gdf_stops = gp.GeoDataFrame(stops_df, geometry=gp.points_from_xy(
             stops_df['stop_lon'], stops_df['stop_lat']), crs="EPSG:4326")
         gdf_stops.to_crs(3857, inplace=True)
@@ -324,12 +359,13 @@ class ExtractGTFS():
         dist_df.reset_index(inplace=True)
         dist_df = dist_df[dist_df['distance'] <= TRANSFER_MAX_DISTANCE]
         dist_df['min_transfer_time'] = dist_df['distance'].apply(
-            lambda x: 2 + x / (TRANSFER_SPEED * 1000 / 60))
+            lambda x: ADD_TRANSFER_TIME * 60 + x * 3.6 / TRANSFER_SPEED * 1000)
         dist_df.drop(columns=['distance'], inplace=True)
         # type 2 - "Transfer requires a minimum amount of time between arrival
         # and departure to ensure a connection"
         dist_df['transfer_type'] = 2
         transfers_df = clip.transfers.copy()
+        #
         ex_transfers = pd.concat([transfers_df, dist_df], ignore_index=True)
         # remove transfers that were already in by keeping the first occurence
         # (first ones are from the "original" transfers because concat)
@@ -340,4 +376,81 @@ class ExtractGTFS():
                          f'{TRANSFER_MAX_DISTANCE} mit {TRANSFER_SPEED}km/h '
                          f'und {ADD_TRANSFER_TIME}min Aufschlag)')
         clip.transfers = ex_transfers
-        return clip
+
+    def simplify_route_types(self, clip):
+        routes_df = clip.get_routes()
+        revised_types = routes_df['route_type'].map(ROUTE_TYPE_MAP)
+        nan_values = revised_types.isna()
+        revised_types.loc[nan_values] = routes_df.loc[nan_values, 'route_type']
+        routes_df['route_type'] = revised_types.astype(int)
+        clip.routes = routes_df
+
+    def complement_parent_stations(self, clip):
+        self.logger.info('Erzeuge Elternstationen für Stops, wenn sie '
+                         'beieinander liegen und noch keine haben')
+        stops_df = clip.get_stops()
+        stops_df_nop = stops_df[~stops_df['is_parent'] &
+                                stops_df['parent_station'].isna()]
+        stop_times_df = clip.get_stop_times()
+        dep_df = stops_df_nop.merge(stop_times_df, how='inner', on='stop_id')
+        dep_count = dep_df.groupby('stop_id').size().reset_index().rename(
+            columns={0: 'n_departures'})
+        stops_df_nop = stops_df_nop.merge(dep_count, how='left', on='stop_id')
+        gdf_stops = gp.GeoDataFrame(stops_df_nop, geometry=gp.points_from_xy(
+            stops_df_nop['stop_lon'], stops_df_nop['stop_lat']),
+                                    crs="EPSG:4326")
+        gdf_stops.to_crs(3857, inplace=True)
+        gdf_stops['stop_lon'] = gdf_stops['geometry'].apply(lambda geom: geom.x)
+        gdf_stops['stop_lat'] = gdf_stops['geometry'].apply(lambda geom: geom.y)
+
+        # find stations roughly at same location by chained distance grouping
+        # in 150m steps along lon and lat
+        gdf_stops = gdf_stops.sort_values('stop_lat')
+        gdf_stops['lat_cl'] = gdf_stops[
+            'stop_lat'].diff().fillna(0).abs().gt(150).cumsum()
+        gdf_stops = gdf_stops.sort_values('stop_lon')
+        gdf_stops['lon_cl'] = gdf_stops[
+            'stop_lon'].diff().fillna(0).abs().gt(150).cumsum()
+        idx = stops_df.index.max() + 1
+        for i, group in gdf_stops.groupby(['lat_cl', 'lon_cl']):
+            if len(group) < 2:
+                continue
+            wo_dep = group[group['n_departures'].isna()]
+            # if there is a station in the group without take it as new
+            # parent station
+            if len(wo_dep) > 0:
+                station_id = wo_dep.loc[group.index[0]].stop_id
+                child_ids = group[~(group['stop_id'] == station_id)]['stop_id']
+            else:
+                centroid = group.dissolve().centroid.to_crs(4326)
+                station_template = group.loc[group['n_departures'].idxmax()]
+                station_id = station_template.stop_id.split('_')[0] + f'_parent'
+                new_row = pd.Series({
+                    'stop_id': station_id,
+                    'stop_name': station_template.stop_name,
+                    'stop_lon': centroid.x.values[0],
+                    'stop_lat': centroid.y.values[0],
+                    'location_type': 1,
+                    'is_parent': True})
+                stops_df.loc[idx] = new_row
+                child_ids = group['stop_id']
+            stops_df.loc[
+                stops_df[stops_df['stop_id'].isin(child_ids)].index,
+                'parent_station'] = station_id
+            idx += 1
+        self.logger.info(f'{len(stops_df) - len(clip.get_stops())} Stationen '
+                         'hinzugefügt')
+        clip.stops = stops_df
+        # wenn in Gruppe eine Station ohne Abfahrten, dann die als parent
+        # als name für neue parents die station mit den meisten Abfahrten
+        # generell: Station mit parent -> stop_desc in Klammern an stop_name
+
+    def rename_stops(self, clip):
+        self.logger.info('Füge Stationsbeschreibungen zu Stationsnamen hinzu')
+        stops_df = clip.get_stops()
+        stops_w_desc = stops_df[~stops_df['stop_desc'].isna()]
+        new_names = stops_w_desc['stop_name'] + ' (' + \
+            stops_w_desc['stop_desc'] + ')'
+        stops_df.loc[stops_w_desc.index, 'stop_name'] = new_names
+        self.logger.info(f'{len(stops_w_desc)} Stationen umbenannt')
+        clip.stops = stops_df
