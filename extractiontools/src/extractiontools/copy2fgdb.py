@@ -141,7 +141,7 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
             self.OGR2OGRPATH = os.path.join(self.OGR_FOLDER, 'ogr2ogr.exe')
             self.OGRINFO = os.path.join(self.OGR_FOLDER, 'ogrinfo.exe')
         else:
-            self.OGR_FOLDER = '/usr/local/bin'
+            self.OGR_FOLDER = '/usr/bin'
             self.OGR2OGRPATH = os.path.join(self.OGR_FOLDER, 'ogr2ogr')
             self.OGRINFO = os.path.join(self.OGR_FOLDER, 'ogrinfo')
 
