@@ -582,6 +582,8 @@ COMMENT ON FUNCTION "{self.pg_replacement}".st_worldtorastercoordy(raster, geome
 
 '''
         cur.execute(sql)
+        self.conn.commit()
+
 
     def create_functions(self):
         """
