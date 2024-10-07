@@ -582,6 +582,41 @@ $BODY$;
 COMMENT ON FUNCTION "{self.pg_replacement}".st_worldtorastercoordy(raster, geometry)
     IS 'args: rast, pt - Returns the row in the raster of the point geometry (pt) or a X and Y world coordinate (xw, yw) represented in world spatial reference system of raster.';
 
+CREATE OR REPLACE FUNCTION "{self.pg_replacement}".pgr_drivingdistance(
+	text,
+	bigint,
+	double precision,
+	directed boolean DEFAULT true,
+	OUT seq bigint,
+	OUT depth bigint,
+	OUT start_vid bigint,
+	OUT pred bigint,
+	OUT node bigint,
+	OUT edge bigint,
+	OUT cost double precision,
+	OUT agg_cost double precision)
+    RETURNS SETOF record
+    LANGUAGE 'sql'
+    COST 100
+    VOLATILE STRICT PARALLEL UNSAFE
+    ROWS 1000
+
+AS $BODY$
+    SELECT seq, depth, start_vid, pred, node, edge, cost, agg_cost
+    FROM public._pgr_drivingDistancev4(public._pgr_get_statement($1), ARRAY[$2]::BIGINT[], $3, $4, false);
+$BODY$;
+
+COMMENT ON FUNCTION "{self.pg_replacement}".pgr_drivingdistance(text, bigint, double precision, boolean)
+    IS 'pgr_drivingDistance(Single_vertex)
+- Parameters:
+   - Edges SQL with columns: id, source, target, cost [,reverse_cost]
+   - From vertex identifier
+   - Distance from vertex identifier
+- Optional Parameters
+   - directed := true
+- Documentation:
+   - https://docs.pgrouting.org/latest/en/pgr_drivingDistance.html
+';
 '''
         cur.execute(sql)
 
@@ -1462,7 +1497,7 @@ SELECT count(*) FROM "{network}".edges_reached;
 CREATE OR REPLACE VIEW "{network}".reached_from AS
 -- Knoten, die in Hinrichtung erreicht werden
 SELECT seq, node::integer, agg_cost AS cost
-FROM pgr_drivingDistance(
+FROM "{pg}".pgr_drivingDistance(
 E'SELECT id, source, target, cost, reverse_cost
 FROM "{network}".edge_table',
 {startvertex}, {maxcosts}, true
@@ -1471,12 +1506,13 @@ FROM "{network}".edge_table',
 CREATE OR REPLACE VIEW "{network}".reached_to AS
 -- Knoten, die in Hinrichtung erreicht werden
 SELECT seq, node::integer, agg_cost AS cost
-FROM pgr_drivingDistance(
+FROM "{pg}".pgr_drivingDistance(
 E'SELECT id, source, target, reverse_cost as cost, cost as reverse_cost
  FROM "{network}".edge_table',
 {startvertex}, {maxcosts}, true
 );
-""".format(startvertex=startvertex, maxcosts=maxcosts, network=self.network)
+""".format(startvertex=startvertex, maxcosts=maxcosts, network=self.network,
+           pg=self.pg_replacement)
         self.run_query(sql)
 
     def copy_edge_reached_with_planned(self):
