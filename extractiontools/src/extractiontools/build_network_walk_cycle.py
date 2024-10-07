@@ -183,10 +183,10 @@ if slope == 0:
     v = 15.119693 # Geschwindigkeit bei Steigung 0
 else:
     x = slope + 0.09
+    if x <= 0:
+        return 30
     v = (4.02-213*(x-0.2)-449*(x**3-0.008)-1412*(x**3*math.log(x)+0.0128))*(slope >= -0.08 and slope <.30) + \
     (.4/slope) * (slope >= 0.30)+ 30*(slope < -0.08)
-    if math.isnan(v):
-        v=30
 return v
 $$ LANGUAGE plpython3u;
 
