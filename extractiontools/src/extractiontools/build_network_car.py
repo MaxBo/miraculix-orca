@@ -50,13 +50,15 @@ class BuildNetwork(DBApp):
             self.create_schema()
             self.create_streets_view()
 
+            # create postgis_replacement_functions
+            self.create_postgis_replacement_functions()
+            self.conn.commit()
+
             # select roads and junctions
             self.logger.info(f'Create Views')
             self.create_roads()
             self.create_junctions()
             self.conn.commit()
-            # create functions
-            self.create_postgis_replacement_functions()
             self.create_functions()
             self.conn.commit()
             # create links
@@ -582,8 +584,6 @@ COMMENT ON FUNCTION "{self.pg_replacement}".st_worldtorastercoordy(raster, geome
 
 '''
         cur.execute(sql)
-        self.conn.commit()
-
 
     def create_functions(self):
         """
