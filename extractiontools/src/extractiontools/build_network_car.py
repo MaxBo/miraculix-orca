@@ -552,7 +552,7 @@ AS $BODY$
 
 $BODY$;
 
-COMMENT ON FUNCTION "{self.pg_replacement}"..st_worldtorastercoordx(raster, geometry)
+COMMENT ON FUNCTION "{self.pg_replacement}".st_worldtorastercoordx(raster, geometry)
     IS 'args: rast, pt - Returns the column in the raster of the point geometry (pt) or a X and Y world coordinate (xw, yw) represented in world spatial reference system of raster.';
 
 
