@@ -121,21 +121,24 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
                 schema, layer = schema_layer
             self.copy_layer(schema, layer, dest_schema, gdal_format)
 
-        path = self.get_path(gdal_format)
-        cmd_zip = f'zip -r -j -m {path}.zip {path}'
+        if gdal_format == 'OpenFileGDB':
+            # zip folder
+            path = self.get_path(gdal_format)
+            cmd_zip = f'zip -r -j -m {path}.zip {path}'
 
-        self.logger.info(f'Zipping FGDBs to {path}')
-        self.logger.debug(cmd_zip)
-        ret = subprocess.call(cmd_zip, shell=self.SHELL)
-        if ret:
-            raise IOError(
-                f'could not zip {path}')
-        cmd_rm = f'rm -R {path}'
-        self.logger.debug(cmd_rm)
-        ret = subprocess.call(cmd_rm, shell=self.SHELL)
-        if ret:
-            raise IOError(
-                f'could not remove {path}')
+            self.logger.info(f'Zipping FGDBs to {path}')
+            self.logger.debug(cmd_zip)
+            ret = subprocess.call(cmd_zip, shell=self.SHELL)
+            if ret:
+                raise IOError(
+                    f'could not zip {path}')
+            # remove folder
+            cmd_rm = f'rm -R {path}'
+            self.logger.debug(cmd_rm)
+            ret = subprocess.call(cmd_rm, shell=self.SHELL)
+            if ret:
+                raise IOError(
+                    f'could not remove {path}')
 
     def check_platform(self):
         """
