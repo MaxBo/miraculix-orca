@@ -65,9 +65,9 @@ class ExtractGTFS():
         self.out_path = out_path
         self.do_visum_postproc = do_visum_postproc
         self.do_transferprocessing = do_transferprocessing
-        self.out_path = "D:\\Downloads"
-        self.gtfs_input = os.path.join(
-            self.out_path, '20240826_fahrplaene_gesamtdeutschland_gtfs.zip')
+        #self.out_path = "D:\\Downloads"
+        #self.gtfs_input = os.path.join(
+            #self.out_path, '20240826_fahrplaene_gesamtdeutschland_gtfs.zip')
         self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.project_area = project_area
         self.logger = logger or logging.getLogger(self.__module__)
@@ -375,6 +375,7 @@ class ExtractGTFS():
         self.logger.info(f'{n} Transfers hinzugefügt (max Distanz '
                          f'{TRANSFER_MAX_DISTANCE} mit {TRANSFER_SPEED}km/h '
                          f'und {ADD_TRANSFER_TIME}min Aufschlag)')
+        # ToDo: der Algo entfernt existierende Transfers durch das drop_duplicates
         clip.transfers = ex_transfers
 
     def simplify_route_types(self, clip):
