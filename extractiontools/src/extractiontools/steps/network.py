@@ -540,7 +540,7 @@ def copy_network_car_fgdb(database: str,
                           layers=network_layers,
                           filename='network_car.gdb',
                           schema='network', logger=orca.logger)
-    copy2fgdb.copy_layers('FileGDB')
+    copy2fgdb.copy_layers('OpenFileGDB')
 
 
 @meta(group='(5) Export', required=build_network_fr,
@@ -553,4 +553,4 @@ def copy_network_fr_fgdb(database: str,
     copy2fgdb = Copy2FGDB(database, layers=network_fr_layers,
                           filename='network_fr.gdb',
                           schema='network_fr', logger=orca.logger)
-    copy2fgdb.copy_layers('FileGDB')
+    copy2fgdb.copy_layers('OpenFileGDB')

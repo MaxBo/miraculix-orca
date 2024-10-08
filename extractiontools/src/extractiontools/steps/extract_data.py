@@ -181,7 +181,7 @@ def copy_osm_to_fgdb(database: str, osm_layers: Dict[str, str]):
                              filename='osm_layers',
                              schema='osm_layer',
                              logger=orca.logger)
-    copy2fgdb.copy_layers('FileGDB')
+    copy2fgdb.copy_layers('OpenFileGDB')
 
 
 @meta(group='(5) Export', required=create_osm_views, title='OSM nach GPKG',

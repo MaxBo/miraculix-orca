@@ -432,4 +432,4 @@ if __name__ == '__main__':
     copy2fgdb = CopyOSM2FGDB(options)
     copy2fgdb.get_target_boundary_from_dest_db()
     copy2fgdb.create_views()
-    copy2fgdb.copy_layers('FileGDB')
+    copy2fgdb.copy_layers('OpenFileGDB')

@@ -14,7 +14,7 @@ from extractiontools.ausschnitt import Extract
 class Copy2FGDB(Extract):
     """Copy files to gdal"""
 
-    gdal_file_extensions = {'FileGDB': 'gdb',
+    gdal_file_extensions = {'OpenFileGDB': 'gdb',
                             'GPKG': 'gpkg',
                             }
 
@@ -35,7 +35,7 @@ class Copy2FGDB(Extract):
                    schema: str,
                    layer: str,
                    dest_schema: str = None,
-                   gdal_format: str = 'FileGDB'):
+                   gdal_format: str = 'OpenFileGDB'):
         """
         copy layer
         Parameters
@@ -45,7 +45,7 @@ class Copy2FGDB(Extract):
         path = self.get_path(gdal_format)
 
         lco = ''
-        if gdal_format == 'FileGDB':
+        if gdal_format == 'OpenFileGDB':
             lco = f' -lco FEATURE_DATASET="{dest_schema}"'
 
         # get srid
@@ -107,7 +107,7 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
             cur.execute(sql)
             return cur.rowcount
 
-    def copy_layers(self, gdal_format: str = 'FileGDB'):
+    def copy_layers(self, gdal_format: str = 'OpenFileGDB'):
         """
         copy all layers in option.layers
         """
@@ -200,4 +200,4 @@ if __name__ == '__main__':
         layers[f'{options.schema}.{layer}'] = options.dest_schema
 
     copy2fgdb = Copy2FGDB(login, layers, options.gdbname)
-    copy2fgdb.copy_layers('FileGDB')
+    copy2fgdb.copy_layers('OpenFileGDB')
