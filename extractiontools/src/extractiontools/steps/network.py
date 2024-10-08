@@ -300,8 +300,7 @@ def gtfs_input() -> str:
       description='Soll der Feed nachbearbeitet werden (speziell, um ihn in '
       'Visum einzubinden)?<br>Wenn ja, werden nach der Beschneidung des Feeds '
       'Haltestellen nach Routentyp aufgesplittet, Duplikate zusammengefasst '
-      'und neue IDs vergeben.<br>Wenn nein, wird der Feed nur auf den '
-      'Projektbereich zugeschnitten und ungenutzte Stops entfernt.',
+      'und neue IDs vergeben.',
       scope='step')
 @orca.injectable()
 def gtfs_postprocessing() -> bool:
