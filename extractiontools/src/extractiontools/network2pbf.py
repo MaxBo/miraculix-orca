@@ -213,7 +213,7 @@ USING btree(id);
             self.OSM_FOLDER = '$HOME/gis/osm'
             self.OSMOSISPATH = os.path.join('/opt', 'osmosis',
                                             'bin', 'osmosis')
-        self.AUTHFILE = os.path.join('/opt', 'osmosis_config', 'pwd')
+        self.AUTHFILE = os.path.join('/run', 'secrets', 'osmosis_pwd')
 
     def copy2pbf(self):
         """
