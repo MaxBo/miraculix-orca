@@ -130,6 +130,12 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
         if ret:
             raise IOError(
                 f'could not zip {path}')
+        self.logger.debug(cmd_rm)
+        cmd_rm = f'rm -R {path}'
+        ret = subprocess.call(cmd_rm, shell=self.SHELL)
+        if ret:
+            raise IOError(
+                f'could not remove {path}')
 
     def check_platform(self):
         """
