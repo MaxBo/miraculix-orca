@@ -122,7 +122,7 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
             self.copy_layer(schema, layer, dest_schema, gdal_format)
 
         path = self.get_path(gdal_format)
-        cmd_zip = f'zip -r -m {path}.zip {path}'
+        cmd_zip = f'zip -r -j -m {path}.zip {path}'
 
         self.logger.info(f'Zipping FGDBs to {path}')
         self.logger.debug(cmd_zip)
