@@ -172,7 +172,7 @@ class Extract(DBApp):
                 if host != '*' and host != find_host:
                     self.logger.debug(f'host: {host}, find_host: {find_host}')
                     continue
-                if port != '*' and port != find_port:
+                if port != '*' and str(port) != str(find_port):
                     self.logger.debug(f'port: {port}, find_port: {find_port}')
                     continue
                 if db != '*' and db != find_db:
