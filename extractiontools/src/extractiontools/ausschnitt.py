@@ -162,10 +162,11 @@ class Extract(DBApp):
 
         if not content:
             raise ValueError('pgpass-file empty')
-
+        self.logger.debug(content[:5])
         PATTERN = re.compile(r'^(.*):(.*):(.*):(.*):(.*)$', re.MULTILINE)
         matches = PATTERN.findall(content)
         for match in matches:
+            self.logger.debug('{match[0]}@{match[0]}:{match[1]}/{match[2]}' )
             if match and not match[0].startswith("#"):
                 host, port, db, user, password = match
                 if host != '*' and host != find_host:
