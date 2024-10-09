@@ -160,6 +160,9 @@ class Extract(DBApp):
         with open(pg_passfile, 'r') as f:
             content = f.read()
 
+        if not content:
+            raise ValueError('pgpass-file empty')
+
         PATTERN = re.compile(r'^(.*):(.*):(.*):(.*):(.*)$', re.MULTILINE)
         matches = PATTERN.findall(content)
         for match in matches:
