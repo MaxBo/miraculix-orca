@@ -149,10 +149,10 @@ class Extract(DBApp):
         """
 
     def get_password_from_pgpass(self,
-                                 find_host:  str,
-                                 find_port:  str,
+                                 find_host: str,
+                                 find_port: str,
                                  find_db: str,
-                                 find_user:  str) -> str:
+                                 find_user: str) -> str:
         """get password from pgpass-file"""
         pg_passfile = os.environ.get('PGPASSFILE', None)
         if not pg_passfile:
@@ -162,28 +162,23 @@ class Extract(DBApp):
 
         if not content:
             raise ValueError('pgpass-file empty')
-        self.logger.debug(content[:5])
+
         PATTERN = re.compile(r'^(.*):(.*):(.*):(.*):(.*)$', re.MULTILINE)
         matches = PATTERN.findall(content)
         for match in matches:
-            self.logger.debug(f'{match[0]}@{match[0]}:{match[1]}/{match[2]}' )
             if match and not match[0].startswith("#"):
                 host, port, db, user, password = match
                 if host != '*' and host != find_host:
-                    self.logger.debug(f'host: {host}, find_host: {find_host}')
                     continue
                 if port != '*' and str(port) != str(find_port):
-                    self.logger.debug(f'port: {port}, find_port: {find_port}')
                     continue
                 if db != '*' and db != find_db:
-                    self.logger.debug(f'db: {db}, find_db: {find_db}')
                     continue
                 if user != '*' and user != find_user:
-                    self.logger.debug(f'user: {user}, find_user: {find_user}')
                     continue
-
-                self.logger.debug(f'Password found, length {len(password)}')
+                # Password found
                 return password
+
         raise ValueError(f'no password found in {pg_passfile} for {find_user}@{find_host}:{find_port}/{find_db}')
 
     def create_foreign_server(self):
