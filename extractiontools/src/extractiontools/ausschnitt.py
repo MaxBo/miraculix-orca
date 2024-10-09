@@ -166,7 +166,7 @@ class Extract(DBApp):
         PATTERN = re.compile(r'^(.*):(.*):(.*):(.*):(.*)$', re.MULTILINE)
         matches = PATTERN.findall(content)
         for match in matches:
-            self.logger.debug('{match[0]}@{match[0]}:{match[1]}/{match[2]}' )
+            self.logger.debug(f'{match[0]}@{match[0]}:{match[1]}/{match[2]}' )
             if match and not match[0].startswith("#"):
                 host, port, db, user, password = match
                 if host != '*' and host != find_host:
@@ -177,6 +177,8 @@ class Extract(DBApp):
                     continue
                 if user != '*' and user != find_user:
                     continue
+
+                self.logger.debug(f'Password found, length {len(password)}')
                 return password
         raise ValueError(f'no password found in {pg_passfile} for {find_user}@{find_host}:{find_port}/{find_db}')
 
