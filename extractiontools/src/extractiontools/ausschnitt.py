@@ -174,6 +174,7 @@ class Extract(DBApp):
                 if user != '*' and user != find_user:
                     continue
                 return password
+        raise ValueError(f'no password found in {pg_passfile} for {find_user}@{find_host}:{find_port}/{find_db}')
 
     def create_foreign_server(self):
         password = self.get_password_from_pgpass(find_host=self.foreign_login.host,
