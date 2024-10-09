@@ -148,7 +148,38 @@ class Extract(DBApp):
         additional steps, to be defined in the subclass
         """
 
+    def get_password_from_pgpass(self,
+                                 find_host:  str,
+                                 find_port:  str,
+                                 find_db: str,
+                                 find_user:  str) -> str:
+        """get password from pgpass-file"""
+        pg_passfile = os.environ.get('PGPASSFILE', None)
+        if not pg_passfile:
+            raise ValueError('No PGPass-file defined in .env-file')
+        with open(pg_passfile, 'r') as f:
+            content = f.read()
+
+        PATTERN = re.compile(r'^(.*):(.*):(.*):(.*):(.*)$', re.MULTILINE)
+        matches = PATTERN.findall(content)
+        for match in matches:
+            if match and not match[0].startswith("#"):
+                host, port, db, user, password = match
+                if host != '*' and host != find_host:
+                    continue
+                if port != '*' and port != find_port:
+                    continue
+                if db != '*' and db != find_db:
+                    continue
+                if user != '*' and user != find_user:
+                    continue
+                return password
+
     def create_foreign_server(self):
+        password = self.get_password_from_pgpass(find_host=self.foreign_login.host,
+                                                 find_port=self.foreign_login.port,
+                                                 find_db=self.foreign_login.db,
+                                                 find_user=self.foreign_login.user)
         sql = f"""
         -- server
         DROP SERVER IF EXISTS {self.foreign_server} CASCADE;
@@ -165,7 +196,7 @@ class Extract(DBApp):
         CREATE USER MAPPING FOR {self.login.user}
         SERVER {self.foreign_server}
         OPTIONS (user '{self.foreign_login.user}',
-        password '{self.foreign_login.password}');
+        password '{password}');
         """
         self.logger.info(
             f'Creating connection to database "{self.foreign_login.db}"')
