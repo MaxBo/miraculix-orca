@@ -59,15 +59,15 @@ class ExtractOSM(Extract):
         """
         self.logger.info(f'Copying relation members to '
                          f'{self.schema}.relation_members')
-        sql = """
-        CREATE TABLE "{schema}".relations AS
-        (SELECT * FROM {temp}.relations) WITH NO DATA;
-        """.format(temp=self.temp, schema=self.schema)
+        sql = f"""
+        CREATE TABLE "{self.schema}".relations AS
+        (SELECT * FROM {self.temp}.relations) WITH NO DATA;
+        """
         self.run_query(sql, conn=self.conn)
-        sql = """
-        CREATE TABLE "{schema}".relation_members AS
-        (SELECT * FROM {temp}.relation_members) WITH NO DATA;
-        """.format(temp=self.temp, schema=self.schema)
+        sql = f"""
+        CREATE TABLE "{self.schema}".relation_members AS
+        (SELECT * FROM {self.temp}.relation_members) WITH NO DATA;
+        """
         self.run_query(sql, conn=self.conn)
         self.conn.commit()
 
@@ -192,18 +192,17 @@ class ExtractOSM(Extract):
                    #session_id=self.session_id)
         #self.run_query(sql, conn=self.conn)
 
-        sql = """
+        sql = f"""
         -- copy way nodes
         SELECT
           wn.way_id,
           wn.node_id,
           wn.sequence_id
-        INTO "{schema}".way_nodes
-        FROM {temp}.way_nodes wn
+        INTO "{self.schema}".way_nodes
+        FROM {self.temp}.way_nodes wn
         WHERE EXISTS
-          (SELECT 1 FROM "{schema}".ways w WHERE w.id = wn.way_id);
-        """.format(temp_meta=self.temp_meta, schema=self.schema,
-                   session_id=self.session_id)
+          (SELECT 1 FROM "{self.schema}".ways w WHERE w.id = wn.way_id);
+        """
         self.run_query(sql, conn=self.conn)
 
         sql = '''
