@@ -106,6 +106,8 @@ class ExtractOSM(Extract):
             {self.schema}.nodes n
           WHERE rm.member_type = 'N'::bpchar AND n.id = rm.member_id
           AND rm.relation_id = r.id)
+        AND WHERE NOT EXISTS
+        (SELECT 1 FROM {self.schema}.relations r2 WHERE r.id = r2.id)
         ;"""
         self.run_query(sql, conn=self.conn)
 
