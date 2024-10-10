@@ -60,6 +60,11 @@ class ExtractOSM(Extract):
         self.logger.info(f'Copying relation members to '
                          f'{self.schema}.relation_members')
         sql = """
+        CREATE TABLE "{schema}".relations AS
+        (SELECT * FROM {temp}.relations) WITH NO DATA;
+        """.format(temp=self.temp, schema=self.schema)
+        self.run_query(sql, conn=self.conn)
+        sql = """
         CREATE TABLE "{schema}".relation_members AS
         (SELECT * FROM {temp}.relation_members) WITH NO DATA;
         """.format(temp=self.temp, schema=self.schema)
@@ -67,12 +72,40 @@ class ExtractOSM(Extract):
         self.conn.commit()
 
         self.logger.info(f'Copying relations to {self.schema}.relations')
+        #sql = f"""
+        #-- copy relations for ways and nodes
+        #SELECT id, version, user_id, tstamp, changeset_id, tags
+        #INTO {self.schema}.relations
+        #FROM {self.temp_meta}.osm_relations
+        #WHERE session_id='{self.session_id}';
+        #;"""
+        #self.run_query(sql, conn=self.conn)
+
         sql = f"""
-        -- copy relations for ways and nodes
+        -- copy relations for ways
+        INSERT INTO {self.schema}.relations
         SELECT id, version, user_id, tstamp, changeset_id, tags
-        INTO {self.schema}.relations
-        FROM {self.temp_meta}.osm_relations
-        WHERE session_id='{self.session_id}';
+        FROM {self.temp}.relations r
+        WHERE EXISTS
+        ( SELECT 1
+           FROM {self.temp}.relation_members rm,
+            {self.schema}.ways w
+          WHERE rm.member_type = 'W'::bpchar AND w.id = rm.member_id
+          AND rm.relation_id = r.id)
+        ;"""
+        self.run_query(sql, conn=self.conn)
+
+        sql = f"""
+        -- copy relations for nodes
+        INSERT INTO {self.schema}.relations
+        SELECT id, version, user_id, tstamp, changeset_id, tags
+        FROM {self.temp}.relations r
+        WHERE EXISTS
+        ( SELECT 1
+           FROM {self.temp}.relation_members rm,
+            {self.schema}.nodes n
+          WHERE rm.member_type = 'N'::bpchar AND n.id = rm.member_id
+          AND rm.relation_id = r.id)
         ;"""
         self.run_query(sql, conn=self.conn)
 
@@ -146,6 +179,19 @@ class ExtractOSM(Extract):
         """
 
         self.logger.info(f'Copying way nodes to {self.schema}.way_nodes')
+        #sql = """
+        #-- copy way nodes
+        #SELECT
+          #wn.way_id,
+          #wn.node_id,
+          #wn.sequence_id
+        #INTO "{schema}".way_nodes
+        #FROM {temp_meta}.osm_way_nodes wn
+        #WHERE session_id='{session_id}';
+        #""".format(temp_meta=self.temp_meta, schema=self.schema,
+                   #session_id=self.session_id)
+        #self.run_query(sql, conn=self.conn)
+
         sql = """
         -- copy way nodes
         SELECT
@@ -153,8 +199,9 @@ class ExtractOSM(Extract):
           wn.node_id,
           wn.sequence_id
         INTO "{schema}".way_nodes
-        FROM {temp_meta}.osm_way_nodes wn
-        WHERE session_id='{session_id}';
+        FROM {temp}.way_nodes wn
+        WHERE EXISTS
+          (SELECT 1 FROM "{schema}".ways w WHERE w.id = wn.way_id);
         """.format(temp_meta=self.temp_meta, schema=self.schema,
                    session_id=self.session_id)
         self.run_query(sql, conn=self.conn)
