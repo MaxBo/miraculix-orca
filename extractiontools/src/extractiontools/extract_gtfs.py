@@ -257,9 +257,6 @@ class ExtractGTFS():
         revised_stops['parent_station'] = revised_stops['type_stop_id_1']
 
         # transfers.txt has stop ids that need to be replaced as well
-
-        # ToDo: 200m transfers, wenn nicht vorhanden, 3kmh Gehgeschw., + 2 min
-        # IDs
         revised_transfers = clip.transfers.copy()
         for column in ['from_stop_id', 'to_stop_id']:
             revised_transfers['stop_id_revised'] = revised_transfers.loc[
@@ -277,11 +274,8 @@ class ExtractGTFS():
             revised_transfers.drop(
                 columns=['stop_id_revised', 'stop_id', 'type_stop_id'],
                 inplace=True)
-        ## drop lines where from an to stop is identical after reassigning ids
-        #redundant = revised_transfers['from_stop_id'] == revised_transfers[
-            #'to_stop_id']
-        #revised_transfers.drop(index=revised_transfers[redundant].index,
-                               #inplace=True)
+        # drop lines that are duplicated due to reassigning ids
+        revised_transfers.drop_duplicates(keep='first', inplace=True)
 
         # fill column with revised ids with the original id in case they
         # are not reassigned
@@ -360,23 +354,25 @@ class ExtractGTFS():
         dist_df = dist_df[dist_df['distance'] <= TRANSFER_MAX_DISTANCE]
         dist_df['min_transfer_time'] = dist_df['distance'].apply(
             lambda x: ADD_TRANSFER_TIME * 60 + x * 3.6 / TRANSFER_SPEED * 1000)
-        dist_df.drop(columns=['distance'], inplace=True)
         # type 2 - "Transfer requires a minimum amount of time between arrival
         # and departure to ensure a connection"
         dist_df['transfer_type'] = 2
         transfers_df = clip.transfers.copy()
-        #
-        ex_transfers = pd.concat([transfers_df, dist_df], ignore_index=True)
-        # remove transfers that were already in by keeping the first occurence
-        # (first ones are from the "original" transfers because concat)
-        ex_transfers.drop_duplicates(subset=['from_stop_id', 'to_stop_id'],
-                                     keep='first', inplace=True)
-        n = len(ex_transfers) - len(transfers_df)
+        # only add transfers where from-stop-to-stop combination is not already
+        # in transfers in any form
+        dist_df['from_to'] = (dist_df['from_stop_id'] + '|' +
+                              dist_df['to_stop_id'])
+        t_from_to = (transfers_df['from_stop_id'] + '|' +
+                     transfers_df['to_stop_id'])
+        not_in_transfers = ~dist_df['from_to'].isin(t_from_to)
+        dist_df = dist_df[not_in_transfers]
+        dist_df.drop(columns=['distance', 'from_to'], inplace=True)
+        ext_transfers = pd.concat([transfers_df, dist_df], ignore_index=True)
+        n = len(ext_transfers) - len(transfers_df)
         self.logger.info(f'{n} Transfers hinzugefügt (max Distanz '
                          f'{TRANSFER_MAX_DISTANCE} mit {TRANSFER_SPEED}km/h '
                          f'und {ADD_TRANSFER_TIME}min Aufschlag)')
-        # ToDo: der Algo entfernt existierende Transfers durch das drop_duplicates
-        clip.transfers = ex_transfers
+        clip.transfers = ext_transfers
 
     def simplify_route_types(self, clip):
         routes_df = clip.get_routes()
