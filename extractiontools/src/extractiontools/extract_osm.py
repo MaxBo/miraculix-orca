@@ -89,7 +89,6 @@ class ExtractOSM(Extract):
             WHERE
               rm.member_id = ANY(ARRAY[{arr}]) AND
               rm.member_type = 'W'::bpchar
-              )
             ;"""
             cur.execute(sql)
             rows = cur.fetchall()
