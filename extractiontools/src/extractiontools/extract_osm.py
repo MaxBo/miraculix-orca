@@ -122,7 +122,7 @@ class ExtractOSM(Extract):
             SELECT id FROM {self.schema}.relations tr WHERE id = ANY(%s);
             '''
             self.logger.debug(sql)
-            cur.execute(sql, (relation_ids, ))
+            cur.execute(sql, (tuple(relation_ids), ))
             rows = cur.fetchall()
             already_in = {row[0] for row in rows}
             relation_ids = relation_ids - already_in
@@ -135,7 +135,7 @@ class ExtractOSM(Extract):
             FROM {self.temp}.relations WHERE id = ANY(%s)
             '''
             self.logger.debug(sql)
-            cur.execute(sql, (relation_ids, ))
+            cur.execute(sql, (tuple(relation_ids), ))
 
             sql = f'''
             SELECT DISTINCT rm.relation_id AS id
@@ -144,7 +144,7 @@ class ExtractOSM(Extract):
             AND rm.member_type = 'R';
             '''
             self.logger.debug(sql)
-            cur.execute(sql, (relation_ids, ))
+            cur.execute(sql, (tuple(relation_ids), ))
             rows = cur.fetchall()
             relation_ids = {row[0] for row in rows}
 
