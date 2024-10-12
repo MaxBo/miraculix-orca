@@ -77,20 +77,20 @@ class ExtractOSM(Extract):
             return
         relation_ids = set()
         chunksize = 50000
-        n_chunks = len(self.way_ids) // chunksize
+        total = len(self.way_ids)
         cur = self.conn.cursor()
-        for i in range(0, len(self.way_ids), chunksize):
+        for i in range(0, total, chunksize):
             cur_ids = self.way_ids[i: i + chunksize]
             sql = f"""
             -- get relation_ids for ways
-            SELECT rm.relation_id
+            SELECT DISTINCT rm.relation_id
             FROM
               {self.temp}.relation_members rm
             WHERE
               rm.member_id = ANY(%s) AND
               rm.member_type = 'W'::bpchar
             ;"""
-            self.logger.debug(f'{i}/{n_chunks}: {sql}')
+            self.logger.debug(f'{i}/{total}: {sql}')
             cur.execute(sql, (self.way_ids, ))
             rows = cur.fetchall()
             relation_ids = relation_ids | {row[0] for row in rows}
@@ -101,19 +101,19 @@ class ExtractOSM(Extract):
         cur.execute(sql)
         rows = cur.fetchall()
         self.node_ids = [row[0] for row in rows]
-        n_chunks = len(self.node_ids) // chunksize
-        for i in range(0, len(self.node_ids), chunksize):
+        total = len(self.node_ids)
+        for i in range(0, total, chunksize):
             cur_ids = self.node_ids[i: i + chunksize]
             sql = f"""
             -- get relation_ids for nodes
-            SELECT rm.relation_id
+            SELECT DISTINCT rm.relation_id
             FROM
               {self.temp}.relation_members rm
             WHERE
               rm.member_id = ANY(%s) AND
               rm.member_type = 'N'::bpchar
             ;"""
-            self.logger.debug(f'{i}/{n_chunks}: {sql}')
+            self.logger.debug(f'{i}/{total}: {sql}')
             cur.execute(sql, (self.node_ids, ))
             rows = cur.fetchall()
             relation_ids = relation_ids | {row[0] for row in rows}
@@ -158,8 +158,8 @@ class ExtractOSM(Extract):
         if len(ids) == 0:
             return
         chunksize = 50000
-        n_chunks = len(ids) // chunksize
-        for i in range(0, len(ids), chunksize):
+        total = len(ids)
+        for i in range(0, total, chunksize):
             cur_ids = ids[i: i + chunksize]
             arr = ','.join([str(ci) for ci in cur_ids])
             sql = f"""
@@ -169,7 +169,7 @@ class ExtractOSM(Extract):
             FROM {self.temp}.relation_members rm
             WHERE rm.relation_id = ANY(%s);
             """
-            self.logger.debug(f'{i}/{n_chunks}: {sql}')
+            self.logger.debug(f'{i}/{total}: {sql}')
             cur.execute(sql, (cur_ids, ))
 
     def copy_way_nodes(self):
@@ -195,8 +195,8 @@ class ExtractOSM(Extract):
         if len(self.way_ids) == 0:
             return
         chunksize = 50000
-        n_chunks = len(self.way_ids) // chunksize
-        for i in range(0, len(self.way_ids), chunksize):
+        total = len(self.way_ids)
+        for i in range(0, total, chunksize):
             cur_ids = self.way_ids[i: i + chunksize]
             sql = f"""
             -- INSERT way_nodes
@@ -205,7 +205,7 @@ class ExtractOSM(Extract):
             FROM {self.temp}.way_nodes wn
             WHERE wn.way_id = ANY(%s);
             """
-            self.logger.debug(f'{i}/{n_chunks}: {sql}')
+            self.logger.debug(f'{i}/{total}: {sql}')
             cur.execute(sql, (cur_ids, ))
 
         sql = '''
