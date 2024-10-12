@@ -95,6 +95,7 @@ class ExtractOSM(Extract):
         sql = f'''
         SELECT id FROM {self.schema}.nodes n;
         '''
+        cur = self.conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
         self.node_ids = [row[0] for row in rows]
@@ -194,6 +195,7 @@ class ExtractOSM(Extract):
         sql = f'''
         SELECT id FROM {self.schema}.ways w;
         '''
+        cur = self.conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
         self.way_ids = [row[0] for row in rows]
@@ -217,7 +219,6 @@ class ExtractOSM(Extract):
         WHERE NOT EXISTS (SELECT 1 FROM "{schema}".nodes tn WHERE wn.node_id = tn.id);
         '''.format(temp=self.temp, schema=self.schema)
 
-        cur = self.conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
         ids = [row[0] for row in rows]
