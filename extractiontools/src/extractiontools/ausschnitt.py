@@ -578,7 +578,7 @@ FROM {self.temp}.{tn} t;
                 continue
             self.logger.info(f'Copying table "{table}" to {schema}.{table}')
             sql = f'''
-            DROP TABLE IF EXISTS {schema}.{table};
+            DROP TABLE IF EXISTS {schema}.{table} CASCADE;
             CREATE TABLE {schema}.{table} (LIKE {temp_schema}.{table}
             INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING DEFAULTS);
             INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};

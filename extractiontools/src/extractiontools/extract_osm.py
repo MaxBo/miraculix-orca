@@ -441,8 +441,6 @@ class ExtractOSM(Extract):
         Copy the osm classifications and osm-view in wgs84
         to destination database
         """
-        sql = 'DROP SCHEMA IF EXISTS classifications;'
-        self.run_query(sql, self.conn)
         self.copy_tables_to_target_db(schema='classifications', skip_views=False)
 
 
