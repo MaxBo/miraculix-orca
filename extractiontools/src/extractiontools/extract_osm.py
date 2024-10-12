@@ -92,7 +92,7 @@ class ExtractOSM(Extract):
             ;"""
             cur.execute(sql)
             rows = cur.fetchall()
-            relation_ids.add({row[0] for row in rows})
+            relation_ids += {row[0] for row in rows}
 
         sql = f'''
         SELECT id FROM {self.schema}.nodes n;
@@ -115,7 +115,7 @@ class ExtractOSM(Extract):
             ;"""
             cur.execute(sql)
             rows = cur.fetchall()
-            relation_ids.add({row[0] for row in rows})
+            relation_ids += {row[0] for row in rows}
 
         while relation_ids:
             arr = ','.join([str(i) for i in relation_ids])
