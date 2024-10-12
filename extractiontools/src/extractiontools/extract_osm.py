@@ -75,27 +75,29 @@ class ExtractOSM(Extract):
 
         if len(self.way_ids) == 0:
             return
+        relation_ids = {}
         chunksize = 10000
+        cur = self.conn.cursor()
         for i in range(0, len(self.way_ids), chunksize):
             cur_ids = self.way_ids[i: i + chunksize]
             arr = ','.join([str(ci) for ci in cur_ids])
             sql = f"""
-            -- copy relations for ways
-            INSERT INTO {self.schema}.relations
-            SELECT id, version, user_id, tstamp, changeset_id, tags
+            -- get relation_ids for ways
+            SELECT rm.relation_id
             FROM
-              {self.temp}.relations r,
               {self.temp}.relation_members rm
             WHERE
-              rm.member_type = 'W'::bpchar AND rm.member_id = ANY(ARRAY[{arr}])
-              AND rm.relation_id = r.id
+              rm.member_id = ANY(ARRAY[{arr}]) AND
+              rm.member_type = 'W'::bpchar
+              )
             ;"""
-            self.run_query(sql, conn=self.conn)
+            cur.execute(sql)
+            rows = cur.fetchall()
+            relations_ids.add({row[0] for row in rows})
 
         sql = f'''
         SELECT id FROM {self.schema}.nodes n;
         '''
-        cur = self.conn.cursor()
         cur.execute(sql)
         rows = cur.fetchall()
         self.node_ids = [row[0] for row in rows]
@@ -104,29 +106,20 @@ class ExtractOSM(Extract):
             cur_ids = self.way_ids[i: i + chunksize]
             arr = ','.join([str(ci) for ci in cur_ids])
             sql = f"""
-            -- copy relations for nodes
-            INSERT INTO {self.schema}.relations
-            SELECT id, version, user_id, tstamp, changeset_id, tags
+            -- get relation_ids for nodes
+            SELECT rm.relation_id
             FROM
-              {self.temp}.relations r,
               {self.temp}.relation_members rm
             WHERE
-              rm.member_type = 'N'::bpchar AND rm.member_id = ANY(ARRAY[{arr}])
-              AND rm.relation_id = r.id
+              rm.member_id = ANY(ARRAY[{arr}]) AND
+              rm.member_type = 'N'::bpchar
             ;"""
-            self.run_query(sql, conn=self.conn)
+            cur.execute(sql)
+            rows = cur.fetchall()
+            relations_ids.add({row[0] for row in rows})
 
-        self.run_query(sql, conn=self.conn)
-
-        sql = f'''
-        SELECT id FROM {self.schema}.relations r;
-        '''
-        cur.execute(sql)
-        rows = cur.fetchall()
-        ids = [row[0] for row in rows]
-
-        while ids:
-            arr = ','.join([str(i) for i in ids])
+        while relations_ids:
+            arr = ','.join([str(i) for i in relations_ids])
             sql = f'''
             SELECT id FROM {self.schema}.relations tr WHERE id = ANY(ARRAY[{arr}]);
             '''
@@ -134,10 +127,10 @@ class ExtractOSM(Extract):
             cur.execute(sql)
             rows = cur.fetchall()
             already_in = {row[0] for row in rows}
-            ids = set(ids) - already_in
-            if not ids:
+            relations_ids -= already_in
+            if not relations_ids:
                 break
-            arr = ','.join([str(i) for i in ids])
+            arr = ','.join([str(i) for i in relations_ids])
 
             sql = f'''
             INSERT INTO {self.schema}.relations
@@ -156,7 +149,7 @@ class ExtractOSM(Extract):
             self.logger.debug(sql)
             cur.execute(sql)
             rows = cur.fetchall()
-            ids = [row[0] for row in rows]
+            relations_ids = {row[0] for row in rows}
 
         sql = f'''
         SELECT id FROM {self.schema}.relations r;
