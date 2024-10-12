@@ -87,7 +87,7 @@ class ExtractOSM(Extract):
               {self.temp}.relations r,
               {self.temp}.relation_members rm
             WHERE
-              rm.member_type = 'W'::bpchar AND rm.member_id = ANY(ARRAY[{arr}]
+              rm.member_type = 'W'::bpchar AND rm.member_id = ANY(ARRAY[{arr}])
               AND rm.relation_id = r.id
             ;"""
             self.run_query(sql, conn=self.conn)
@@ -111,7 +111,7 @@ class ExtractOSM(Extract):
               {self.temp}.relations r,
               {self.temp}.relation_members rm
             WHERE
-              rm.member_type = 'N'::bpchar AND rm.member_id = ANY(ARRAY[{arr}]
+              rm.member_type = 'N'::bpchar AND rm.member_id = ANY(ARRAY[{arr}])
               AND rm.relation_id = r.id
             ;"""
             self.run_query(sql, conn=self.conn)
