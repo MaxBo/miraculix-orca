@@ -90,7 +90,7 @@ class ExtractOSM(Extract):
               rm.member_type = 'W'::bpchar
             ;"""
             self.logger.debug(sql)
-            cur.execute(sql, relation_ids)
+            cur.execute(sql, self.way_ids)
             rows = cur.fetchall()
             relation_ids = relation_ids | {row[0] for row in rows}
 
@@ -113,7 +113,7 @@ class ExtractOSM(Extract):
               rm.member_type = 'N'::bpchar
             ;"""
             self.logger.debug(sql)
-            cur.execute(sql, relation_ids)
+            cur.execute(sql, self.node_ids)
             rows = cur.fetchall()
             relation_ids = relation_ids | {row[0] for row in rows}
 
@@ -122,7 +122,7 @@ class ExtractOSM(Extract):
             SELECT id FROM {self.schema}.relations tr WHERE id = ANY(%s);
             '''
             self.logger.debug(sql)
-            cur.execute(sql, relation_ids)
+            cur.execute(sql, tuple(relation_ids))
             rows = cur.fetchall()
             already_in = {row[0] for row in rows}
             relation_ids = relation_ids - already_in
@@ -135,7 +135,7 @@ class ExtractOSM(Extract):
             FROM {self.temp}.relations WHERE id = ANY(%s)
             '''
             self.logger.debug(sql)
-            cur.execute(sql, relation_ids)
+            cur.execute(sql, tuple(relation_ids))
 
             sql = f'''
             SELECT DISTINCT rm.relation_id AS id
@@ -144,7 +144,7 @@ class ExtractOSM(Extract):
             AND rm.member_type = 'R';
             '''
             self.logger.debug(sql)
-            cur.execute(sql, relation_ids)
+            cur.execute(sql, tuple(relation_ids))
             rows = cur.fetchall()
             relation_ids = {row[0] for row in rows}
 
@@ -165,9 +165,10 @@ class ExtractOSM(Extract):
             INSERT INTO {self.schema}.relation_members
             SELECT rm.*
             FROM {self.temp}.relation_members rm
-            WHERE rm.relation_id = ANY(ARRAY[{arr}]);
+            WHERE rm.relation_id = ANY(%s);
             """
-            self.run_query(sql, conn=self.conn)
+            self.logger.debug(sql)
+            cur.execute(sql, cur_ids)
 
     def copy_way_nodes(self):
         """
@@ -194,15 +195,15 @@ class ExtractOSM(Extract):
         chunksize = 10000
         for i in range(0, len(self.way_ids), chunksize):
             cur_ids = self.way_ids[i: i + chunksize]
-            arr = ','.join([str(ci) for ci in cur_ids])
             sql = f"""
             -- INSERT way_nodes
             INSERT INTO {self.schema}.way_nodes
             SELECT wn.*
             FROM {self.temp}.way_nodes wn
-            WHERE wn.way_id = ANY(ARRAY[{arr}]);
+            WHERE wn.way_id = ANY(%s);
             """
-            self.run_query(sql, conn=self.conn)
+            self.logger.debug(sql)
+            cur.execute(sql, cur_ids)
 
         sql = '''
         SELECT DISTINCT wn.node_id FROM "{schema}".way_nodes wn
