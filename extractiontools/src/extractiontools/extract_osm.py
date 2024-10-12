@@ -92,7 +92,7 @@ class ExtractOSM(Extract):
             ;"""
             cur.execute(sql)
             rows = cur.fetchall()
-            relations_ids.add({row[0] for row in rows})
+            relation_ids.add({row[0] for row in rows})
 
         sql = f'''
         SELECT id FROM {self.schema}.nodes n;
@@ -115,10 +115,10 @@ class ExtractOSM(Extract):
             ;"""
             cur.execute(sql)
             rows = cur.fetchall()
-            relations_ids.add({row[0] for row in rows})
+            relation_ids.add({row[0] for row in rows})
 
-        while relations_ids:
-            arr = ','.join([str(i) for i in relations_ids])
+        while relation_ids:
+            arr = ','.join([str(i) for i in relation_ids])
             sql = f'''
             SELECT id FROM {self.schema}.relations tr WHERE id = ANY(ARRAY[{arr}]);
             '''
@@ -126,10 +126,10 @@ class ExtractOSM(Extract):
             cur.execute(sql)
             rows = cur.fetchall()
             already_in = {row[0] for row in rows}
-            relations_ids -= already_in
-            if not relations_ids:
+            relation_ids -= already_in
+            if not relation_ids:
                 break
-            arr = ','.join([str(i) for i in relations_ids])
+            arr = ','.join([str(i) for i in relation_ids])
 
             sql = f'''
             INSERT INTO {self.schema}.relations
@@ -148,7 +148,7 @@ class ExtractOSM(Extract):
             self.logger.debug(sql)
             cur.execute(sql)
             rows = cur.fetchall()
-            relations_ids = {row[0] for row in rows}
+            relation_ids = {row[0] for row in rows}
 
         sql = f'''
         SELECT id FROM {self.schema}.relations r;
