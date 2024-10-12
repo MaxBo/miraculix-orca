@@ -72,51 +72,54 @@ class ExtractOSM(Extract):
         self.conn.commit()
 
         self.logger.info(f'Copying relations to {self.schema}.relations')
-        #sql = f"""
-        #-- copy relations for ways and nodes
-        #SELECT id, version, user_id, tstamp, changeset_id, tags
-        #INTO {self.schema}.relations
-        #FROM {self.temp_meta}.osm_relations
-        #WHERE session_id='{self.session_id}';
-        #;"""
-        #self.run_query(sql, conn=self.conn)
 
-        sql = f"""
-        -- copy relations for ways
-        INSERT INTO {self.schema}.relations
-        SELECT id, version, user_id, tstamp, changeset_id, tags
-        FROM {self.temp}.relations r
-        WHERE EXISTS
-        ( SELECT 1
-           FROM {self.temp}.relation_members rm,
-            {self.schema}.ways w
-          WHERE rm.member_type = 'W'::bpchar AND w.id = rm.member_id
-          AND rm.relation_id = r.id)
-        ;"""
+        if len(self.way_ids) == 0:
+            return
+        chunksize = 10000
+        for i in range(0, len(self.way_ids), chunksize):
+            cur_ids = self.way_ids[i: i + chunksize]
+            arr = ','.join([str(ci) for ci in cur_ids])
+            sql = f"""
+            -- copy relations for ways
+            INSERT INTO {self.schema}.relations
+            SELECT id, version, user_id, tstamp, changeset_id, tags
+            FROM
+              {self.temp}.relations r,
+              {self.temp}.relation_members rm
+            WHERE
+              rm.member_type = 'W'::bpchar AND rm.member_id = ANY(ARRAY[{arr}]
+              AND rm.relation_id = r.id
+            ;"""
+            self.run_query(sql, conn=self.conn)
+
+        sql = f'''
+        SELECT id FROM {self.schema}.nodes n;
+        '''
+        cur.execute(sql)
+        rows = cur.fetchall()
+        self.node_ids = [row[0] for row in rows]
+
+        for i in range(0, len(self.way_ids), chunksize):
+            cur_ids = self.way_ids[i: i + chunksize]
+            arr = ','.join([str(ci) for ci in cur_ids])
+            sql = f"""
+            -- copy relations for nodes
+            INSERT INTO {self.schema}.relations
+            SELECT id, version, user_id, tstamp, changeset_id, tags
+            FROM
+              {self.temp}.relations r,
+              {self.temp}.relation_members rm
+            WHERE
+              rm.member_type = 'N'::bpchar AND rm.member_id = ANY(ARRAY[{arr}]
+              AND rm.relation_id = r.id
+            ;"""
+            self.run_query(sql, conn=self.conn)
+
         self.run_query(sql, conn=self.conn)
 
-        sql = f"""
-        -- copy relations for nodes
-        INSERT INTO {self.schema}.relations
-        SELECT id, version, user_id, tstamp, changeset_id, tags
-        FROM {self.temp}.relations r
-        WHERE EXISTS
-        ( SELECT 1
-           FROM {self.temp}.relation_members rm,
-            {self.schema}.nodes n
-          WHERE rm.member_type = 'N'::bpchar AND n.id = rm.member_id
-          AND rm.relation_id = r.id)
-        AND WHERE NOT EXISTS
-        (SELECT 1 FROM {self.schema}.relations r2 WHERE r.id = r2.id)
-        ;"""
-        self.run_query(sql, conn=self.conn)
-
-        sql = f"""
-        SELECT id FROM {self.temp_meta}.osm_related_relations
-        WHERE session_id='{self.session_id}';
-        """
-        cur = self.conn.cursor()
-        self.logger.debug(sql)
+        sql = f'''
+        SELECT id FROM {self.schema}.relations r;
+        '''
         cur.execute(sql)
         rows = cur.fetchall()
         ids = [row[0] for row in rows]
@@ -162,7 +165,7 @@ class ExtractOSM(Extract):
         ids = [row[0] for row in rows]
         if len(ids) == 0:
             return
-        chunksize = 1000
+        chunksize = 10000
         for i in range(0, len(ids), chunksize):
             cur_ids = ids[i: i + chunksize]
             arr = ','.join([str(ci) for ci in cur_ids])
@@ -181,31 +184,33 @@ class ExtractOSM(Extract):
         """
 
         self.logger.info(f'Copying way nodes to {self.schema}.way_nodes')
-        #sql = """
-        #-- copy way nodes
-        #SELECT
-          #wn.way_id,
-          #wn.node_id,
-          #wn.sequence_id
-        #INTO "{schema}".way_nodes
-        #FROM {temp_meta}.osm_way_nodes wn
-        #WHERE session_id='{session_id}';
-        #""".format(temp_meta=self.temp_meta, schema=self.schema,
-                   #session_id=self.session_id)
-        #self.run_query(sql, conn=self.conn)
 
-        sql = f"""
-        -- copy way nodes
-        SELECT
-          wn.way_id,
-          wn.node_id,
-          wn.sequence_id
-        INTO "{self.schema}".way_nodes
-        FROM {self.temp}.way_nodes wn
-        WHERE EXISTS
-          (SELECT 1 FROM "{self.schema}".ways w WHERE w.id = wn.way_id);
-        """
+        sql = f'''
+        CREATE TABLE {self.schema}.way_nodes AS
+        (SELECT * FROM {self.temp}.way_nodes) WITH NO DATA;
+        '''
         self.run_query(sql, conn=self.conn)
+
+        sql = f'''
+        SELECT id FROM {self.schema}.ways w;
+        '''
+        cur.execute(sql)
+        rows = cur.fetchall()
+        self.way_ids = [row[0] for row in rows]
+        if len(self.way_ids) == 0:
+            return
+        chunksize = 10000
+        for i in range(0, len(self.way_ids), chunksize):
+            cur_ids = self.way_ids[i: i + chunksize]
+            arr = ','.join([str(ci) for ci in cur_ids])
+            sql = f"""
+            -- INSERT way_nodes
+            INSERT INTO {self.schema}.way_nodes
+            SELECT wn.*
+            FROM {self.temp}.way_nodes wn
+            WHERE wn.way_id = ANY(ARRAY[{arr}]);
+            """
+            self.run_query(sql, conn=self.conn)
 
         sql = '''
         SELECT DISTINCT wn.node_id FROM "{schema}".way_nodes wn
