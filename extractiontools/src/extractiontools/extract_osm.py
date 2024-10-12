@@ -80,17 +80,17 @@ class ExtractOSM(Extract):
         cur = self.conn.cursor()
         for i in range(0, len(self.way_ids), chunksize):
             cur_ids = self.way_ids[i: i + chunksize]
-            arr = ','.join([str(ci) for ci in cur_ids])
             sql = f"""
             -- get relation_ids for ways
             SELECT rm.relation_id
             FROM
               {self.temp}.relation_members rm
             WHERE
-              rm.member_id = ANY(ARRAY[{arr}]) AND
+              rm.member_id = ANY(%s) AND
               rm.member_type = 'W'::bpchar
             ;"""
-            cur.execute(sql)
+            self.logger.debug(sql)
+            cur.execute(sql, relation_ids)
             rows = cur.fetchall()
             relation_ids = relation_ids | {row[0] for row in rows}
 
@@ -103,50 +103,48 @@ class ExtractOSM(Extract):
 
         for i in range(0, len(self.way_ids), chunksize):
             cur_ids = self.way_ids[i: i + chunksize]
-            arr = ','.join([str(ci) for ci in cur_ids])
             sql = f"""
             -- get relation_ids for nodes
             SELECT rm.relation_id
             FROM
               {self.temp}.relation_members rm
             WHERE
-              rm.member_id = ANY(ARRAY[{arr}]) AND
+              rm.member_id = ANY(%s) AND
               rm.member_type = 'N'::bpchar
             ;"""
-            cur.execute(sql)
+            self.logger.debug(sql)
+            cur.execute(sql, relation_ids)
             rows = cur.fetchall()
             relation_ids = relation_ids | {row[0] for row in rows}
 
         while relation_ids:
-            arr = ','.join([str(i) for i in relation_ids])
             sql = f'''
-            SELECT id FROM {self.schema}.relations tr WHERE id = ANY(ARRAY[{arr}]);
+            SELECT id FROM {self.schema}.relations tr WHERE id = ANY(%s);
             '''
             self.logger.debug(sql)
-            cur.execute(sql)
+            cur.execute(sql, relation_ids)
             rows = cur.fetchall()
             already_in = {row[0] for row in rows}
             relation_ids = relation_ids - already_in
             if not relation_ids:
                 break
-            arr = ','.join([str(i) for i in relation_ids])
 
             sql = f'''
             INSERT INTO {self.schema}.relations
             SELECT id, version, user_id, tstamp, changeset_id, tags
-            FROM {self.temp}.relations WHERE id = ANY(ARRAY[{arr}])
+            FROM {self.temp}.relations WHERE id = ANY(%s)
             '''
             self.logger.debug(sql)
-            cur.execute(sql)
+            cur.execute(sql, relation_ids)
 
             sql = f'''
             SELECT DISTINCT rm.relation_id AS id
             FROM {self.temp}.relation_members rm
-            WHERE rm.member_id = ANY(ARRAY[{arr}])
+            WHERE rm.member_id = ANY(%s)
             AND rm.member_type = 'R';
             '''
             self.logger.debug(sql)
-            cur.execute(sql)
+            cur.execute(sql, relation_ids)
             rows = cur.fetchall()
             relation_ids = {row[0] for row in rows}
 
