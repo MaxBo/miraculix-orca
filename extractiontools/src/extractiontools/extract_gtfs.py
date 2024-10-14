@@ -158,7 +158,9 @@ class ExtractGTFS():
         # restore old order
         gdf_stops = gdf_stops.sort_values('idx').drop(columns=['idx'])
 
-        subset = ['stop_name', 'route_type', 'lat_cl', 'lon_cl', 'level_id']
+        subset = ['stop_name', 'route_type', 'lat_cl', 'lon_cl']
+        if 'level_id' in gdf_stops.columns:
+            subset.append('level_id')
         duplicated = gdf_stops[gdf_stops.duplicated(
             subset=subset, keep='first')]
 
@@ -199,7 +201,7 @@ class ExtractGTFS():
             ['stop_id','route_type']).size().reset_index()[
                 ['stop_id','route_type']]
 
-        ex_idx = [False] * len(duplicated)
+        ex_idx = np.array([False] * len(duplicated))
         # that seems a little excessive, no idea how to do it without a loop
         # it isn't a thing that happens a lot though
         # alternatively we could build and use type_stop_id
