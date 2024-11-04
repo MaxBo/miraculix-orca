@@ -65,9 +65,11 @@ class ExtractGTFS():
         self.out_path = out_path
         self.do_visum_postproc = do_visum_postproc
         self.do_transferprocessing = do_transferprocessing
-        #self.out_path = "D:\\Downloads"
+        self.out_path = "D:\\Downloads"
         #self.gtfs_input = os.path.join(
             #self.out_path, '20240826_fahrplaene_gesamtdeutschland_gtfs.zip')
+        self.gtfs_input = os.path.join(
+            self.out_path, 'gtfsde_latest.zip')
         self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.project_area = project_area
         self.logger = logger or logging.getLogger(self.__module__)
@@ -259,25 +261,28 @@ class ExtractGTFS():
         revised_stops['parent_station'] = revised_stops['type_stop_id_1']
 
         # transfers.txt has stop ids that need to be replaced as well
-        revised_transfers = clip.transfers.copy()
-        for column in ['from_stop_id', 'to_stop_id']:
-            revised_transfers['stop_id_revised'] = revised_transfers.loc[
-                :, column].map(reassign_map_union)
-            revised_transfers.loc[revised_transfers['stop_id_revised'].isna(),
-                              'stop_id_revised'] = revised_transfers.loc[
-                                  :, column]
-            revised_transfers = revised_transfers.merge(
-                # there should be no parents with route types so no duplicates
-                # for them but better be safe to avoid duplicating rows
-                revised_stops[['stop_id', 'type_stop_id']].drop_duplicates(),
-                how='left', left_on='stop_id_revised', right_on='stop_id')
-            revised_transfers.loc[:, column] = revised_transfers.loc[
-                :, 'type_stop_id']
-            revised_transfers.drop(
-                columns=['stop_id_revised', 'stop_id', 'type_stop_id'],
-                inplace=True)
-        # drop lines that are duplicated due to reassigning ids
-        revised_transfers.drop_duplicates(keep='first', inplace=True)
+        # not all feeds have transfers (e.g. gtfs.de)
+        if clip.transfers:
+            revised_transfers = clip.transfers.copy()
+            for column in ['from_stop_id', 'to_stop_id']:
+                revised_transfers['stop_id_revised'] = revised_transfers.loc[
+                    :, column].map(reassign_map_union)
+                revised_transfers.loc[revised_transfers['stop_id_revised'].isna(),
+                                  'stop_id_revised'] = revised_transfers.loc[
+                                      :, column]
+                revised_transfers = revised_transfers.merge(
+                    # there should be no parents with route types so no duplicates
+                    # for them but better be safe to avoid duplicating rows
+                    revised_stops[['stop_id', 'type_stop_id']].drop_duplicates(),
+                    how='left', left_on='stop_id_revised', right_on='stop_id')
+                revised_transfers.loc[:, column] = revised_transfers.loc[
+                    :, 'type_stop_id']
+                revised_transfers.drop(
+                    columns=['stop_id_revised', 'stop_id', 'type_stop_id'],
+                    inplace=True)
+            # drop lines that are duplicated due to reassigning ids
+            revised_transfers.drop_duplicates(keep='first', inplace=True)
+            clip.transfers = revised_transfers
 
         # fill column with revised ids with the original id in case they
         # are not reassigned
@@ -337,11 +342,13 @@ class ExtractGTFS():
         clip.stop_times = tt_revised.drop(
             columns=['stop_id_revised', 'route_type', 'type_stop_id'])
 
-        clip.transfers = revised_transfers
-
     def complement_transfers(self, clip):
         self.logger.info('Berechne Distanzen und Transferzeiten zwischen '
                          'den Stops')
+        if not clip.transfers:
+            self.logger.info('Achtung: Der Feed enthält keine Transferzeiten. '
+                             'Alle Transferzeiten werden jetzt künstlich '
+                             'erzeugt.')
         stops_df = clip.get_stops()
         stops_df = stops_df[~stops_df['is_parent']]
         gdf_stops = gp.GeoDataFrame(stops_df, geometry=gp.points_from_xy(
@@ -359,18 +366,24 @@ class ExtractGTFS():
         # type 2 - "Transfer requires a minimum amount of time between arrival
         # and departure to ensure a connection"
         dist_df['transfer_type'] = 2
-        transfers_df = clip.transfers.copy()
-        # only add transfers where from-stop-to-stop combination is not already
-        # in transfers in any form
-        dist_df['from_to'] = (dist_df['from_stop_id'] + '|' +
-                              dist_df['to_stop_id'])
-        t_from_to = (transfers_df['from_stop_id'] + '|' +
-                     transfers_df['to_stop_id'])
-        not_in_transfers = ~dist_df['from_to'].isin(t_from_to)
-        dist_df = dist_df[not_in_transfers]
-        dist_df.drop(columns=['distance', 'from_to'], inplace=True)
-        ext_transfers = pd.concat([transfers_df, dist_df], ignore_index=True)
-        n = len(ext_transfers) - len(transfers_df)
+        dist_df.drop(columns=['distance'], inplace=True)
+
+        if clip.transfers:
+            transfers_df = clip.transfers.copy()
+            # only add transfers where from-stop-to-stop combination is
+            # not already in transfers in any form
+            dist_df['from_to'] = (dist_df['from_stop_id'] + '|' +
+                                  dist_df['to_stop_id'])
+            t_from_to = (transfers_df['from_stop_id'] + '|' +
+                         transfers_df['to_stop_id'])
+            not_in_transfers = ~dist_df['from_to'].isin(t_from_to)
+            dist_df = dist_df[not_in_transfers]
+            dist_df.drop(columns=['from_to'], inplace=True)
+            ext_transfers = pd.concat([transfers_df, dist_df], ignore_index=True)
+            n = len(ext_transfers) - len(transfers_df)
+        else:
+            ext_transfers = dist_df
+            n = len(dist_df)
         self.logger.info(f'{n} Transfers hinzugefügt (max Distanz '
                          f'{TRANSFER_MAX_DISTANCE} mit {TRANSFER_SPEED}km/h '
                          f'und {ADD_TRANSFER_TIME}min Aufschlag)')
@@ -445,8 +458,11 @@ class ExtractGTFS():
         # generell: Station mit parent -> stop_desc in Klammern an stop_name
 
     def rename_stops(self, clip):
-        self.logger.info('Füge Stationsbeschreibungen zu Stationsnamen hinzu')
         stops_df = clip.get_stops()
+        # renaming only applicable if stop_desc exists
+        if not 'stop_desc' in stops_df.columns:
+            return
+        self.logger.info('Füge Stationsbeschreibungen zu Stationsnamen hinzu')
         stops_w_desc = stops_df[~stops_df['stop_desc'].isna()]
         new_names = stops_w_desc['stop_name'] + ' (' + \
             stops_w_desc['stop_desc'] + ')'
