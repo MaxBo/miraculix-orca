@@ -65,11 +65,11 @@ class ExtractGTFS():
         self.out_path = out_path
         self.do_visum_postproc = do_visum_postproc
         self.do_transferprocessing = do_transferprocessing
-        self.out_path = "D:\\Downloads"
+        #self.out_path = "D:\\Downloads"
         #self.gtfs_input = os.path.join(
             #self.out_path, '20240826_fahrplaene_gesamtdeutschland_gtfs.zip')
-        self.gtfs_input = os.path.join(
-            self.out_path, 'gtfsde_latest.zip')
+        #self.gtfs_input = os.path.join(
+            #self.out_path, 'gtfsde_latest.zip')
         self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.project_area = project_area
         self.logger = logger or logging.getLogger(self.__module__)
