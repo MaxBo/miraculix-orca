@@ -76,7 +76,7 @@ class ExtractOSM(Extract):
         if len(self.way_ids) == 0:
             return
         relation_ids = set()
-        chunksize = 20000
+        chunksize = 100000
         total = len(self.way_ids)
         cur = self.conn.cursor()
         for i in range(0, total, chunksize):
@@ -91,7 +91,7 @@ class ExtractOSM(Extract):
               rm.member_type = 'W'::bpchar
             ;"""
             self.logger.debug(f'{i}/{total}: {sql}')
-            cur.execute(sql, (self.way_ids, ))
+            cur.execute(sql, (cur_ids, ))
             rows = cur.fetchall()
             relation_ids = relation_ids | {row[0] for row in rows}
 
@@ -114,7 +114,7 @@ class ExtractOSM(Extract):
               rm.member_type = 'N'::bpchar
             ;"""
             self.logger.debug(f'{i}/{total}: {sql}')
-            cur.execute(sql, (self.node_ids, ))
+            cur.execute(sql, (cur_ids, ))
             rows = cur.fetchall()
             relation_ids = relation_ids | {row[0] for row in rows}
 
