@@ -76,7 +76,7 @@ class ExtractOSM(Extract):
         if len(self.way_ids) == 0:
             return
         relation_ids = set()
-        chunksize = 100000
+        chunksize = 10000
         total = len(self.way_ids)
         cur = self.conn.cursor()
         for i in range(0, total, chunksize):
