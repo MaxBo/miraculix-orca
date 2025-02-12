@@ -178,15 +178,15 @@ CREATE OR REPLACE FUNCTION "{network}".calc_v_rad (slope double precision)
 RETURNS double precision
 ---berechne Geschwindigkeit in Abhängigkeit von Hin und Rückrichtung, vRad ist gedeckelt auf 30 km/h
 AS $$
-import numpy as np
+import math
 if slope == 0:
     v = 15.119693 # Geschwindigkeit bei Steigung 0
 else:
     x = slope + 0.09
-    v = (4.02-213*(x-0.2)-449*(x**3-0.008)-1412*(x**3*np.log(x)+0.0128))*(slope >= -0.08 and slope <.30) + \
+    if x <= 0:
+        return 30
+    v = (4.02-213*(x-0.2)-449*(x**3-0.008)-1412*(x**3*math.log(x)+0.0128))*(slope >= -0.08 and slope <.30) + \
     (.4/slope) * (slope >= 0.30)+ 30*(slope < -0.08)
-    if np.isnan(v):
-        v=30
 return v
 $$ LANGUAGE plpython3u;
 
@@ -195,7 +195,6 @@ RETURNS double precision
 ---berechne Geschwindigkeit in Abhängigkeit von Hin und Rückrichtung, vFuss ist gedeckelt auf 7 km/h
 ---bei Gefälle steigt die Geschwindigkeit zunächst bis auf 7 km/h und nimmt dann aber wieder ab bis auf 3.5 km/h, da man berab auch nicht so schnell gehen kann
 AS $$
-import numpy as np
 v0 = 5.
 x = slope
 if slope == 0:

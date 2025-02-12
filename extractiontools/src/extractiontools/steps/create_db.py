@@ -9,9 +9,11 @@ __parent_modules__ = [
 ]
 
 
-@meta(group='(1) Project', order=1)
+@meta(group='(1) Projekt', order=1, title='Datenbank erstellen',
+      description='Erstellen der Zieldatenbank.')
 @orca.step()
-def create_db(target_srid: str, project_area: ogr.Geometry, database: str):
+def create_db(target_srid: str, project_area: ogr.Geometry, database: str,
+              db_status):
     """
     (re)create the target database
     and copy the selected files
@@ -25,9 +27,11 @@ def create_db(target_srid: str, project_area: ogr.Geometry, database: str):
     extract.update_boundaries()
 
 
-@meta(group='(1) Project', order=2)
+@meta(group='(1) Projekt', order=2, title='Datenbank löschen',
+      description='Löscht Zieldatenbank und ihre Inhalte komplett.',
+      required=create_db)
 @orca.step()
-def drop_db(database: str):
+def drop_db(database: str, db_status):
     """
     drop the database and its contents
     """
@@ -35,7 +39,13 @@ def drop_db(database: str):
     extract.extract()
 
 
-@meta(group='(1) Project', order=3, requires=create_db)
+@meta(group='(1) Projekt', order=3, required=create_db, title='Zugriff gewähren',
+      description='''Gewährt <b>Lese- und Schreibrechte</b> in der Zieldatenbank für
+      ausgewählte Nutzer:innen. Dies wirkt sich nur auf <b>bestehende Schemata</b> aus.
+      Der Schritt sollte daher zum Schluss ausgeführt werden. <br>
+      Der Zugriff auf ein Schema wird bei erneuter Erzeugung widerrufen (z.B. werden
+      die Zugriffsrechte zum Schema "osm" zurückgesetzt, wenn der Schritt
+      "extract_osm" erneut ausgeführt wird) ''')
 @orca.step()
 def grant_access(database: str, db_users: list):
     '''

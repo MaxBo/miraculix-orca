@@ -30,7 +30,9 @@ __parent_modules__ = [
 ]
 
 
-@meta(group='(2) Extract Data', order=1, required='create_db')
+@meta(group='(2) Datenextraktion', order=1, required='create_db',
+      title='OSM-Daten extrahieren', description='OSM-Daten aus der '
+      'Quelldatenbank extrahieren')
 @orca.step()
 def extract_osm(source_db: str, database: str, target_srid: int,
                 project_area: ogr.Geometry):
@@ -43,7 +45,9 @@ def extract_osm(source_db: str, database: str, target_srid: int,
     extract.extract()
 
 
-@meta(group='(2) Extract Data', order=2, required=extract_osm)
+@meta(group='(2) Datenextraktion', order=2, required=extract_osm,
+      title='Polygone erzeugen', description='(Multi-)Polygone aus den '
+      'OSM-Daten erzeugen')
 @orca.step()
 def create_polygons_from_osm(database: str):
     """
@@ -53,7 +57,9 @@ def create_polygons_from_osm(database: str):
     copy2fgdb.create_poly_and_multipolygons()
 
 
-@meta(group='(2) Extract Data', order=4, required='create_db')
+@meta(group='(2) Datenextraktion', order=4, required='create_db',
+      title='Landnutzung extrahieren',
+      description='Daten zur Landnutzung im Projektgebiet extrahieren')
 @orca.step()
 def extract_landuse(source_db: str, database: str, gmes: List[str],
                     corine: List[str], target_srid: int,
@@ -67,7 +73,10 @@ def extract_landuse(source_db: str, database: str, gmes: List[str],
     extract.extract()
 
 
-@meta(group='(2) Extract Data', order=10, required='create_db')
+@meta(group='(2) Datenextraktion', order=10, required='create_db',
+      title='Verwaltungsgrenzen extrahieren',
+      description='administrative Grenzen innerhalb des Projektgebiets '
+      'extrahieren')
 @orca.step()
 def extract_verwaltungsgrenzen(source_db: str, database: str,
                                verwaltungsgrenzen_tables: List[str],
@@ -83,7 +92,10 @@ def extract_verwaltungsgrenzen(source_db: str, database: str,
     extract.extract()
 
 
-@meta(group='(2) Extract Data', order=11, required='create_db')
+@meta(group='(2) Datenextraktion', order=11, required='create_db',
+      title='Firmen und Nachbarschaften extrahieren',
+      description='Firmen und Nachbarschaften innerhalb des '
+      'Projektgebiets extrahieren')
 @orca.step()
 def extract_firms_neighbourhoods(source_db: str, database: str,
                                  firms_tables: List[str],
@@ -100,7 +112,10 @@ def extract_firms_neighbourhoods(source_db: str, database: str,
     extract.extract()
 
 
-@meta(group='(2) Extract Data', order=5, required='create_db')
+@meta(group='(2) Datenextraktion', order=5, required='create_db',
+      title='Raster extrahieren',
+      description='LAEA- und Zensus-Raster innerhalb des '
+      'Projektgebiets extrahieren')
 @orca.step()
 def extract_laea_raster(source_db: str, database: str, target_srid: int,
                         project_area: ogr.Geometry):
@@ -114,7 +129,11 @@ def extract_laea_raster(source_db: str, database: str, target_srid: int,
     z2r.run()
 
 
-@meta(group='(2) Extract Data', order=3, required=create_polygons_from_osm)
+@meta(group='(2) Datenextraktion', order=3, required=create_polygons_from_osm,
+      title='OSM-Views erzeugen',
+      description='erzeugt spezialisierte Views auf die OSM-Daten. <br>'
+      '<b>Achtung</b>: bereits existierende OSM-Views und davon abhängende '
+      'Views werden kaskadiert gelöscht!')
 @orca.step()
 def create_osm_views(database: str):
     """
@@ -129,7 +148,8 @@ def create_osm_views(database: str):
     copy2fgdb.create_views()
 
 
-@meta(group='(5) Export')
+@meta(group='(5) Export', title='OSM Layer', description='Die Ziel-Schemata in '
+      'der FGDB, in die die Tabellen mit den OSM-Daten exportiert werden.')
 @orca.injectable()
 def osm_layers() -> Dict[str, str]:
     """the OSM network layers to export to the corresponding schema"""
@@ -148,7 +168,8 @@ def osm_layers() -> Dict[str, str]:
     return layers
 
 
-@meta(group='(5) Export', required=create_osm_views)
+@meta(group='(5) Export', required=create_osm_views, title='OSM nach FGDB',
+      description='Export der OSM-Layer in eine FGDB-Datei')
 @orca.step()
 def copy_osm_to_fgdb(database: str, osm_layers: Dict[str, str]):
     """
@@ -160,10 +181,11 @@ def copy_osm_to_fgdb(database: str, osm_layers: Dict[str, str]):
                              filename='osm_layers',
                              schema='osm_layer',
                              logger=orca.logger)
-    copy2fgdb.copy_layers('FileGDB')
+    copy2fgdb.copy_layers('OpenFileGDB')
 
 
-@meta(group='(5) Export', required=create_osm_views)
+@meta(group='(5) Export', required=create_osm_views, title='OSM nach GPKG',
+      description='Export der OSM-Layer in eine Geopackage-Datei')
 @orca.step()
 def copy_osm_to_gpkg(database: str, osm_layers: Dict[str, str]):
     """
@@ -178,7 +200,8 @@ def copy_osm_to_gpkg(database: str, osm_layers: Dict[str, str]):
     copy2fgdb.copy_layers('GPKG')
 
 
-@meta(group='(5) Export', required=extract_laea_raster)
+@meta(group='(5) Export', required=extract_laea_raster, title='Zensus-TIFF',
+      description='Export des Zensus in eine GeoTIFF')
 @orca.step()
 def copy_zensus_to_tiff(database: str, subfolder_tiffs: str):
     """
@@ -189,7 +212,10 @@ def copy_zensus_to_tiff(database: str, subfolder_tiffs: str):
     z2r.run()
 
 
-@meta(group='(8a) Regionalstatistik')
+@meta(group='(8a) Regionalstatistik', title='Regionalstatistik extrahieren',
+      description='Daten der Regionalstatistik der gegebenen Jahren in den '
+      'gegebenen Gemeindegrenzen aus der Quelldatenbank extrahieren',
+      required='create_db')
 @orca.step()
 def extract_regionalstatistik(source_db: str,
                               database: str,
@@ -207,13 +233,13 @@ def extract_regionalstatistik(source_db: str,
     extract_regionalstatistik.extract()
 
 
-@meta(group='(8b) Pendler')
+@meta(group='(8b) Pendler', title='Pendlerdaten importieren')
 @orca.step()
 def import_pendlerdaten(source_db: str,
                         subfolder_pendlerdaten: str,
                         pendlerdaten_years: List[str]):
     """
-    Import neue Pendlerdaten aus Excel-Dateien in Europa-Datenbank
+    Import neue Pendlerdaten aus Excel-Dateien in die Quelldatenbank
     Nur zu starten, wenn neue Pendlerdaten-Excel-Dateien auf den Server hochgeladen wurden!!
     """
     import_pendler = ImportPendlerdaten(db=source_db,
@@ -223,7 +249,8 @@ def import_pendlerdaten(source_db: str,
     import_pendler.run()
 
 
-@meta(group='(8b) Pendler', required=extract_regionalstatistik)
+@meta(group='(8b) Pendler', required=extract_regionalstatistik,
+      title='Pendlerdaten extrahieren')
 @orca.step()
 def extract_pendlerdaten(source_db: str,
                          database: str,
@@ -239,7 +266,8 @@ def extract_pendlerdaten(source_db: str,
     extract_pendler.extract()
 
 
-@meta(group='(8b) Pendler', required=extract_pendlerdaten)
+@meta(group='(8b) Pendler', required=extract_pendlerdaten,
+      title='Pendlerspinne erzeugen')
 @orca.step()
 def create_pendlerspinne(database: str,
                          pendlerspinne_gebiete: str,
@@ -255,7 +283,8 @@ def create_pendlerspinne(database: str,
     create_pendlerspinne.run()
 
 
-@meta(group='(8b) Pendler', required=extract_pendlerdaten)
+@meta(group='(8b) Pendler', required=extract_pendlerdaten,
+      title='Pendlerdaten exportieren')
 @orca.step()
 def export_pendlerdaten(database: str):
     """
@@ -267,7 +296,10 @@ def export_pendlerdaten(database: str):
     export.export()
 
 
-@meta(group='(9) TravelDemandModel', order=1)
+@meta(group='(9) TravelDemandModel', order=1,
+      title='Verschneidungstool vorbereiten',
+      description='Vorbereitung der Tabellen und Views für das '
+      'Verschneidungstool')
 @orca.step()
 def prepare_verschneidungstool(source_db: str, database: str, target_srid: int):
     """
@@ -278,7 +310,9 @@ def prepare_verschneidungstool(source_db: str, database: str, target_srid: int):
                                         logger=orca.logger)
     prepare.extract()
 
-@meta(group='(9) TravelDemandModel', order=2)
+@meta(group='(9) TravelDemandModel', order=2, title='BASt extrahieren',
+      description='BASt-Netzwerk und Verkehrszählungen aus der Quelldatenbank '
+      'extrahieren')
 @orca.step()
 def extract_bast(source_db: str, database: str, target_srid: int):
     """

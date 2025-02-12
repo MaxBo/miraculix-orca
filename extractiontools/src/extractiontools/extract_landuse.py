@@ -81,10 +81,10 @@ class ExtractLanduse(Extract):
             """
             self.run_query(sql, conn=self.conn)
 
-            self.logger.info(f'clean invalid geometries for'
+            self.logger.info(f'clean invalid geometries for '
                              f'{self.schema}.{corine}')
             # cleanup corine data
-            sel = f"""
+            sql = f"""
             UPDATE {self.schema}.{corine}
             SET geom = st_makevalid(geom)
             WHERE NOT st_isvalid(geom);

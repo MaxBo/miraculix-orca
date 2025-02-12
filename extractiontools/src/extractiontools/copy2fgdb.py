@@ -14,7 +14,7 @@ from extractiontools.ausschnitt import Extract
 class Copy2FGDB(Extract):
     """Copy files to gdal"""
 
-    gdal_file_extensions = {'FileGDB': 'gdb',
+    gdal_file_extensions = {'OpenFileGDB': 'gdb',
                             'GPKG': 'gpkg',
                             }
 
@@ -35,7 +35,7 @@ class Copy2FGDB(Extract):
                    schema: str,
                    layer: str,
                    dest_schema: str = None,
-                   gdal_format: str = 'FileGDB'):
+                   gdal_format: str = 'OpenFileGDB'):
         """
         copy layer
         Parameters
@@ -45,7 +45,7 @@ class Copy2FGDB(Extract):
         path = self.get_path(gdal_format)
 
         lco = ''
-        if gdal_format == 'FileGDB':
+        if gdal_format == 'OpenFileGDB':
             lco = f' -lco FEATURE_DATASET="{dest_schema}"'
 
         # get srid
@@ -107,7 +107,7 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
             cur.execute(sql)
             return cur.rowcount
 
-    def copy_layers(self, gdal_format: str = 'FileGDB'):
+    def copy_layers(self, gdal_format: str = 'OpenFileGDB'):
         """
         copy all layers in option.layers
         """
@@ -121,15 +121,24 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
                 schema, layer = schema_layer
             self.copy_layer(schema, layer, dest_schema, gdal_format)
 
-        path = self.get_path(gdal_format)
-        cmd_zip = f'zip -r -m {path}.zip {path}'
+        if gdal_format == 'OpenFileGDB':
+            # zip folder
+            path = self.get_path(gdal_format)
+            cmd_zip = f'zip -r -j -m {path}.zip {path}'
 
-        self.logger.info(f'Zipping FGDBs to {path}')
-        self.logger.debug(cmd_zip)
-        ret = subprocess.call(cmd_zip, shell=self.SHELL)
-        if ret:
-            raise IOError(
-                f'could not zip {path}')
+            self.logger.info(f'Zipping FGDBs to {path}')
+            self.logger.debug(cmd_zip)
+            ret = subprocess.call(cmd_zip, shell=self.SHELL)
+            if ret:
+                raise IOError(
+                    f'could not zip {path}')
+            # remove folder
+            cmd_rm = f'rm -R {path}'
+            self.logger.debug(cmd_rm)
+            ret = subprocess.call(cmd_rm, shell=self.SHELL)
+            if ret:
+                raise IOError(
+                    f'could not remove {path}')
 
     def check_platform(self):
         """
@@ -141,7 +150,7 @@ SELECT * FROM {schema}.{layer} LIMIT 1;
             self.OGR2OGRPATH = os.path.join(self.OGR_FOLDER, 'ogr2ogr.exe')
             self.OGRINFO = os.path.join(self.OGR_FOLDER, 'ogrinfo.exe')
         else:
-            self.OGR_FOLDER = '/usr/local/bin'
+            self.OGR_FOLDER = '/usr/bin'
             self.OGR2OGRPATH = os.path.join(self.OGR_FOLDER, 'ogr2ogr')
             self.OGRINFO = os.path.join(self.OGR_FOLDER, 'ogrinfo')
 
@@ -200,4 +209,4 @@ if __name__ == '__main__':
         layers[f'{options.schema}.{layer}'] = options.dest_schema
 
     copy2fgdb = Copy2FGDB(login, layers, options.gdbname)
-    copy2fgdb.copy_layers('FileGDB')
+    copy2fgdb.copy_layers('OpenFileGDB')

@@ -33,7 +33,8 @@ class ExtractLAEA(Extract):
         row_number() OVER(ORDER BY v.cellcode)::integer AS id,
         v.geom,
         v.pnt,
-        z.einwohner
+        z.einwohner,
+        z.einwohner2022
         FROM
         {self.schema}.zensus_ew_hectar z,
         {self.schema}.laea_vector_100 v
@@ -68,13 +69,17 @@ class ExtractLAEA(Extract):
         sql = f"""
         DROP TABLE IF EXISTS {self.schema}.zensus_ew_hectar CASCADE;
         CREATE TABLE {self.schema}.zensus_ew_hectar
-        (id text primary key, einwohner integer);
+        (id text primary key, einwohner integer, einwohner2022 integer);
 
-        INSERT INTO {self.schema}.zensus_ew_hectar(id, einwohner)
-        SELECT z.id, z.einwohner
-        FROM {self.temp}.ew_zensus2011_gitter z,
-        {self.schema}.laea_vector_100 v
-        WHERE v.cellcode = z.id;
+        INSERT INTO {self.schema}.zensus_ew_hectar(id, einwohner, einwohner2022)
+        SELECT v.cellcode AS id,
+               COALESCE(z2011.einwohner, 0) as einwohner,
+               COALESCE(z2022.einwohner, 0) as einwohner2022
+        FROM {self.schema}.laea_vector_100 v
+        LEFT JOIN {self.temp}.ew_zensus2011_gitter z2011 ON v.cellcode = z2011.id
+        LEFT JOIN {self.temp}.ew_zensus2022_gitter z2022 ON v.cellcode = z2022.id
+        WHERE z2011.einwohner > 0 OR z2022.einwohner > 0
+        ;
         """
         self.run_query(sql, conn=self.conn)
 

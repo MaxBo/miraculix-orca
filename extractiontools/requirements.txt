@@ -6,3 +6,5 @@ requests
 lxml
 pyxlsb
 openpyxl
+gtfs_kit
+geopandas

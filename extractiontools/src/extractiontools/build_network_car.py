@@ -35,6 +35,7 @@ class BuildNetwork(DBApp):
         self.links_to_find = links_to_find
         self.corine = corine
         self.routing_walk = False
+        self.pg_replacement = '_pg_replacement'
 
     def build(self):
         """
@@ -49,12 +50,15 @@ class BuildNetwork(DBApp):
             self.create_schema()
             self.create_streets_view()
 
+            # create postgis_replacement_functions
+            self.create_postgis_replacement_functions()
+            self.conn.commit()
+
             # select roads and junctions
             self.logger.info(f'Create Views')
             self.create_roads()
             self.create_junctions()
             self.conn.commit()
-            # create functions
             self.create_functions()
             self.conn.commit()
             # create links
@@ -303,8 +307,8 @@ jr AS (
   j.nodeid,
   j.pnt_wgs,
   a.rast,
-  ST_WorldToRasterCoordX(a.rast, j.pnt_wgs) AS colx,
-  ST_WorldToRasterCoordY(a.rast, j.pnt_wgs) AS rowy,
+  "{pg}".ST_WorldToRasterCoordX(a.rast, j.pnt_wgs) AS colx,
+  "{pg}".ST_WorldToRasterCoordY(a.rast, j.pnt_wgs) AS rowy,
   st_height(a.rast) AS height,
   st_width(a.rast) AS width
 FROM "{network}".junctions j,
@@ -328,7 +332,7 @@ ST_PixelAsCentroid(
   jr.rast, jr.colx + dx.dx, jr.rowy + dy.dy)::geography,
   jr.pnt_wgs::geography) AS distance,
 st_value(
-    jr.rast, jr.colx + dx.dx, jr.rowy + dy.dy) AS val
+    jr.rast, 1, jr.colx + dx.dx, jr.rowy + dy.dy) AS val
 FROM jr, dx, dy
 WHERE 0 < jr.colx + dx.dx
 AND jr.colx + dx.dx <= jr.width
@@ -363,6 +367,7 @@ CREATE INDEX pk_junctions_z ON "{network}".junctions_z USING btree(nodeid);
                                   max_dist=30,  # Maximale Distanz zu benachbarten Centroiden
                                   network=self.network,
                                   srid=self.srid,
+                                  pg=self.pg_replacement,
                                   ))
 
         #
@@ -513,6 +518,107 @@ SELECT "{network}".create_links({limit}, 0);
 DELETE FROM "{network}".links WHERE st_NumPoints(geom) = 0;
         """
         self.run_query(sql)
+
+    def create_postgis_replacement_functions(self):
+        """Build postgis replacement functions required for PostgreSQL 17"""
+        self.logger.debug(
+            f'Create Functions that replaces postgis-functions in PostgreSQL 17')
+        cur = self.conn.cursor()
+
+        sql = f'''
+CREATE SCHEMA IF NOT EXISTS "{self.pg_replacement}";
+
+
+CREATE OR REPLACE FUNCTION "{self.pg_replacement}".st_worldtorastercoordx(
+	rast raster,
+	pt geometry)
+    RETURNS integer
+    LANGUAGE 'plpgsql'
+    COST 100
+    IMMUTABLE STRICT PARALLEL SAFE
+AS $BODY$
+	DECLARE
+		xr integer;
+	BEGIN
+		IF ( public.ST_geometrytype(pt) != 'ST_Point' ) THEN
+			RAISE EXCEPTION 'Attempting to compute raster coordinate with a non-point geometry';
+		END IF;
+		IF public.ST_SRID(rast) != public.ST_SRID(pt) THEN
+			RAISE EXCEPTION 'Raster and geometry do not have the same SRID';
+		END IF;
+		SELECT columnx INTO xr FROM public._ST_worldtorastercoord($1, public.ST_x(pt), public.ST_y(pt));
+		RETURN xr;
+	END;
+
+$BODY$;
+
+COMMENT ON FUNCTION "{self.pg_replacement}".st_worldtorastercoordx(raster, geometry)
+    IS 'args: rast, pt - Returns the column in the raster of the point geometry (pt) or a X and Y world coordinate (xw, yw) represented in world spatial reference system of raster.';
+
+
+CREATE OR REPLACE FUNCTION "{self.pg_replacement}".st_worldtorastercoordy(
+	rast raster,
+	pt geometry)
+    RETURNS integer
+    LANGUAGE 'plpgsql'
+    COST 100
+    IMMUTABLE STRICT PARALLEL SAFE
+AS $BODY$
+	DECLARE
+		yr integer;
+	BEGIN
+		IF ( public.st_geometrytype(pt) != 'ST_Point' ) THEN
+			RAISE EXCEPTION 'Attempting to compute raster coordinate with a non-point geometry';
+		END IF;
+		IF public.ST_SRID(rast) != public.ST_SRID(pt) THEN
+			RAISE EXCEPTION 'Raster and geometry do not have the same SRID';
+		END IF;
+		SELECT rowy INTO yr FROM public._ST_worldtorastercoord($1, public.st_x(pt), public.st_y(pt));
+		RETURN yr;
+	END;
+
+$BODY$;
+
+COMMENT ON FUNCTION "{self.pg_replacement}".st_worldtorastercoordy(raster, geometry)
+    IS 'args: rast, pt - Returns the row in the raster of the point geometry (pt) or a X and Y world coordinate (xw, yw) represented in world spatial reference system of raster.';
+
+CREATE OR REPLACE FUNCTION "{self.pg_replacement}".pgr_drivingdistance(
+	text,
+	bigint,
+	double precision,
+	directed boolean DEFAULT true,
+	OUT seq bigint,
+	OUT depth bigint,
+	OUT start_vid bigint,
+	OUT pred bigint,
+	OUT node bigint,
+	OUT edge bigint,
+	OUT cost double precision,
+	OUT agg_cost double precision)
+    RETURNS SETOF record
+    LANGUAGE 'sql'
+    COST 100
+    VOLATILE STRICT PARALLEL UNSAFE
+    ROWS 1000
+
+AS $BODY$
+    SELECT seq, depth, start_vid, pred, node, edge, cost, agg_cost
+    FROM public._pgr_drivingDistancev4(public._pgr_get_statement($1), ARRAY[$2]::BIGINT[], $3, $4, false);
+$BODY$;
+
+COMMENT ON FUNCTION "{self.pg_replacement}".pgr_drivingdistance(text, bigint, double precision, boolean)
+    IS 'pgr_drivingDistance(Single_vertex)
+- Parameters:
+   - Edges SQL with columns: id, source, target, cost [,reverse_cost]
+   - From vertex identifier
+   - Distance from vertex identifier
+- Optional Parameters
+   - directed := true
+- Documentation:
+   - https://docs.pgrouting.org/latest/en/pgr_drivingDistance.html
+';
+'''
+        cur.execute(sql)
 
     def create_functions(self):
         """
@@ -1391,7 +1497,7 @@ SELECT count(*) FROM "{network}".edges_reached;
 CREATE OR REPLACE VIEW "{network}".reached_from AS
 -- Knoten, die in Hinrichtung erreicht werden
 SELECT seq, node::integer, agg_cost AS cost
-FROM pgr_drivingDistance(
+FROM "{pg}".pgr_drivingDistance(
 E'SELECT id, source, target, cost, reverse_cost
 FROM "{network}".edge_table',
 {startvertex}, {maxcosts}, true
@@ -1400,12 +1506,13 @@ FROM "{network}".edge_table',
 CREATE OR REPLACE VIEW "{network}".reached_to AS
 -- Knoten, die in Hinrichtung erreicht werden
 SELECT seq, node::integer, agg_cost AS cost
-FROM pgr_drivingDistance(
+FROM "{pg}".pgr_drivingDistance(
 E'SELECT id, source, target, reverse_cost as cost, cost as reverse_cost
  FROM "{network}".edge_table',
 {startvertex}, {maxcosts}, true
 );
-""".format(startvertex=startvertex, maxcosts=maxcosts, network=self.network)
+""".format(startvertex=startvertex, maxcosts=maxcosts, network=self.network,
+           pg=self.pg_replacement)
         self.run_query(sql)
 
     def copy_edge_reached_with_planned(self):
