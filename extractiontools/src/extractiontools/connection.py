@@ -232,6 +232,10 @@ class DBApp:
             if true, log query
         vars: dict(optional)
             values to pass to the query
+
+        Returns
+        -------
+        cursor : the cursor used for database operations
         """
         conn = conn or self.conn
         cur = conn.cursor()
@@ -253,6 +257,8 @@ class DBApp:
                         execute(query, vars)
         else:
             execute(sql, vars)
+
+        return cur
 
     def set_search_path(self, connstr: str = 'conn'):
         conn = getattr(self, connstr)
