@@ -26,7 +26,7 @@ class ExtractRegionalstatistik(Extract):
                  **kwargs):
         super().__init__(destination_db=destination_db,
                          source_db=source_db, **kwargs)
-        self.gemeindelayer = regionalstatistik_gemeinden
+        self.gemeindelayer = f'verwaltungsgrenzen.{regionalstatistik_gemeinden}'
         self.jahre = regionalstatistik_years
 
     def additional_stuff(self):
@@ -117,7 +117,7 @@ class ExtractPendler(Extract):
                  **kwargs):
         super().__init__(destination_db=destination_db,
                          source_db=source_db, **kwargs)
-        self.gemeindelayer = pendlerdaten_gemeinden
+        self.gemeindelayer = f'verwaltungsgrenzen.{pendlerdaten_gemeinden}'
 
     def additional_stuff(self):
         """
@@ -379,7 +379,7 @@ class CreatePendlerSpinne(DBApp):
         self.destination_db = self.db = db
         self.set_login(database=db)
         self.check_platform()
-        self.pendlerspinne_gebiete = pendlerspinne_gebiete
+        self.pendlerspinne_gebiete = f'verwaltungsgrenzen.{pendlerspinne_gebiete}'
         self.target_srid = target_srid
 
     def run(self):

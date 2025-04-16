@@ -215,7 +215,7 @@ def copy_zensus_to_tiff(database: str, subfolder_tiffs: str):
 @meta(group='(8a) Regionalstatistik', title='Regionalstatistik extrahieren',
       description='Daten der Regionalstatistik der gegebenen Jahren in den '
       'gegebenen Gemeindegrenzen aus der Quelldatenbank extrahieren',
-      required='create_db')
+      required=['create_db', 'extract_verwaltungsgrenzen'])
 @orca.step()
 def extract_regionalstatistik(source_db: str,
                               database: str,

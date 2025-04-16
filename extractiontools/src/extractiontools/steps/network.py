@@ -19,6 +19,7 @@ from extractiontools.network2pbf import CopyNetwork2Pbf, CopyNetwork2PbfTagged
 from extractiontools.stop_otp_router import OTPServer
 from extractiontools.copy2fgdb import Copy2FGDB
 from extractiontools.extract_gtfs import ExtractGTFS
+from extractiontools.injectables.database import extracted_vwg_tables_choices
 from typing import List
 
 default_login = Login(
@@ -30,7 +31,7 @@ default_login = Login(
 
 
 @meta(group='(3) Netzwerk', required=['extract_osm', 'extract_landuse'],
-      title='Netzwerk Auto bauen')
+      title='Netzwerk Auto bauen', description='Ein Netzwerk für den Modus Auto aus OSM-Daten bauen.')
 @orca.step()
 def build_network_car(database: str,
                       chunksize: int,
@@ -52,7 +53,7 @@ def build_network_car(database: str,
 
 
 @meta(group='(3) Netzwerk', required=['extract_osm', 'extract_landuse'],
-      title='abgestuftes Netzwerk Auto bauen', description='ein Netzwerk für '
+      title='abgestuftes Netzwerk Auto bauen', description='Ein Netzwerk für '
       'den Modus Auto bauen mit Abstufung in ein Gebiet mit feiner Auflösung '
       'und ein größeres Gebiet mit grober Auflösung ')
 @orca.step()
@@ -246,18 +247,18 @@ def gtfs_only_one_day() -> bool:
     """gtfs valid only on the given day?"""
     return False
 
-
 @meta(group='(4) ÖPNV', title='Kreise',
+      choices=extracted_vwg_tables_choices, refresh='always',
       description='Tabelle mit den Geometrien der Kreise')
 @orca.injectable()
 def tbl_kreise() -> str:
     """table with the county geometries"""
-    return 'verwaltungsgrenzen.krs_2018_12'
+    return ''
 
 
 @meta(group='(4) ÖPNV', order=4, title='Zeittabellen als GTFS',
       description='Exportiert die Zeittabellen als GTFS-Dateien',
-      required='scrape_timetables')
+      required=[scrape_timetables, 'extract_verwaltungsgrenzen'])
 @orca.step()
 def timetables_gtfs(database: str,
                     date_timetable: str,

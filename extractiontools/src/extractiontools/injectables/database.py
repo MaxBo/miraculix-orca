@@ -38,9 +38,17 @@ def create_login(database='postgres'):
         db=database
     )
 
-
 def get_foreign_tables(database, schema) -> dict:
     login = create_foreign_login(database)
+    return _get_tables(login, schema)
+
+def get_tables(database, schema) -> dict:
+    if not database:
+        return {}
+    login = create_login(database)
+    return _get_tables(login, schema)
+
+def _get_tables(login, schema) -> dict:
     sql = f"""
     SELECT * FROM information_schema.tables
     WHERE table_schema = '{schema}'
@@ -112,7 +120,7 @@ def db_status(database) -> dict:
 
 @meta(hidden=True, refresh='always')
 @orca.injectable()
-def user_choices(source_db) -> List[str]:
+def user_choices() -> List[str]:
     login = create_login()
     sql = 'SELECT rolname FROM pg_catalog.pg_roles WHERE rolsuper = False;'
     with Connection(login=login) as conn:
@@ -130,7 +138,6 @@ def user_choices(source_db) -> List[str]:
 def db_users() -> List[str]:
     return []
 
-
 def dummy_polygon():
     ring = ogr.Geometry(ogr.wkbLinearRing)
     ring.AddPoint(9.0, 54.6)
@@ -141,7 +148,6 @@ def dummy_polygon():
     geom = ogr.Geometry(ogr.wkbPolygon)
     geom.AddGeometry(ring)
     return geom
-
 
 @meta(group='(1) Projekt', order=4,
       title='Projektgebiet',
@@ -169,6 +175,10 @@ def source_db() -> str:
     """The name of the base-database to extract data from"""
     return 'europe'
 
+@meta(hidden=True, refresh='always')
+@orca.injectable()
+def extracted_vwg_tables_choices(database) -> dict:
+    return get_tables(database, 'verwaltungsgrenzen')
 
 @meta(hidden=True, refresh='always')
 @orca.injectable()
@@ -295,26 +305,29 @@ def regionalstatistik_years() -> List[str]:
 
 
 @meta(group='(8a) Regionalstatistik', title='Gemeinden der Regionalstatistik',
+      choices=extracted_vwg_tables_choices,
       description='Layer mit Gemeinden, für die die Statistiken importiert werden')
 @orca.injectable()
 def regionalstatistik_gemeinden() -> str:
     """Gemeindelayer for Regionalstatistik"""
-    return 'verwaltungsgrenzen.gem_2020_12'
+    return ''
 
 
 @meta(group='(8b) Pendlerdaten', title='Gemeinden mit Pendlerdaten',
+      choices=extracted_vwg_tables_choices,
       description='Layer mit Gemeinden, für die die Pendlerdaten importiert werden')
 @orca.injectable()
 def pendlerdaten_gemeinden() -> str:
     """Gemeindelayer for Pendlerdaten"""
-    return 'verwaltungsgrenzen.gem_2018_12'
+    return ''
 
 
-@meta(group='(8b) Pendlerdaten', title='Gebiete der Pendlerspinne')
+@meta(group='(8b) Pendlerdaten', title='Gebiete der Pendlerspinne',
+      choices=extracted_vwg_tables_choices)
 @orca.injectable()
 def pendlerspinne_gebiete() -> str:
     """Layer mit den Gebieten für die Pendlerspinne"""
-    return 'verwaltungsgrenzen.gem_2018_12'
+    return ''
 
 
 @meta(group='(3) Netzwerk', title='Netzwerkschema',
