@@ -63,14 +63,9 @@ class ExtractGTFS():
         """"""
         self.gtfs_input = gtfs_input
         self.out_path = out_path
+        self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.do_visum_postproc = do_visum_postproc
         self.do_transferprocessing = do_transferprocessing
-        #self.out_path = "D:\\Downloads"
-        #self.gtfs_input = os.path.join(
-            #self.out_path, '20240826_fahrplaene_gesamtdeutschland_gtfs.zip')
-        #self.gtfs_input = os.path.join(
-            #self.out_path, 'gtfsde_latest.zip')
-        self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.project_area = project_area
         self.logger = logger or logging.getLogger(self.__module__)
 
@@ -110,7 +105,7 @@ class ExtractGTFS():
             self.complement_transfers(clip)
 
         self.logger.info(f'Schreibe verarbeiteten Feed nach {self.gtfs_output}')
-        clip.write(self.gtfs_output)
+        clip.to_file(self.gtfs_output)
 
     def postprocess(self, clip):
         stops = clip.get_stops()
@@ -262,7 +257,7 @@ class ExtractGTFS():
 
         # transfers.txt has stop ids that need to be replaced as well
         # not all feeds have transfers (e.g. gtfs.de)
-        if clip.transfers:
+        if clip.transfers is not None and len(clip.transfers) > 0:
             revised_transfers = clip.transfers.copy()
             for column in ['from_stop_id', 'to_stop_id']:
                 revised_transfers['stop_id_revised'] = revised_transfers.loc[
@@ -345,7 +340,7 @@ class ExtractGTFS():
     def complement_transfers(self, clip):
         self.logger.info('Berechne Distanzen und Transferzeiten zwischen '
                          'den Stops')
-        if not clip.transfers:
+        if clip.transfers is None or len(clip.transfers) == 0:
             self.logger.info('Achtung: Der Feed enthält keine Transferzeiten. '
                              'Alle Transferzeiten werden jetzt künstlich '
                              'erzeugt.')
@@ -368,7 +363,7 @@ class ExtractGTFS():
         dist_df['transfer_type'] = 2
         dist_df.drop(columns=['distance'], inplace=True)
 
-        if clip.transfers:
+        if clip.transfers is not None and len(clip.transfers) > 0:
             transfers_df = clip.transfers.copy()
             # only add transfers where from-stop-to-stop combination is
             # not already in transfers in any form
