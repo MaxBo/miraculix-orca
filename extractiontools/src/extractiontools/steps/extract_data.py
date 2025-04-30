@@ -3,6 +3,8 @@
 from typing import List, Dict
 import orca
 from orcadjango.decorators import meta
+from extractiontools.gebietsstand import Gebietsstaende
+from extractiontools.injectables.database import extracted_vwg_tables_choices
 from extractiontools.extract_osm import ExtractOSM
 from extractiontools.osm2polygons import CreatePolygons
 from extractiontools.extract_landuse import ExtractLanduse
@@ -20,14 +22,26 @@ from extractiontools.verschneidungstool import PrepareVerschneidungstool
 from extractiontools.extract_bast_trafficdata import ExtractBASt
 from osgeo import ogr
 
-import extractiontools.steps.create_db
-import extractiontools.steps.network
-import extractiontools.steps.google
 
 __parent_modules__ = [
     'extractiontools.steps.create_db',
     'extractiontools.steps.network',
 ]
+
+
+@meta(group='(2) Datenextraktion', order=1, required='create_db',
+      title='OSM-Daten extrahieren', description='OSM-Daten aus der '
+      'Quelldatenbank extrahieren')
+@orca.step()
+def extract_osm(source_db: str, database: str, target_srid: int,
+                project_area: ogr.Geometry):
+    """
+    extract OSM data in the area
+    """
+    extract = ExtractOSM(source_db=source_db, destination_db=database,
+                         target_srid=target_srid, logger=orca.logger,
+                         boundary=project_area)
+    extract.extract()
 
 
 @meta(group='(2) Datenextraktion', order=1, required='create_db',
@@ -92,7 +106,42 @@ def extract_verwaltungsgrenzen(source_db: str, database: str,
     extract.extract()
 
 
-@meta(group='(2) Datenextraktion', order=11, required='create_db',
+@meta(group='(2) Tabellen', choices=extracted_vwg_tables_choices, scope='step',
+      title='Verwaltungsgrenzen Bezugsstand',
+      description='Verwaltungsgrenzen aus dem Bezugsjahr, die mit älteren Ständen abgeglichen werden sollen')
+@orca.injectable()
+def gebietsstand_bezugsstand() -> str:
+    return ''
+
+@meta(group='(2) Tabellen', choices=extracted_vwg_tables_choices, scope='step',
+      title='Verwaltungsgrenzen Vergleichsstände',
+      description='Liste mit Verwaltungsgrenzen, die mit dem Bezugsstand '
+                  'abgeglichen werden sollen (möglichst vor dem Bezugsjahr und gleiche räumliche Ebene)')
+@orca.injectable()
+def gebietsstand_vergleichsstaende() -> List[str]:
+    return []
+
+@meta(scope='step', title='Schwellwert Restflächen (m²)',
+      description='Schwellwert in <b>m²</b> unter dem nach dem Verschnitt verbliebene Teilflächen ignoriert werden')
+@orca.injectable()
+def gebietsstand_schwellwert() -> int:
+    return 1000
+
+
+@meta(group='(2) Datenextraktion', order=11, required=['create_db', extract_verwaltungsgrenzen],
+      title='Gebietsstände',
+      description='Vergleicht einen Stand von Verwaltungsgrenzen als Referenz mit anderen Gebietsständen und gibt '
+                  'die Anteile der Flächen dieser an den Referenzgebieten aus.')
+@orca.step()
+def gebietsstaende(database: str, gebietsstand_bezugsstand: str, gebietsstand_vergleichsstaende: list[str],
+                   gebietsstand_schwellwert: int):
+    g = Gebietsstaende(destination_db=database, ref_table=gebietsstand_bezugsstand,
+                       comp_tables=gebietsstand_vergleichsstaende, threshold=gebietsstand_schwellwert,
+                       logger=orca.logger)
+    g.calc()
+
+
+@meta(group='(2) Datenextraktion', order=12, required='create_db',
       title='Firmen und Nachbarschaften extrahieren',
       description='Firmen und Nachbarschaften innerhalb des '
       'Projektgebiets extrahieren')

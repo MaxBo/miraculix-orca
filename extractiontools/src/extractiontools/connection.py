@@ -333,7 +333,7 @@ SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{dbname}
 
         cur = conn.cursor()
         sql = f"""
-DROP DATABASE IF EXISTS {dbname};
+DROP DATABASE IF EXISTS "{dbname}";
         """
         conn.set_isolation_level(0)
         cur.execute(sql)
@@ -413,3 +413,15 @@ AND    i.indisprimary;
         rows = cur.fetchall()
         pkey = ', '.join([f'"{r[0]}"' for r in rows])
         return pkey
+
+    def get_columns(self, schema: str, tablename: str, conn: NamedTupleConnection = None):
+        conn = conn or self.conn
+        sql = f"""        
+            SELECT column_name FROM information_schema.columns    
+            WHERE table_schema = '{schema}' AND table_name = '{tablename}';
+        """
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        return [r.column_name for r in rows]
+

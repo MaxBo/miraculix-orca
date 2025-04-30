@@ -42,10 +42,23 @@ def get_foreign_tables(database, schema) -> dict:
     login = create_foreign_login(database)
     return _get_tables(login, schema)
 
+def db_exists(db_name: str) -> bool:
+    login = create_login()
+    with Connection(login=login) as conn:
+        cursor = conn.cursor()
+        sql = 'SELECT datname FROM pg_catalog.pg_database WHERE datname = %s;'
+        cursor = conn.cursor()
+        cursor.execute(sql, (db_name, ))
+        rows = cursor.fetchall()
+        exists = len(rows) > 0
+    return exists
+
 def get_tables(database, schema) -> dict:
     if not database:
         return {}
     login = create_login(database)
+    if not db_exists(database):
+        return {}
     return _get_tables(login, schema)
 
 def _get_tables(login, schema) -> dict:
@@ -92,26 +105,19 @@ def database() -> str:
 def db_status(database) -> dict:
     if not database:
         return  {'existiert': False}
-    login = create_login()
+
     status = {}
-    with Connection(login=login) as conn:
-        cursor = conn.cursor()
-        sql = 'SELECT datname FROM pg_catalog.pg_database WHERE datname = %s;'
-        cursor = conn.cursor()
-        cursor.execute(sql, (database, ))
-        rows = cursor.fetchall()
-        exists = len(rows) > 0
-        status['existiert'] = exists
-        if exists:
+    exists = db_exists(database)
+    status['existiert'] = exists
+    if exists:
+        login = create_login(database)
+        with Connection(login=login) as conn:
+            cursor = conn.cursor()
             sql = 'SELECT pg_size_pretty(pg_database_size(%s));'
             cursor.execute(sql, (database, ))
             r = cursor.fetchone()
             status['Datenbankgröße'] = r.pg_size_pretty
-    if exists:
-        login.db = database
-        with Connection(login=login) as conn:
             sql = 'select schema_name from information_schema.schemata;'
-            cursor = conn.cursor()
             cursor.execute(sql)
             rows = cursor.fetchall()
             status['Schemas'] = ', '.join([r.schema_name for r in rows])
