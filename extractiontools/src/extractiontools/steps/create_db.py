@@ -39,6 +39,32 @@ def drop_db(database: str, db_status):
     extract.extract()
 
 
+@meta(title='Datenbank löschen', description='Die Datenbank nach der erfolgreichen Archivierung löschen.', scope='step')
+@orca.injectable()
+def remove_db_after_archiving() -> bool:
+    """routing for walking"""
+    return False
+
+@meta(group='(1) Projekt', order=4, required=create_db, title='Datenbank archivieren',
+      description='Archiviert die Zieldatenbank als Dump')
+@orca.step()
+def archive_db(database: str, db_status, remove_db_after_archiving):
+    '''
+    '''
+    extract = Extract(destination_db=database, logger=orca.logger)
+    # extract.grant_access()
+
+
+@meta(group='(1) Projekt', order=5, required=create_db, title='Zugriff gewähren',
+      description='Stellt die Zieldatenbank aus dem archivierten Dump wieder her. Die Datenbank muss vorher '
+                  'gelöscht worden sein.')
+@orca.step()
+def restore_db(database: str, db_status):
+    '''
+    '''
+    extract = Extract(destination_db=database, logger=orca.logger)
+    # extract.grant_access()
+
 @meta(group='(1) Projekt', order=3, required=create_db, title='Zugriff gewähren',
       description='''Gewährt <b>Lese- und Schreibrechte</b> in der Zieldatenbank für
       ausgewählte Nutzer:innen. Dies wirkt sich nur auf <b>bestehende Schemata</b> aus.
@@ -57,3 +83,4 @@ def grant_access(database: str, db_users: list):
     '''
     extract = Extract(destination_db=database, logger=orca.logger)
     extract.grant_access(db_users)
+

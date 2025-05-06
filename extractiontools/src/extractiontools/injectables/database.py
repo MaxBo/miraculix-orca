@@ -95,7 +95,6 @@ def db_status(database) -> dict:
     login = create_login()
     status = {}
     with Connection(login=login) as conn:
-        cursor = conn.cursor()
         sql = 'SELECT datname FROM pg_catalog.pg_database WHERE datname = %s;'
         cursor = conn.cursor()
         cursor.execute(sql, (database, ))
