@@ -2,6 +2,7 @@ import orca
 from orcadjango.decorators import meta
 from extractiontools.ausschnitt import Extract
 from extractiontools.drop_db import DropDatabase
+from extractiontools.archive import Archive
 from osgeo import ogr
 
 __parent_modules__ = [
@@ -51,19 +52,22 @@ def remove_db_after_archiving() -> bool:
 def archive_db(database: str, db_status, remove_db_after_archiving):
     '''
     '''
-    extract = Extract(destination_db=database, logger=orca.logger)
-    # extract.grant_access()
+    arch = Archive(database=database, logger=orca.logger)
+    arch.archive()
+    if remove_db_after_archiving:
+        drop = DropDatabase(destination_db=database, logger=orca.logger)
+        drop.extract()
 
 
-@meta(group='(1) Projekt', order=5, required=create_db, title='Zugriff gewähren',
+@meta(group='(1) Projekt', order=5, required=create_db, title='Datenbank wiederherstellen',
       description='Stellt die Zieldatenbank aus dem archivierten Dump wieder her. Die Datenbank muss vorher '
                   'gelöscht worden sein.')
 @orca.step()
 def restore_db(database: str, db_status):
     '''
     '''
-    extract = Extract(destination_db=database, logger=orca.logger)
-    # extract.grant_access()
+    arch = Archive(database=database, logger=orca.logger)
+    arch.unarchive()
 
 @meta(group='(1) Projekt', order=3, required=create_db, title='Zugriff gewähren',
       description='''Gewährt <b>Lese- und Schreibrechte</b> in der Zieldatenbank für
