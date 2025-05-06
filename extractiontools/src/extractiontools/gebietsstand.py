@@ -62,10 +62,10 @@ class Gebietsstaende(DBApp):
                     INSERT INTO {self.target_schema}.bezug_{self.ref_table}
                     SELECT
                       '{comp_table}' AS vergleichstabelle,
-                      ags_vergleich AS ags_vergleich,
+                      RPAD(ags_vergleich, 8, '0') AS ags_vergleich,
                       gen_vergleich AS gen_vergleich,
                       ST_Area(geom_schnitt) / ST_Area(geom_vergleich) * 100 AS flaechenanteil,
-                      ags_referenz AS ags_bezug,
+                      RPAD(ags_referenz, 8, '0') AS ags_bezug,
                       gen_referenz AS gen_bezug,
                       ST_Area(geom_schnitt) AS area_schnitt
                     FROM
