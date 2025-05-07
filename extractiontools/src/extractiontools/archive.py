@@ -47,3 +47,13 @@ class Archive(DBApp):
             raise IOError(f'Fehler bei der Wiederherstellung.')
         else:
             self.logger.info(f'{self.database} aus {self.out_fp} wiederhergestellt.')
+
+    def exists(self) -> bool:
+        return os.path.exists(self.out_fp)
+
+    def date_str(self) -> str:
+        if not self.exists():
+            return ''
+        s = os.path.getmtime(self.out_fp)
+        from datetime import datetime
+        return datetime.fromtimestamp(s).strftime("%d.%m.%Y %I:%M:%S")
