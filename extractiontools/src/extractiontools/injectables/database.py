@@ -124,7 +124,7 @@ def db_status(database) -> dict:
             status['Schemas'] = ', '.join([r.schema_name for r in rows])
     archive = Archive(database)
     exists = archive.exists()
-    status['archiviert'] = exists
+    status['Archiv'] = archive.fn if exists else 'nicht vorhanden'
     if exists:
         status['Datum Archivierung'] = archive.date_str()
     return status

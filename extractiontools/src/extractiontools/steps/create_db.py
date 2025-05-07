@@ -1,4 +1,5 @@
 import orca
+
 from orcadjango.decorators import meta
 from extractiontools.ausschnitt import Extract
 from extractiontools.drop_db import DropDatabase
@@ -58,15 +59,31 @@ def archive_db(database: str, db_status, remove_db_after_archiving):
         drop = DropDatabase(destination_db=database, logger=orca.logger)
         drop.extract()
 
+@meta(hidden=True, refresh='always')
+@orca.injectable()
+def archive_choices() -> dict:
+    choices = {'default': 'Dump der aktuellen Datenbank'}
+    choices.update(Archive.available_archives())
+    return choices
+
+@meta(choices=archive_choices, scope='step',
+      title='Archiv', description='Archiv, das wiederhergestellt werden soll. Die Auswahl besteht aus allen '
+                                  'vorhandenen Archiven über alle Projekte. Bitte "<b>default</b>" auswählen, wenn das '
+                                  'Archiv der in diesem Projekt angegebenen aktuellen Datenbank verwendet werden soll '
+                                  '(entspricht dem im Datenbankstatus aufgeführten Archiv)')
+@orca.injectable()
+def archive_fn() -> str:
+    return 'default'
 
 @meta(group='(1) Projekt', order=5, required=create_db, title='Datenbank wiederherstellen',
-      description='Stellt die Zieldatenbank aus dem archivierten Dump wieder her. Die Datenbank muss vorher '
-                  'gelöscht worden sein.')
+      description='Stellt die Zieldatenbank aus einem archivierten Dump wieder her. Die Datenbank darf nicht ' 
+                  'existieren, muss also eventuell vorher gelöscht werden.')
 @orca.step()
-def restore_db(database: str, db_status):
+def restore_db(database: str, db_status, archive_fn):
     '''
     '''
-    arch = Archive(database=database, logger=orca.logger)
+    fn = '' if archive_fn == 'default' else archive_fn
+    arch = Archive(database=database, archive_fn=fn, logger=orca.logger)
     arch.unarchive()
 
 @meta(group='(1) Projekt', order=3, required=create_db, title='Zugriff gewähren',

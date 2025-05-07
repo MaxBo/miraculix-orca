@@ -1,7 +1,7 @@
 import os
 import logging
 from subprocess import Popen, PIPE, STDOUT
-
+from datetime import datetime
 from extractiontools.connection import DBApp
 
 
@@ -9,9 +9,9 @@ class Archive(DBApp):
     file_schema = '{database}.sql.gz'
     archive_folder = '/root/archive'
 
-    def __init__(self, database: str, logger=None):
+    def __init__(self, database: str, archive_fn:str=None, logger=None):
         super().__init__(logger=logger)
-        self.fn = self.file_schema.format(database=database)
+        self.fn = archive_fn or self.file_schema.format(database=database)
         self.logger = logger or logging.getLogger(self.__module__)
         self.set_login(database='postgres')
         self.database = database
@@ -36,6 +36,8 @@ class Archive(DBApp):
     def unarchive(self):
         if self.check_if_database_exists(self.database):
             raise Exception(f'Database {self.database} existiert bereits. Bitte vorher löschen.')
+        if not self.exists():
+            raise Exception(f'Archiv {self.fn} nicht gefunden.')
         os.environ['PGSSLMODE'] = 'require'
         self.create_target_db(self.database, 'group_osm')
         cmd = f'gunzip -c {self.out_fp} | psql -d {self.database} -h {self.login.host} -U {self.login.user} -p {self.login.port}'
@@ -54,6 +56,17 @@ class Archive(DBApp):
     def date_str(self) -> str:
         if not self.exists():
             return ''
-        s = os.path.getmtime(self.out_fp)
-        from datetime import datetime
+        return self._date_str_from_fp(self.out_fp)
+
+    @classmethod
+    def _date_str_from_fp(cls, fp) -> str:
+        s = os.path.getmtime(fp)
         return datetime.fromtimestamp(s).strftime("%d.%m.%Y %I:%M:%S")
+
+    @classmethod
+    def available_archives(cls) -> dict:
+        ret = {}
+        for fn in os.listdir(cls.archive_folder):
+            if os.path.splitext(fn)[-1] == '.gz':
+                ret[fn] = cls._date_str_from_fp(os.path.join(cls.archive_folder, fn))
+        return ret
