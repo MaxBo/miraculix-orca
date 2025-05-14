@@ -10,10 +10,7 @@ import subprocess
 import time
 from typing import List
 from osgeo import ogr
-from psycopg2.sql import Identifier, SQL
 from psycopg2 import errors
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-from copy import deepcopy
 import logging
 
 from .connection import Connection, DBApp, Login
@@ -464,21 +461,6 @@ FROM {self.temp}.{tn} t;
         else:
             self.PGPATH = pg_path or '/usr/bin'
             self.SHELL = True
-
-    def create_target_db(self, login):
-        """
-        create the target database
-        """
-        sql = SQL("""
-        CREATE DATABASE {db};
-        ALTER DATABASE {db} OWNER TO {role};
-        """).format(db=Identifier(self.login.db), role=Identifier(self.role))
-
-        login = deepcopy(self.login)
-        login.db = 'postgres'
-        with Connection(login=login) as conn:
-            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-            self.run_query(sql, conn=conn)
 
     def create_meta(self):
         sql = '''

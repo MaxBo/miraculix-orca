@@ -19,13 +19,14 @@ class Gebietsstaende(DBApp):
 
     def calc(self):
         self.logger.info(f'Gleiche Gebietsstände mit Tabelle "{self.ref_table}" ab')
-        with Connection(login=self.login) as conn:
+        with (Connection(login=self.login) as conn):
             self.create_schema(self.target_schema, conn=conn)
-            self.logger.info(f'Erstelle Zieltabelle "{self.target_schema}.bezug_{self.ref_table}"')
+            target_table = f'bezug_{self.ref_table}'
+            self.logger.info(f'Erstelle Zieltabelle "{self.target_schema}.{target_table}"')
             create_sql = f"""        
-                DROP TABLE IF EXISTS gebietsstaende.bezug_gem_2022_01;
+                DROP TABLE IF EXISTS {self.target_schema}.{target_table};
                 
-                CREATE table {self.target_schema}.bezug_{self.ref_table} (
+                CREATE table {self.target_schema}.{target_table} (
                     vergleichstabelle varchar(50),
                     ags_vergleich varchar(8),
                     gen_vergleich varchar(100),
@@ -59,7 +60,7 @@ class Gebietsstaende(DBApp):
                         {self.schema}.{comp_table} vergleich
                         ON ST_Intersects(referenz.geom, vergleich.geom)
                     )
-                    INSERT INTO {self.target_schema}.bezug_{self.ref_table}
+                    INSERT INTO {self.target_schema}.{target_table}
                     SELECT
                       '{comp_table}' AS vergleichstabelle,
                       RPAD(ags_vergleich, 8, '0') AS ags_vergleich,
@@ -75,3 +76,7 @@ class Gebietsstaende(DBApp):
                 """
                 cur = conn.cursor()
                 cur.execute(join_sql)
+
+            comment = (f'Vergleich der Gebietsstände der Tabelle {self.ref_table} '
+                       f'mit den Tabellen {", ".join(self.comp_tables)}.')
+            self.set_table_comment(comment, target_table, schema=self.target_schema, conn=conn)
