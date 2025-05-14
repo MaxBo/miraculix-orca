@@ -181,6 +181,10 @@ class DBApp:
             conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
             self.run_query(sql, conn=conn)
 
+    def set_table_comment(self, comment: str, table_name, schema='public', conn=None):
+        sql = f"COMMENT ON TABLE {schema}.{table_name} IS '{comment}';"
+        self.run_query(sql, conn=conn or self.conn)
+
     def create_schema(self,
                       schema: str,
                       conn: NamedTupleConnection = None,
