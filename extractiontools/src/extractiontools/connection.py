@@ -169,7 +169,7 @@ class DBApp:
         """
 
         db = database or self.login.db
-        self.role = role or self.role
+        role = role or self.role
         sql = SQL("""
         CREATE DATABASE {db};
         ALTER DATABASE {db} OWNER TO {role};

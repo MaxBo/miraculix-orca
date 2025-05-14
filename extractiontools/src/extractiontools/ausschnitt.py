@@ -101,8 +101,7 @@ class Extract(DBApp):
             self.truncate_db()
         else:
             self.logger.info(f'Create Database {self.destination_db}')
-            self.create_target_db(self.login)
-            self.logger.info(f'Create Database {self.destination_db}')
+            self.create_target_db(self.destination_db)
         self.create_extensions()
         self.create_meta()
         self.create_foreign_server()
