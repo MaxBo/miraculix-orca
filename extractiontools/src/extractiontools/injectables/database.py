@@ -4,6 +4,7 @@ import orca
 import os
 import re
 
+from extractiontools.archive import Archive
 from extractiontools.connection import Login, Connection
 from extractiontools.utils.google_api import GooglePlacesAPI
 
@@ -121,6 +122,11 @@ def db_status(database) -> dict:
             cursor.execute(sql)
             rows = cursor.fetchall()
             status['Schemas'] = ', '.join([r.schema_name for r in rows])
+    archive = Archive(database)
+    exists = archive.exists()
+    status['Archiv'] = archive.fn if exists else 'nicht vorhanden'
+    if exists:
+        status['Datum Archivierung'] = archive.date_str()
     return status
 
 
