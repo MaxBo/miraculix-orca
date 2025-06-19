@@ -45,6 +45,12 @@ class Gebietsstaende(DBApp):
                 self.logger.info(f'Verschneide Tabelle "{self.schema}.{comp_table}"')
                 comp_cols = self.get_columns(self.schema, comp_table, conn=conn)
                 comp_ags = 'ags' if 'ags' in comp_cols else 'key'
+                ref_where = f"WHERE gf = 4" if 'gf' in ref_cols else ''
+                comp_where = f"WHERE gf = 4" if 'gf' in comp_cols else ''
+                # join_where_clause = ''
+                # if ref_where and comp_where:
+                #     join_where_clause = f'({ref_where} AND {comp_where})'
+
                 join_sql = f"""
                     WITH schnittflaechen AS (
                       SELECT
@@ -55,17 +61,17 @@ class Gebietsstaende(DBApp):
                         vergleich.geom AS geom_vergleich,
                         ST_Intersection(referenz.geom, vergleich.geom) AS geom_schnitt
                       FROM
-                        {self.schema}.{self.ref_table} referenz
-                      JOIN
-                        {self.schema}.{comp_table} vergleich
-                        ON ST_Intersects(referenz.geom, vergleich.geom)
+                        (SELECT * FROM {self.schema}.{self.ref_table} {ref_where}) AS referenz
+                    JOIN
+                        (SELECT * FROM {self.schema}.{comp_table} {comp_where}) AS vergleich
+                        ON ST_Intersects(referenz.geom, vergleich.geom)  
                     )
                     INSERT INTO {self.target_schema}.{target_table}
                     SELECT
                       '{comp_table}' AS vergleichstabelle,
                       RPAD(ags_vergleich, 8, '0') AS ags_vergleich,
                       gen_vergleich AS gen_vergleich,
-                      ST_Area(geom_schnitt) / ST_Area(geom_vergleich) * 100 AS flaechenanteil,
+                      ST_Area(geom_schnitt) / ST_Area(geom_vergleich) AS flaechenanteil,
                       RPAD(ags_referenz, 8, '0') AS ags_bezug,
                       gen_referenz AS gen_bezug,
                       ST_Area(geom_schnitt) AS area_schnitt

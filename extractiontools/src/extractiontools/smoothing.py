@@ -61,7 +61,6 @@ def main():
 
 
 def classify_ew_dichte():
-    print('hallo')
     folder = r'E:\GGR\Berlin Dichte\30 Gis\31 gisserver_backup\tiffs'
     path = os.path.join(folder, 'ew_ha_raster.tiff')
 
