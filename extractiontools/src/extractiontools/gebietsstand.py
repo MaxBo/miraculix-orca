@@ -39,12 +39,13 @@ class Gebietsstaende(DBApp):
             cur.execute(create_sql)
 
             ref_cols = self.get_columns(self.schema, self.ref_table, conn=conn)
-            ref_ags = 'ags' if 'ags' in ref_cols else 'key'
+            # prefer field rs over ags over key as identifier
+            ref_ags = 'rs' if 'rs' in ref_cols else 'ags' if 'ags' in ref_cols else 'key'
 
             for comp_table in self.comp_tables:
                 self.logger.info(f'Verschneide Tabelle "{self.schema}.{comp_table}"')
                 comp_cols = self.get_columns(self.schema, comp_table, conn=conn)
-                comp_ags = 'ags' if 'ags' in comp_cols else 'key'
+                comp_ags = 'rs' if 'rs' in comp_cols else 'ags' if 'ags' in comp_cols else 'key'
                 ref_where = f"WHERE gf = 4" if 'gf' in ref_cols else ''
                 comp_where = f"WHERE gf = 4" if 'gf' in comp_cols else ''
                 # join_where_clause = ''
@@ -67,18 +68,21 @@ class Gebietsstaende(DBApp):
                         ON ST_Intersects(referenz.geom, vergleich.geom)  
                     )
                     INSERT INTO {self.target_schema}.{target_table}
-                    SELECT
-                      '{comp_table}' AS vergleichstabelle,
-                      RPAD(ags_vergleich, 8, '0') AS ags_vergleich,
-                      gen_vergleich AS gen_vergleich,
-                      ST_Area(geom_schnitt) / ST_Area(geom_vergleich) AS flaechenanteil,
-                      RPAD(ags_referenz, 8, '0') AS ags_bezug,
-                      gen_referenz AS gen_bezug,
-                      ST_Area(geom_schnitt) AS area_schnitt
-                    FROM
-                      schnittflaechen
-                    WHERE
-                      ST_Area(geom_schnitt) > {self.threshold};
+                    SELECT DISTINCT ON (ags_vergleich) *
+                    FROM (
+                        SELECT
+                          '{comp_table}' AS vergleichstabelle,
+                          RPAD(ags_vergleich, 8, '0') AS ags_vergleich,
+                          gen_vergleich AS gen_vergleich,
+                          ST_Area(geom_schnitt) / ST_Area(geom_vergleich) AS flaechenanteil,
+                          RPAD(ags_referenz, 8, '0') AS ags_bezug,
+                          gen_referenz AS gen_bezug,
+                          ST_Area(geom_schnitt) AS area_schnitt
+                        FROM
+                          schnittflaechen
+                        WHERE
+                          ST_Area(geom_schnitt) > {self.threshold}
+                    ) ORDER BY ags_vergleich, flaechenanteil DESC;
                 """
                 cur = conn.cursor()
                 cur.execute(join_sql)
