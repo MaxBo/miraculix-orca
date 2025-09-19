@@ -26,7 +26,7 @@ class ExtractRegionalstatistik(Extract):
                  **kwargs):
         super().__init__(destination_db=destination_db,
                          source_db=source_db, **kwargs)
-        self.gemeindelayer = regionalstatistik_gemeinden
+        self.gemeindelayer = f'verwaltungsgrenzen.{regionalstatistik_gemeinden}'
         self.jahre = regionalstatistik_years
 
     def additional_stuff(self):
@@ -117,7 +117,7 @@ class ExtractPendler(Extract):
                  **kwargs):
         super().__init__(destination_db=destination_db,
                          source_db=source_db, **kwargs)
-        self.gemeindelayer = pendlerdaten_gemeinden
+        self.gemeindelayer = f'verwaltungsgrenzen.{pendlerdaten_gemeinden}'
 
     def additional_stuff(self):
         """
@@ -131,15 +131,20 @@ class ExtractPendler(Extract):
         """
         self.logger.info(
             f'Extracting commuters to {self.schema}.ein_auspendler')
+
+        sql = f'SELECT array(SELECT ags FROM {self.gemeindelayer} g)'
+        cursor = self.run_query(sql)
+        ags_array = cursor.fetchone()[0]
+        ags_str = ','.join(ags_array)
+
         sql = f"""
         SELECT
           p.*
         INTO {self.schema}.ein_auspendler
-        FROM {self.temp}.ein_auspendler p,
-        {self.gemeindelayer} g
+        FROM {self.temp}.ein_auspendler p
         WHERE
-        (g.ags = p.ags_wo AND p."Ein_Aus" = 'Auspendler Gemeinden') OR
-        (g.ags = p.ags_ao AND p."Ein_Aus" = 'Einpendler Gemeinden')
+        (p.ags_wo = ANY('{{{ags_str}}}') AND p."Ein_Aus" = 'Auspendler Gemeinden') OR
+        (p.ags_ao = ANY('{{{ags_str}}}') AND p."Ein_Aus" = 'Einpendler Gemeinden')
         """
         self.run_query(sql)
 
@@ -374,7 +379,7 @@ class CreatePendlerSpinne(DBApp):
         self.destination_db = self.db = db
         self.set_login(database=db)
         self.check_platform()
-        self.pendlerspinne_gebiete = pendlerspinne_gebiete
+        self.pendlerspinne_gebiete = f'verwaltungsgrenzen.{pendlerspinne_gebiete}'
         self.target_srid = target_srid
 
     def run(self):

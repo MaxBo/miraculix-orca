@@ -4,9 +4,20 @@ import orca
 import os
 import re
 
+from extractiontools.archive import Archive
 from extractiontools.connection import Login, Connection
-from orcadjango.decorators import meta
 from extractiontools.utils.google_api import GooglePlacesAPI
+
+try:
+    from orcadjango.decorators import meta
+except:
+    def meta(**kwargs):
+        '''
+        mockup decorator if extractiontools are used outside of orcadjango
+        '''
+        def decorator(func):
+            pass
+        return decorator
 
 
 def create_foreign_login(database='postgres'):
@@ -28,9 +39,30 @@ def create_login(database='postgres'):
         db=database
     )
 
-
 def get_foreign_tables(database, schema) -> dict:
     login = create_foreign_login(database)
+    return _get_tables(login, schema)
+
+def db_exists(db_name: str) -> bool:
+    login = create_login()
+    with Connection(login=login) as conn:
+        cursor = conn.cursor()
+        sql = 'SELECT datname FROM pg_catalog.pg_database WHERE datname = %s;'
+        cursor = conn.cursor()
+        cursor.execute(sql, (db_name, ))
+        rows = cursor.fetchall()
+        exists = len(rows) > 0
+    return exists
+
+def get_tables(database, schema) -> dict:
+    if not database:
+        return {}
+    login = create_login(database)
+    if not db_exists(database):
+        return {}
+    return _get_tables(login, schema)
+
+def _get_tables(login, schema) -> dict:
     sql = f"""
     SELECT * FROM information_schema.tables
     WHERE table_schema = '{schema}'
@@ -68,9 +100,39 @@ def database() -> str:
     return ''
 
 
+@meta(group='(1) Projekt', refresh='always', order=2,
+      title='Datenbankstatus', description='Status der Datenbank')
+@orca.injectable()
+def db_status(database) -> dict:
+    if not database:
+        return  {'existiert': False}
+
+    status = {}
+    exists = db_exists(database)
+    status['existiert'] = exists
+    if exists:
+        login = create_login(database)
+        with Connection(login=login) as conn:
+            cursor = conn.cursor()
+            sql = 'SELECT pg_size_pretty(pg_database_size(%s));'
+            cursor.execute(sql, (database, ))
+            r = cursor.fetchone()
+            status['Datenbankgröße'] = r.pg_size_pretty
+            sql = 'select schema_name from information_schema.schemata;'
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            status['Schemas'] = ', '.join([r.schema_name for r in rows])
+    archive = Archive(database)
+    exists = archive.exists()
+    status['Archiv'] = archive.fn if exists else 'nicht vorhanden'
+    if exists:
+        status['Datum Archivierung'] = archive.date_str()
+    return status
+
+
 @meta(hidden=True, refresh='always')
 @orca.injectable()
-def user_choices(source_db) -> List[str]:
+def user_choices() -> List[str]:
     login = create_login()
     sql = 'SELECT rolname FROM pg_catalog.pg_roles WHERE rolsuper = False;'
     with Connection(login=login) as conn:
@@ -80,14 +142,13 @@ def user_choices(source_db) -> List[str]:
     return [r.rolname for r in rows if not r.rolname.startswith('pg_')]
 
 
-@meta(group='(1) Projekt', order=4, choices=user_choices,
+@meta(group='(1) Projekt', order=6, choices=user_choices,
       title='Datenbanknutzer:innen', description='Diesen Nutzer:innen wird Zugriff auf '
       'die Datenbank und ihre Tabellen gewährt. Die Auswahl beschränkt sich '
       'auf bereits angelegte Rollen.')
 @orca.injectable()
 def db_users() -> List[str]:
     return []
-
 
 def dummy_polygon():
     ring = ogr.Geometry(ogr.wkbLinearRing)
@@ -100,8 +161,7 @@ def dummy_polygon():
     geom.AddGeometry(ring)
     return geom
 
-
-@meta(group='(1) Projekt', order=3,
+@meta(group='(1) Projekt', order=4,
       title='Projektgebiet',
       description='Das Projektgebiet. Die Daten werden auf dieses '
       'Gebiet zugeschnitten.')
@@ -111,7 +171,7 @@ def project_area() -> ogr.Geometry:
     return None
 
 
-@meta(group='(1) Projekt', order=2, title='Projektion',
+@meta(group='(1) Projekt', order=3, title='Projektion',
       description='EPSG-Code des Koordinatenreferenzsystems, in das alle '
       'Geodaten transformiert werden, die in der Zieldatenbank abgelegt werden.')
 @orca.injectable()
@@ -120,13 +180,17 @@ def target_srid() -> int:
     return 25832
 
 
-@meta(group='(1) Projekt', order=4, choices=['europe'], title='Quelldatenbank',
+@meta(group='(1) Projekt', order=5, choices=['europe'], title='Quelldatenbank',
       description='Der Name der Datenbank, aus der die Daten extrahiert werden.')
 @orca.injectable()
 def source_db() -> str:
     """The name of the base-database to extract data from"""
     return 'europe'
 
+@meta(hidden=True, refresh='always')
+@orca.injectable()
+def extracted_vwg_tables_choices(database) -> dict:
+    return get_tables(database, 'verwaltungsgrenzen')
 
 @meta(hidden=True, refresh='always')
 @orca.injectable()
@@ -253,26 +317,29 @@ def regionalstatistik_years() -> List[str]:
 
 
 @meta(group='(8a) Regionalstatistik', title='Gemeinden der Regionalstatistik',
+      choices=extracted_vwg_tables_choices,
       description='Layer mit Gemeinden, für die die Statistiken importiert werden')
 @orca.injectable()
 def regionalstatistik_gemeinden() -> str:
     """Gemeindelayer for Regionalstatistik"""
-    return 'verwaltungsgrenzen.gem_2020_12'
+    return ''
 
 
 @meta(group='(8b) Pendlerdaten', title='Gemeinden mit Pendlerdaten',
+      choices=extracted_vwg_tables_choices,
       description='Layer mit Gemeinden, für die die Pendlerdaten importiert werden')
 @orca.injectable()
 def pendlerdaten_gemeinden() -> str:
     """Gemeindelayer for Pendlerdaten"""
-    return 'verwaltungsgrenzen.gem_2018_12'
+    return ''
 
 
-@meta(group='(8b) Pendlerdaten', title='Gebiete der Pendlerspinne')
+@meta(group='(8b) Pendlerdaten', title='Gebiete der Pendlerspinne',
+      choices=extracted_vwg_tables_choices)
 @orca.injectable()
 def pendlerspinne_gebiete() -> str:
     """Layer mit den Gebieten für die Pendlerspinne"""
-    return 'verwaltungsgrenzen.gem_2018_12'
+    return ''
 
 
 @meta(group='(3) Netzwerk', title='Netzwerkschema',

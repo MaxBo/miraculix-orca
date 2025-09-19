@@ -9,6 +9,8 @@ from psycopg2.sql import SQL, Composed, Literal
 from psycopg2.extensions import Column
 from copy import deepcopy
 from typing import Union, Dict, OrderedDict, Tuple, List
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from psycopg2.sql import Identifier, SQL
 
 import os
 import logging
@@ -161,6 +163,28 @@ class DBApp:
             database
         )
 
+    def create_target_db(self, database: str = None, role: str = None):
+        """
+        create the target database
+        """
+
+        db = database or self.login.db
+        role = role or self.role
+        sql = SQL("""
+        CREATE DATABASE {db};
+        ALTER DATABASE {db} OWNER TO {role};
+        """).format(db=Identifier(db), role=Identifier(role))
+
+        login = deepcopy(self.login)
+        login.db = 'postgres'
+        with Connection(login=login) as conn:
+            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+            self.run_query(sql, conn=conn)
+
+    def set_table_comment(self, comment: str, table_name, schema='public', conn=None):
+        sql = f"COMMENT ON TABLE {schema}.{table_name} IS '{comment}';"
+        self.run_query(sql, conn=conn or self.conn)
+
     def create_schema(self,
                       schema: str,
                       conn: NamedTupleConnection = None,
@@ -232,6 +256,10 @@ class DBApp:
             if true, log query
         vars: dict(optional)
             values to pass to the query
+
+        Returns
+        -------
+        cursor : the cursor used for database operations
         """
         conn = conn or self.conn
         cur = conn.cursor()
@@ -253,6 +281,8 @@ class DBApp:
                         execute(query, vars)
         else:
             execute(sql, vars)
+
+        return cur
 
     def set_search_path(self, connstr: str = 'conn'):
         conn = getattr(self, connstr)
@@ -327,7 +357,7 @@ SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{dbname}
 
         cur = conn.cursor()
         sql = f"""
-DROP DATABASE IF EXISTS {dbname};
+DROP DATABASE IF EXISTS "{dbname}";
         """
         conn.set_isolation_level(0)
         cur.execute(sql)
@@ -407,3 +437,15 @@ AND    i.indisprimary;
         rows = cur.fetchall()
         pkey = ', '.join([f'"{r[0]}"' for r in rows])
         return pkey
+
+    def get_columns(self, schema: str, tablename: str, conn: NamedTupleConnection = None):
+        conn = conn or self.conn
+        sql = f"""        
+            SELECT column_name FROM information_schema.columns    
+            WHERE table_schema = '{schema}' AND table_name = '{tablename}';
+        """
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        return [r.column_name for r in rows]
+

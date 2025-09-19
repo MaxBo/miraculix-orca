@@ -2,6 +2,7 @@
 
 from typing import Dict
 import os
+import glob
 import orca
 from osgeo import ogr
 from datetime import date
@@ -18,6 +19,7 @@ from extractiontools.network2pbf import CopyNetwork2Pbf, CopyNetwork2PbfTagged
 from extractiontools.stop_otp_router import OTPServer
 from extractiontools.copy2fgdb import Copy2FGDB
 from extractiontools.extract_gtfs import ExtractGTFS
+from extractiontools.injectables.database import extracted_vwg_tables_choices
 from typing import List
 
 default_login = Login(
@@ -29,7 +31,7 @@ default_login = Login(
 
 
 @meta(group='(3) Netzwerk', required=['extract_osm', 'extract_landuse'],
-      title='Netzwerk Auto bauen')
+      title='Netzwerk Auto bauen', description='Ein Netzwerk für den Modus Auto aus OSM-Daten bauen.')
 @orca.step()
 def build_network_car(database: str,
                       chunksize: int,
@@ -51,7 +53,7 @@ def build_network_car(database: str,
 
 
 @meta(group='(3) Netzwerk', required=['extract_osm', 'extract_landuse'],
-      title='abgestuftes Netzwerk Auto bauen', description='ein Netzwerk für '
+      title='abgestuftes Netzwerk Auto bauen', description='Ein Netzwerk für '
       'den Modus Auto bauen mit Abstufung in ein Gebiet mit feiner Auflösung '
       'und ein größeres Gebiet mit grober Auflösung ')
 @orca.step()
@@ -133,8 +135,8 @@ def scrape_stops(database: str):
     scrape.scrape()
 
 
-@meta(group='(4) ÖPNV', order=5, required='scrape_stops or extract_stops',
-      title='schnellste Verbindungen suchen', description='Zieht die '
+@meta(group='(4) ÖPNV', order=5, required=['scrape_stops', 'extract_stops'],
+      title='Schnellste Verbindungen suchen', description='Zieht die '
       'schnellsten Verbindungen zwischen den Haltestellen und Zielpunkten von der Deutsche '
       'Bahn-Website. Dabei werden alle Verbindungen am gegebenen Tag zu den gegebenen Uhrzeiten '
       'zwischen allen zuvor gescrapten Haltestellen aus der Tabelle "haltestellen" als '
@@ -142,7 +144,9 @@ def scrape_stops(database: str):
       'Tabelle innerhalb des gegebenen Radius als Zielorte abgefragt. Die Ergebnisse '
       'werden in der Tabelle "db_{datum}_{Name der Tabelle mit den Zielen}" '
       'in demselben Schema mit "H_ID" als Abfahrtshaltestellen, Primärschlüssel '
-      'der Zielhaltestellen und den schnellsten Verbindungen in Minuten.')
+      'der Zielhaltestellen und den schnellsten Verbindungen in Minuten. <br> '
+      '<b>Einer</b> der beiden Schritte ("scrape_stops" oder "extract_stops") '
+      'muss vorher ausgeführt worden sein (nicht beide)')
 @orca.step()
 def scrape_db_fastest_routes(database: str, destinations_db_routing: str,
                              date_db_routing: date, times_db_routing: List[int],
@@ -217,9 +221,11 @@ def recreate_timetable_tables() -> bool:
     return False
 
 
-@meta(group='(4) ÖPNV', order=3, required='scrape_stops or extract_stops',
+@meta(group='(4) ÖPNV', order=3, required=['scrape_stops', 'extract_stops'],
       title='Zeittabellen scrapen', description='Zieht die Fahrten aller '
-      'Haltestellen von der Deutsche Bahn-Website')
+      'Haltestellen von der Deutsche Bahn-Website. <br> '
+      '<b>Einer</b> der beiden Schritte ("scrape_stops" oder "extract_stops") '
+      'muss vorher ausgeführt worden sein (nicht beide)')
 @orca.step()
 def scrape_timetables(database: str, source_db: str,
                       date_timetable: str,
@@ -241,17 +247,18 @@ def gtfs_only_one_day() -> bool:
     """gtfs valid only on the given day?"""
     return False
 
-
 @meta(group='(4) ÖPNV', title='Kreise',
+      choices=extracted_vwg_tables_choices, refresh='always',
       description='Tabelle mit den Geometrien der Kreise')
 @orca.injectable()
 def tbl_kreise() -> str:
     """table with the county geometries"""
-    return 'verwaltungsgrenzen.krs_2018_12'
+    return ''
 
 
 @meta(group='(4) ÖPNV', order=4, title='Zeittabellen als GTFS',
-      description='Exportiert die Zeittabellen als GTFS-Dateien')
+      description='Exportiert die Zeittabellen als GTFS-Dateien',
+      required=[scrape_timetables, 'extract_verwaltungsgrenzen'])
 @orca.step()
 def timetables_gtfs(database: str,
                     date_timetable: str,
@@ -272,29 +279,68 @@ def timetables_gtfs(database: str,
     hafas.convert()
     hafas.export_gtfs()
 
+GTFS_DIR = r'/root/gis/gtfs'
+
+@meta(hidden=True, refresh='always')
+@orca.injectable()
+def local_gtfs_files() -> List[str]:
+    fps = glob.glob(os.path.join(GTFS_DIR, '*.zip'))
+    return [os.path.split(fp)[-1] for fp in fps]
+
 
 @meta(group='(4) ÖPNV', title='GTFS-Inputdatei',
-      description='GTFS-Datei mit Feed, der verschnitten werden soll')
+      description='GTFS-Datei mit Feed, der verschnitten werden soll',
+      choices=local_gtfs_files, scope='step')
 @orca.injectable()
 def gtfs_input() -> str:
     """gtfs input file"""
-    return r'/root/gis/gtfsde_latest.zip'
+    return r'gtfsde_latest.zip'
+
+
+@meta(group='(4) ÖPNV', title='Visum Nachbearbeitung',
+      description='Soll der Feed nachbearbeitet werden (speziell, um ihn in '
+      'Visum einzubinden)?<br>Wenn ja, werden nach der Beschneidung des Feeds '
+      'Haltestellen nach Routentyp aufgesplittet, Duplikate zusammengefasst '
+      'und neue IDs vergeben.',
+      scope='step')
+@orca.injectable()
+def gtfs_postprocessing() -> bool:
+    """do the preprocessing if True, if False only clipping"""
+    return True
+
+@meta(group='(4) ÖPNV', title='Transferergänzung',
+      description='Sollen fehlende Transfers ergänzt werden?<br>Wenn ja, '
+      'werden die Transfers ergänzt mit Relationen zwischen Stops, die 200m '
+      'Luftlinie auseinander liegen und noch nicht in den Transfers enthalten '
+      'sind. Bei den Umstiegszeiten wird mit 3km/h Luftlinie plus 2 Minuten '
+      'gerechnet.', scope='step')
+@orca.injectable()
+def gtfs_transferprocessing() -> bool:
+    """do the preprocessing if True, if False only clipping"""
+    return True
 
 
 @meta(group='(4) ÖPNV', order=6, title='GTFS verschneiden',
       description='Verschneide Feed aus GTFS-Datei mit dem Projektgebiet und '
-      'gebe ihn als GTFS-Datei wieder aus')
+      'gebe ihn als GTFS-Datei wieder aus. <br>'
+      'Der Schritt greift nicht auf die Datenbank zu. Der Datenbankname wird '
+      'lediglich für die Zusammensetzung des Pfades der Ausgabedatei benötigt')
 @orca.step()
 def extract_gtfs(database: str,
                  base_path: str,
                  subfolder_otp: str,
                  gtfs_input: str,
+                 gtfs_postprocessing: bool,
+                 gtfs_transferprocessing: bool,
                  project_area: 'ogr.Geometry'):
     """
     Intersect Feed from GTFS file with project area and write clipped GTFS file
     """
-    out_path = os.path.join(base_path, database,subfolder_otp)
-    extract = ExtractGTFS(project_area, gtfs_input, out_path,
+    out_path = os.path.join(base_path, database, subfolder_otp)
+    gtfs_path = os.path.join(GTFS_DIR, gtfs_input)
+    extract = ExtractGTFS(project_area, gtfs_path, out_path,
+                          do_visum_postproc=gtfs_postprocessing,
+                          do_transferprocessing=gtfs_transferprocessing,
                           logger=orca.logger)
     extract.extract()
 
@@ -494,7 +540,7 @@ def copy_network_car_fgdb(database: str,
                           layers=network_layers,
                           filename='network_car.gdb',
                           schema='network', logger=orca.logger)
-    copy2fgdb.copy_layers('FileGDB')
+    copy2fgdb.copy_layers('OpenFileGDB')
 
 
 @meta(group='(5) Export', required=build_network_fr,
@@ -507,4 +553,4 @@ def copy_network_fr_fgdb(database: str,
     copy2fgdb = Copy2FGDB(database, layers=network_fr_layers,
                           filename='network_fr.gdb',
                           schema='network_fr', logger=orca.logger)
-    copy2fgdb.copy_layers('FileGDB')
+    copy2fgdb.copy_layers('OpenFileGDB')

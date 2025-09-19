@@ -33,7 +33,7 @@ class HafasDB2GTFS(Extract):
         self.only_one_day = only_one_day
         self.base_path = base_path
         self.subfolder = subfolder
-        self.tbl_kreise = tbl_kreise
+        self.tbl_kreise = f'verwaltungsgrenzen.{tbl_kreise}'
 
     def convert(self):
         with Connection(self.login) as conn:

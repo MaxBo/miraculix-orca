@@ -10,10 +10,7 @@ import subprocess
 import time
 from typing import List
 from osgeo import ogr
-from psycopg2.sql import Identifier, SQL
 from psycopg2 import errors
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-from copy import deepcopy
 import logging
 
 from .connection import Connection, DBApp, Login
@@ -104,8 +101,7 @@ class Extract(DBApp):
             self.truncate_db()
         else:
             self.logger.info(f'Create Database {self.destination_db}')
-            self.create_target_db(self.login)
-            self.logger.info(f'Create Database {self.destination_db}')
+            self.create_target_db(self.destination_db)
         self.create_extensions()
         self.create_meta()
         self.create_foreign_server()
@@ -148,7 +144,44 @@ class Extract(DBApp):
         additional steps, to be defined in the subclass
         """
 
+    def get_password_from_pgpass(self,
+                                 find_host: str,
+                                 find_port: str,
+                                 find_db: str,
+                                 find_user: str) -> str:
+        """get password from pgpass-file"""
+        pg_passfile = os.environ.get('PGPASSFILE', None)
+        if not pg_passfile:
+            raise ValueError('No PGPass-file defined in .env-file')
+        with open(pg_passfile, 'r') as f:
+            content = f.read()
+
+        if not content:
+            raise ValueError('pgpass-file empty')
+
+        PATTERN = re.compile(r'^(.*):(.*):(.*):(.*):(.*)$', re.MULTILINE)
+        matches = PATTERN.findall(content)
+        for match in matches:
+            if match and not match[0].startswith("#"):
+                host, port, db, user, password = match
+                if host != '*' and host != find_host:
+                    continue
+                if port != '*' and str(port) != str(find_port):
+                    continue
+                if db != '*' and db != find_db:
+                    continue
+                if user != '*' and user != find_user:
+                    continue
+                # Password found
+                return password
+
+        raise ValueError(f'no password found in {pg_passfile} for {find_user}@{find_host}:{find_port}/{find_db}')
+
     def create_foreign_server(self):
+        password = self.get_password_from_pgpass(find_host=self.foreign_login.host,
+                                                 find_port=self.foreign_login.port,
+                                                 find_db=self.foreign_login.db,
+                                                 find_user=self.foreign_login.user)
         sql = f"""
         -- server
         DROP SERVER IF EXISTS {self.foreign_server} CASCADE;
@@ -165,7 +198,7 @@ class Extract(DBApp):
         CREATE USER MAPPING FOR {self.login.user}
         SERVER {self.foreign_server}
         OPTIONS (user '{self.foreign_login.user}',
-        password '{self.foreign_login.password}');
+        password '{password}');
         """
         self.logger.info(
             f'Creating connection to database "{self.foreign_login.db}"')
@@ -428,21 +461,6 @@ FROM {self.temp}.{tn} t;
             self.PGPATH = pg_path or '/usr/bin'
             self.SHELL = True
 
-    def create_target_db(self, login):
-        """
-        create the target database
-        """
-        sql = SQL("""
-        CREATE DATABASE {db};
-        ALTER DATABASE {db} OWNER TO {role};
-        """).format(db=Identifier(self.login.db), role=Identifier(self.role))
-
-        login = deepcopy(self.login)
-        login.db = 'postgres'
-        with Connection(login=login) as conn:
-            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-            self.run_query(sql, conn=conn)
-
     def create_meta(self):
         sql = '''
         CREATE SCHEMA meta;
@@ -541,7 +559,7 @@ FROM {self.temp}.{tn} t;
                 continue
             self.logger.info(f'Copying table "{table}" to {schema}.{table}')
             sql = f'''
-            DROP TABLE IF EXISTS {schema}.{table};
+            DROP TABLE IF EXISTS {schema}.{table} CASCADE;
             CREATE TABLE {schema}.{table} (LIKE {temp_schema}.{table}
             INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING DEFAULTS);
             INSERT INTO {schema}.{table} SELECT * FROM {temp_schema}.{table};
