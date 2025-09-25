@@ -51,6 +51,22 @@ ROUTE_TYPE_MAP.update({
 })
 
 
+def cluster(gdf: gp.GeoDataFrame, distance=150) -> gp.GeoDataFrame:
+    '''
+    cluster points within distance, adds cluster_index column to gdf
+    '''
+    buffer = gdf[["geometry"]].copy()
+    buffer["geometry"] = buffer.geometry.buffer(distance/2)
+    cluster_multi = buffer.unary_union
+
+    cluster_poly = gp.GeoDataFrame(geometry=[geom for geom in cluster_multi.geoms]
+    if hasattr(cluster_multi, 'geoms') else
+    [cluster_multi], crs=gdf.crs)
+
+    gdf = gp.sjoin(gdf, cluster_poly, predicate='within', how='left').rename(columns={'index_right': 'cluster_index'})
+    return gdf
+
+
 class ExtractGTFS():
 
     def __init__(self,
@@ -62,7 +78,9 @@ class ExtractGTFS():
                  logger=None):
         """"""
         self.gtfs_input = gtfs_input
+        self.gtfs_input = r'D:\Downloads\JFPL25_OpendataOEV_Stand0925.zip'
         self.out_path = out_path
+        self.out_path = os.path.join(r'D:\Downloads')
         self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.do_visum_postproc = do_visum_postproc
         self.do_transferprocessing = do_transferprocessing
@@ -109,7 +127,6 @@ class ExtractGTFS():
 
     def postprocess(self, clip):
         stops = clip.get_stops()
-        stops['idx'] = stops.index
 
         self.logger.info('Finde Routentypen und spalte Stops nach '
                          'Routentypen auf')
@@ -139,23 +156,10 @@ class ExtractGTFS():
                 typed_stops['stop_lon'], typed_stops['stop_lat']),
             crs="EPSG:4326")
         gdf_stops.to_crs(3857, inplace=True)
-        gdf_stops['stop_lon'] = gdf_stops['geometry'].apply(lambda geom: geom.x)
-        gdf_stops['stop_lat'] = gdf_stops['geometry'].apply(lambda geom: geom.y)
 
-        # find stations roughly at same location with same name and serving
-        # same route type by putting lat/lon in seperate classes formed by 50m
-        # (chained) differences
-        gdf_stops = gdf_stops.sort_values('stop_lat')
-        gdf_stops['lat_cl'] = gdf_stops[
-            'stop_lat'].diff().fillna(0).abs().gt(50).cumsum()
-        gdf_stops = gdf_stops.sort_values('stop_lon')
-        gdf_stops['lon_cl'] = gdf_stops[
-            'stop_lon'].diff().fillna(0).abs().gt(50).cumsum()
-
-        # restore old order
-        gdf_stops = gdf_stops.sort_values('idx').drop(columns=['idx'])
-
-        subset = ['stop_name', 'route_type', 'lat_cl', 'lon_cl']
+        # find stations roughly at same location with same name and serving same route type
+        gdf_stops = cluster(gdf_stops, distance=50)
+        subset = ['stop_name', 'route_type', 'cluster_index']
         if 'level_id' in gdf_stops.columns:
             subset.append('level_id')
         duplicated = gdf_stops[gdf_stops.duplicated(
@@ -167,13 +171,6 @@ class ExtractGTFS():
         duplicated = duplicated.merge(
             gdf_stops[~gdf_stops['stop_id'].isin(duplicated['stop_id'])],
             how='left', on=subset, suffixes=['', '_remain'])
-
-        ## exclude stops that are too distant to each other (the lat/lon above
-        ## classification is not accurate enough in high density areas)
-        #duplicated['distance'] = duplicated.apply(
-            #lambda row: row['geometry'].distance(row['geometry_remain']),
-            #axis=1)
-        #duplicated = duplicated[duplicated['distance'] < 50]
 
         # exclude stops from removal that are adjacent in trips
         tt = tt_with_rt.merge(stops[['stop_id', 'stop_name']], how='left',
@@ -407,19 +404,11 @@ class ExtractGTFS():
             stops_df_nop['stop_lon'], stops_df_nop['stop_lat']),
                                     crs="EPSG:4326")
         gdf_stops.to_crs(3857, inplace=True)
-        gdf_stops['stop_lon'] = gdf_stops['geometry'].apply(lambda geom: geom.x)
-        gdf_stops['stop_lat'] = gdf_stops['geometry'].apply(lambda geom: geom.y)
 
-        # find stations roughly at same location by chained distance grouping
-        # in 150m steps along lon and lat
-        gdf_stops = gdf_stops.sort_values('stop_lat')
-        gdf_stops['lat_cl'] = gdf_stops[
-            'stop_lat'].diff().fillna(0).abs().gt(150).cumsum()
-        gdf_stops = gdf_stops.sort_values('stop_lon')
-        gdf_stops['lon_cl'] = gdf_stops[
-            'stop_lon'].diff().fillna(0).abs().gt(150).cumsum()
+        gdf_stops = cluster(gdf_stops, distance=150)
+
         idx = stops_df.index.max() + 1
-        for i, group in gdf_stops.groupby(['lat_cl', 'lon_cl']):
+        for i, group in gdf_stops.groupby('cluster_index'):
             if len(group) < 2:
                 continue
             wo_dep = group[group['n_departures'].isna()]
@@ -440,13 +429,12 @@ class ExtractGTFS():
                     'location_type': 1,
                     'is_parent': True})
                 stops_df.loc[idx] = new_row
+                idx += 1
                 child_ids = group['stop_id']
             stops_df.loc[
                 stops_df[stops_df['stop_id'].isin(child_ids)].index,
                 'parent_station'] = station_id
-            idx += 1
-        self.logger.info(f'{len(stops_df) - len(clip.get_stops())} Stationen '
-                         'hinzugefügt')
+        self.logger.info(f'{len(stops_df) - len(clip.get_stops())} Stationen hinzugefügt')
         clip.stops = stops_df
         # wenn in Gruppe eine Station ohne Abfahrten, dann die als parent
         # als name für neue parents die station mit den meisten Abfahrten

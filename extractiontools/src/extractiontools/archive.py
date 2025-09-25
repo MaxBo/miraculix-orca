@@ -7,7 +7,7 @@ from extractiontools.connection import DBApp
 
 class Archive(DBApp):
     file_schema = '{database}.sql.gz'
-    archive_folder = '/root/archive'
+    archive_folder = os.environ.get('ARCHIVE', '/root/archive')
 
     def __init__(self, database: str, archive_fn:str=None, logger=None):
         super().__init__(logger=logger)
