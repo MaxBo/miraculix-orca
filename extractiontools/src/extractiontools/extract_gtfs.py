@@ -78,9 +78,9 @@ class ExtractGTFS():
                  logger=None):
         """"""
         self.gtfs_input = gtfs_input
-        self.gtfs_input = r'D:\Downloads\JFPL25_OpendataOEV_Stand0925.zip'
+        # self.gtfs_input = r'D:\Downloads\JFPL25_OpendataOEV_Stand0925.zip'
         self.out_path = out_path
-        self.out_path = os.path.join(r'D:\Downloads')
+        # self.out_path = os.path.join(r'D:\Downloads')
         self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.do_visum_postproc = do_visum_postproc
         self.do_transferprocessing = do_transferprocessing
