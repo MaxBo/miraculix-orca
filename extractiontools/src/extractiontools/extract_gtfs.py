@@ -162,15 +162,13 @@ class ExtractGTFS():
         subset = ['stop_name', 'route_type', 'cluster_index']
         if 'level_id' in gdf_stops.columns:
             subset.append('level_id')
-        duplicated = gdf_stops[gdf_stops.duplicated(
-            subset=subset, keep='first')]
+        # duplicates except first appearance of duplicate subset rows, the exempted one will be kept
+        dup_index = gdf_stops.duplicated(subset=subset, keep='first')
+        duplicated = gdf_stops[dup_index]
 
         # merge stops without the duplicated ones (= with first rows of
-        # duplication appearance) to get relating stop ids of the rows that will
-        # remain
-        duplicated = duplicated.merge(
-            gdf_stops[~gdf_stops['stop_id'].isin(duplicated['stop_id'])],
-            how='left', on=subset, suffixes=['', '_remain'])
+        # duplication appearance) to get relating stop ids of the rows that will remain
+        duplicated = duplicated.merge(gdf_stops[~dup_index], how='left', on=subset, suffixes=['', '_remain'])
 
         # exclude stops from removal that are adjacent in trips
         tt = tt_with_rt.merge(stops[['stop_id', 'stop_name']], how='left',
@@ -194,7 +192,6 @@ class ExtractGTFS():
         exclude = chained_dup.groupby(
             ['stop_id','route_type']).size().reset_index()[
                 ['stop_id','route_type']]
-
         ex_idx = np.array([False] * len(duplicated))
         # that seems a little excessive, no idea how to do it without a loop
         # it isn't a thing that happens a lot though
