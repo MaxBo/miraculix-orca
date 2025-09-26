@@ -279,7 +279,8 @@ def timetables_gtfs(database: str,
     hafas.convert()
     hafas.export_gtfs()
 
-GTFS_DIR = r'/root/gis/gtfs'
+GTFS_DIR = os.environ.get('GTFS_FOLDER', r'/root/gis/gtfs')
+
 
 @meta(hidden=True, refresh='always')
 @orca.injectable()
