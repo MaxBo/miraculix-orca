@@ -78,9 +78,9 @@ class ExtractGTFS():
                  logger=None):
         """"""
         self.gtfs_input = gtfs_input
-        # self.gtfs_input = r'D:\Downloads\JFPL25_OpendataOEV_Stand0925.zip'
+        self.gtfs_input = r'D:\Downloads\JFPL25_OpendataOEV_Stand0925.zip'
         self.out_path = out_path
-        # self.out_path = os.path.join(r'D:\Downloads')
+        self.out_path = os.path.join(r'D:\Downloads')
         self.gtfs_output = os.path.join(self.out_path, 'gtfs_clipped.zip')
         self.do_visum_postproc = do_visum_postproc
         self.do_transferprocessing = do_transferprocessing
@@ -232,12 +232,12 @@ class ExtractGTFS():
             if route_type is None or gp.np.isnan(route_type):
                 continue
             loc_idx = tt_with_rt['route_type'] == route_type
-            revised_ids = tt_with_rt.loc[loc_idx]['stop_id'].map(reassign_map)
+            revised_ids = tt_with_rt.loc[loc_idx]['stop_id'].replace(reassign_map)
             tt_with_rt.loc[loc_idx, 'stop_id_revised'] = revised_ids
 
         # same with parent ids in stops
         revised_stops['parent_id_revised'] = revised_stops[
-            'parent_station'].map(reassign_map_union)
+            'parent_station'].replace(reassign_map_union)
         revised_stops.loc[revised_stops['parent_id_revised'].isna(),
                           'parent_id_revised'] = revised_stops['parent_station']
         revised_stops = revised_stops.merge(
@@ -258,7 +258,7 @@ class ExtractGTFS():
             revised_transfers = clip.transfers.copy()
             for column in ['from_stop_id', 'to_stop_id']:
                 revised_transfers['stop_id_revised'] = revised_transfers.loc[
-                    :, column].map(reassign_map_union)
+                    :, column].replace(reassign_map_union)
                 revised_transfers.loc[revised_transfers['stop_id_revised'].isna(),
                                   'stop_id_revised'] = revised_transfers.loc[
                                       :, column]
@@ -383,7 +383,7 @@ class ExtractGTFS():
 
     def simplify_route_types(self, clip):
         routes_df = clip.get_routes()
-        revised_types = routes_df['route_type'].map(ROUTE_TYPE_MAP)
+        revised_types = routes_df['route_type'].replace(ROUTE_TYPE_MAP)
         nan_values = revised_types.isna()
         revised_types.loc[nan_values] = routes_df.loc[nan_values, 'route_type']
         routes_df['route_type'] = revised_types.astype(int)

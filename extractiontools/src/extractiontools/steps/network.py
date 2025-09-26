@@ -300,8 +300,8 @@ def gtfs_input() -> str:
 @meta(group='(4) ÖPNV', title='Visum Nachbearbeitung',
       description='Soll der Feed nachbearbeitet werden (speziell, um ihn in '
       'Visum einzubinden)?<br>Wenn ja, werden nach der Beschneidung des Feeds '
-      'Haltestellen nach Routentyp aufgesplittet, Duplikate zusammengefasst '
-      'und neue IDs vergeben.',
+      'Haltestellen nach Routentyp aufgesplittet, Duplikate entfernt, nahe Haltestellen zu Haltestellenbereichen '
+      'zusammengefasst und bei Bedarf neue IDs vergeben.',
       scope='step')
 @orca.injectable()
 def gtfs_postprocessing() -> bool:
