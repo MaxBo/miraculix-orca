@@ -1314,31 +1314,42 @@ FROM "{network}".links l;
         sql = 'SELECT max(e.id) FROM "{network}".edge_table e;'
         cursor.execute(sql.format(network=self.network))
         n_edges = cursor.fetchone()[0]
+        create_sql = f'''CREATE TABLE {self.network}.edge_table_vertices_pgr (
+          id BIGINT,
+          in_edges BIGINT [],
+          out_edges BIGINT [],
+          x DOUBLE PRECISION,
+          y DOUBLE PRECISION,
+          geom public.geometry
+        )'''
+        self.run_query(create_sql)
 
         for fromrow in range(0, n_edges, chunksize):
             torow = fromrow + chunksize
-            sql = """
-SELECT pgr_createTopology(E'{network}.edge_table',
-    {tolerance},
-    'geom',
-    'id',
-    'source',
-    'target',
-    rows_where := 'id >= {fromrow} AND id < {torow}',
-    clean := false::boolean);
-COMMIT;
-""".format(tolerance=0.000001, network=self.network,
-                fromrow=fromrow, torow=torow)
+            sql = f'''
+            INSERT INTO {self.network}.edge_table_vertices_pgr (id, in_edges, out_edges, x, y, geom)            
+            SELECT id, in_edges, out_edges, x, y, geom 
+            FROM pgr_extractVertices(
+                'SELECT id, geom FROM {self.network}.edge_table 
+                 WHERE id >= {fromrow} AND id < {torow} ORDER BY id'
+            );
+            '''
             self.logger.info(
-                'create topology for edges {} to {}'.format(fromrow, torow))
+                'extracting vertices from edges {} to {}'.format(fromrow, torow))
             self.run_query(sql)
 
-        sql = """
-SELECT pgr_analyzeGraph(E'{network}.edge_table',{tolerance},
-'geom','id','source','target');
-        """.format(tolerance=0.000001, network=self.network)
-        self.logger.info('Analyze Graph')
-        self.run_query(sql)
+        update_st_sql = f'''
+        UPDATE {self.network}.edge_table AS e
+        SET source = v.id
+        FROM {self.network}.edge_table_vertices_pgr AS v
+        WHERE ST_StartPoint(e.geom) = v.geom;
+        UPDATE {self.network}.edge_table AS e
+        SET target = v.id
+        FROM {self.network}.edge_table_vertices_pgr AS v
+        WHERE ST_EndPoint(e.geom) = v.geom;
+        '''
+        self.logger.info('Setting source and target vertices to edges')
+        self.run_query(update_st_sql)
 
     def create_edge_reached(self):
         """
@@ -1427,8 +1438,8 @@ FROM
 FROM (
   SELECT
     cl.s,
-    kmeans(ARRAY[ST_X(j.the_geom), ST_Y(j.the_geom)], cl.s) OVER (PARTITION BY cl.s),
-    j.the_geom AS geom
+    kmeans(ARRAY[ST_X(j.geom), ST_Y(j.geom)], cl.s) OVER (PARTITION BY cl.s),
+    j.geom AS geom
   FROM "{network}".edge_table_vertices_pgr j,
   (SELECT generate_series(1, {k}) s) cl
 ) AS k
@@ -1437,9 +1448,9 @@ WHERE c.rn = 1)
 
 SELECT e.id, e.geom, e.s, e.rn
 FROM (
-SELECT v.id , v.the_geom AS geom,
+SELECT v.id , v.geom AS geom,
 cluster.s,
-row_number() OVER (PARTITION BY cluster.s ORDER BY v.the_geom <-> cluster.geom) AS rn
+row_number() OVER (PARTITION BY cluster.s ORDER BY v.geom <-> cluster.geom) AS rn
 FROM "{network}".edge_table_vertices_pgr v, cluster) e
 ORDER BY e.rn, e.s
 LIMIT {n};
