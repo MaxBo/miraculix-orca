@@ -1309,34 +1309,14 @@ FROM "{network}".links l;
         """
         self.logger.info('Create Topology')
 
-        chunksize = 50000
-        cursor = self.conn.cursor()
-        sql = 'SELECT max(e.id) FROM "{network}".edge_table e;'
-        cursor.execute(sql.format(network=self.network))
-        n_edges = cursor.fetchone()[0]
-        create_sql = f'''CREATE TABLE {self.network}.edge_table_vertices_pgr (
-          id BIGINT,
-          in_edges BIGINT [],
-          out_edges BIGINT [],
-          x DOUBLE PRECISION,
-          y DOUBLE PRECISION,
-          geom public.geometry
-        )'''
-        self.run_query(create_sql)
-
-        for fromrow in range(0, n_edges, chunksize):
-            torow = fromrow + chunksize
-            sql = f'''
-            INSERT INTO {self.network}.edge_table_vertices_pgr (id, in_edges, out_edges, x, y, geom)            
-            SELECT id, in_edges, out_edges, x, y, geom 
-            FROM pgr_extractVertices(
-                'SELECT id, geom FROM {self.network}.edge_table 
-                 WHERE id >= {fromrow} AND id < {torow} ORDER BY id'
-            );
-            '''
-            self.logger.info(
-                'extracting vertices from edges {} to {}'.format(fromrow, torow))
-            self.run_query(sql)
+        sql = f'''
+        SELECT * INTO {self.network}.edge_table_vertices_pgr
+        FROM pgr_extractVertices(
+            'SELECT id, geom FROM {self.network}.edge_table'
+        );
+        '''
+        self.logger.info('Extracting vertices')
+        self.run_query(sql)
 
         update_st_sql = f'''
         UPDATE {self.network}.edge_table AS e
