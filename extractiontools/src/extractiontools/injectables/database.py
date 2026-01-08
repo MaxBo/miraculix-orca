@@ -374,7 +374,7 @@ def network_graduated_schema() -> str:
     return 'network_grad'
 
 
-@meta(group='(3) Netzwerk')
+@meta(group='(3) Netzwerk', hidden=True)
 @orca.injectable()
 def limit4links() -> int:
     """
@@ -391,11 +391,13 @@ def chunksize() -> int:
     return 1000
 
 
-@meta(group='(3) Netzwerk')
+@meta(group='(3) Netzwerk', title='Mindestzahl Links',
+      description="Mindestanzahl der verbunden Kanten innerhalb einer Netzwerkkomponente (unverbundenes Teilnetzwerk). "
+                  "Komponenten mit weniger Kanten fliegen aus dem Netzwerk.")
 @orca.injectable()
-def links_to_find() -> float:
-    """proportion of all network links to be found from starting point"""
-    return 0.25
+def links_to_find() -> int:
+    """min number of links in a component to keep it in the network"""
+    return 10
 
 
 @meta(group='(3) Netzwerk', title='Routing zu Fuß',
