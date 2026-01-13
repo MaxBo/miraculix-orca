@@ -391,13 +391,21 @@ def chunksize() -> int:
     return 1000
 
 
-@meta(group='(3) Netzwerk', title='Mindestzahl Links',
+@meta(group='(3) Netzwerk', title='Mindestanzahl Links',
       description="Mindestanzahl der verbunden Kanten innerhalb einer Netzwerkkomponente (unverbundenes Teilnetzwerk). "
                   "Komponenten mit weniger Kanten fliegen aus dem Netzwerk.")
 @orca.injectable()
 def links_to_find() -> int:
     """min number of links in a component to keep it in the network"""
     return 10
+
+
+@meta(group='(3) Netzwerk', title='inkl. Planung/Konstruktion',
+      description="Füge  geplante oder im Bau befindliche Straßen zu dem zu bauenden Netzwerk hinzu (ja) oder schließe sie aus (nein).")
+@orca.injectable()
+def include_planning() -> bool:
+    """include planned roads and roads under construction in the built car network if true"""
+    return False
 
 
 @meta(group='(3) Netzwerk', title='Routing zu Fuß',

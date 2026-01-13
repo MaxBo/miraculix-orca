@@ -21,7 +21,7 @@ class BuildNetwork(DBApp):
                  chunksize: int = 1000,
                  links_to_find: int = 10,
                  corine: str = 'clc18',
-                 routing_walk=False,
+                 include_planning=False,
                  **kwargs
                  ):
         super().__init__(**kwargs)
@@ -29,12 +29,13 @@ class BuildNetwork(DBApp):
         self.db = db
         self.set_login(database=db)
         self.schema = schema
-        self.network = 'network_dev_test' #network_schema
+        self.network = network_schema
         self.limit = limit
         self.chunksize = chunksize
         self.links_to_find = links_to_find
         self.corine = corine
         self.routing_walk = False
+        self.include_planning = include_planning
         self.pg_replacement = '_pg_replacement'
 
     def build(self):
@@ -1141,7 +1142,7 @@ CLUSTER "{network}".links USING idx_links_geom;
         """
         self.logger.info('Create View with accessible links')
         sql = """
-CREATE OR REPLACE VIEW "{network}".links_reached_without_planned AS
+CREATE OR REPLACE VIEW "{network}".links_reached AS
 SELECT l.*, lt.road_category
 FROM
   "{network}".links l,
@@ -1150,23 +1151,12 @@ FROM
 WHERE l.wayid=e.wayid AND l.segment=e.segment
 AND l.linktype = lt.id;
 
-CREATE OR REPLACE VIEW "{network}".links_reached_only_by_planned AS
-SELECT l.*, lt.road_category
-FROM
-  "{network}".links l,
-  classifications.linktypes lt,
-  "{network}".edges_reached_with_planned ep
-  LEFT JOIN "{network}".edges_reached e ON ep.id = e.id
-WHERE l.wayid=ep.wayid AND l.segment=ep.segment
-AND e.id IS NULL
-AND l.linktype = lt.id;
-
 CREATE OR REPLACE VIEW "{network}".unaccessible_links AS
 SELECT lt.road_category, l.*
 FROM
   classifications.linktypes lt,
   "{network}".links l LEFT JOIN
-  "{network}".edges_reached_with_planned e
+  "{network}".edges_reached e
   ON l.wayid=e.wayid AND l.segment=e.segment
 WHERE e.id IS NULL
 AND l.linktype=lt.id;
@@ -1182,49 +1172,25 @@ AND l.linktype=lt.id;
 CREATE OR REPLACE VIEW "{network}".autobahn AS
 SELECT l.*
 FROM
-  "{network}".links_reached_without_planned l
+  "{network}".links_reached l
   WHERE road_category='A';
 
 CREATE OR REPLACE VIEW "{network}".hauptstr AS
 SELECT l.*
 FROM
-  "{network}".links_reached_without_planned l
+  "{network}".links_reached l
   WHERE road_category='B';
 
 CREATE OR REPLACE VIEW "{network}".nebennetz AS
 SELECT l.*
 FROM
-  "{network}".links_reached_without_planned l
+  "{network}".links_reached l
   WHERE road_category='C';
 
 CREATE OR REPLACE VIEW "{network}".faehren AS
 SELECT l.*
 FROM
-  "{network}".links_reached_without_planned l
-  WHERE road_category='D';
-
-CREATE OR REPLACE VIEW "{network}".autobahn_accessible_only_by_planned AS
-SELECT l.*
-FROM
-  "{network}".links_reached_only_by_planned l
-  WHERE road_category='A';
-
-CREATE OR REPLACE VIEW "{network}".hauptstr_accessible_by_planned AS
-SELECT l.*
-FROM
-  "{network}".links_reached_only_by_planned l
-  WHERE road_category='B';
-
-CREATE OR REPLACE VIEW "{network}".nebennetz_accessible_by_planned AS
-SELECT l.*
-FROM
-  "{network}".links_reached_only_by_planned l
-  WHERE road_category='C';
-
-CREATE OR REPLACE VIEW "{network}".faehren_accessible_by_planned AS
-SELECT l.*
-FROM
-  "{network}".links_reached_only_by_planned l
+  "{network}".links_reached l
   WHERE road_category='D';
 
         """.format(network=self.network)
@@ -1328,20 +1294,14 @@ FROM "{network}".links l;
         self.run_query(update_st_sql)
 
     def create_views_reachable_edges(self):
-
-        self.create_view_reachable_nodes('nodes_reached', where='planned = FALSE',
+        self.create_view_reachable_nodes('nodes_reached', planned=self.include_planning,
                                          min_component_size=self.links_to_find)
-        self.create_view_reachable_edges('edges_reached', 'nodes_reached')
+        self.create_view_reachable_edges('edges_reached', 'nodes_reached',
+                                         planned=self.include_planning)
 
-        self.create_view_reachable_nodes('nodes_reached_with_planned',
-                                         min_component_size=self.links_to_find)
-        self.create_view_reachable_edges('edges_reached_with_planned',
-                                         'nodes_reached_with_planned')
-
-    def create_view_reachable_nodes(self, target_view_name, where='', min_component_size=10):
-        edge_query = f'SELECT id, source, target, cost, reverse_cost FROM {self.network}.edge_table'
-        if where:
-            edge_query += f' WHERE {where}'
+    def create_view_reachable_nodes(self, target_view_name, planned=False, min_component_size=10):
+        where = 'WHERE planned = FALSE' if not planned else ''
+        edge_query = f'SELECT id, source, target, cost, reverse_cost FROM {self.network}.edge_table {where};'
         sql = f'''
         CREATE OR REPLACE VIEW "{self.network}"."{target_view_name}" AS
         WITH c AS (
