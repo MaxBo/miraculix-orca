@@ -439,7 +439,6 @@ CREATE OR REPLACE VIEW "{network}".walk_cycle_network AS
 SELECT l.*
 FROM
   "{network}".links_reached l;
-
 """.format(network=self.network)
         self.run_query(sql)
 
