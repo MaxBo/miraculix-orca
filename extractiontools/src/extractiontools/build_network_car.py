@@ -14,14 +14,15 @@ class BuildNetwork(DBApp):
     role = 'group_osm'
 
     def __init__(self,
-                 schema='osm',
-                 network_schema='network',
-                 db='extract',
+                 schema: str='osm',
+                 network_schema: str='network',
+                 db: str='extract',
                  limit: int = None,
                  chunksize: int = 1000,
                  links_to_find: int = 10,
                  corine: str = 'clc18',
-                 include_planning=False,
+                 include_planning: bool=False,
+                 routing_walk: bool=False,
                  **kwargs
                  ):
         super().__init__(**kwargs)
@@ -34,7 +35,7 @@ class BuildNetwork(DBApp):
         self.chunksize = chunksize
         self.links_to_find = links_to_find
         self.corine = corine
-        self.routing_walk = False
+        self.routing_walk = routing_walk
         self.include_planning = include_planning
         self.pg_replacement = '_pg_replacement'
 
@@ -1305,13 +1306,13 @@ FROM "{network}".links l;
         sql = f'''
         CREATE OR REPLACE VIEW "{self.network}"."{target_view_name}" AS
         WITH c AS (
-        SELECT * FROM pgr_strongComponents('{edge_query}') 
+        SELECT * FROM pgr_strongComponents('{edge_query}')
         ),
         d AS (
         SELECT c.component, count(*) AS cnt
         FROM c
         GROUP BY c.component)
-        
+
         SELECT
         c.node, c.component
         FROM c, d
@@ -1334,11 +1335,11 @@ FROM "{network}".links l;
             e.tonode,
             e.wayid,
             e.segment
-        FROM  
+        FROM
         "{self.network}".edge_table e,
         "{self.network}"."{nodes_view_name}" h,
         "{self.network}"."{nodes_view_name}" r
-        WHERE {'e.planned = FALSE AND ' if not planned else ''}e.source = h.node AND e.target = r.node;            
+        WHERE {'e.planned = FALSE AND ' if not planned else ''}e.source = h.node AND e.target = r.node;
         '''
         self.run_query(edges_sql)
 
