@@ -440,10 +440,6 @@ SELECT l.*
 FROM
   "{network}".links_reached l;
 
-CREATE OR REPLACE VIEW "{network}".walk_cycle_network_only_by_planned AS
-SELECT l.*
-FROM
-  "{network}".links_reached_only_by_planned l;
 """.format(network=self.network)
         self.run_query(sql)
 
