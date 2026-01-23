@@ -1261,7 +1261,7 @@ SELECT
   CASE WHEN l.oneway THEN -1 ELSE l.t_kfz END AS reverse_cost,
   l.wayid,
   l.segment,
-  l.planned OR l.construction
+  l.planned OR l.construction AS planned
 FROM "{network}".links l;
         """.format(network=self.network)
         self.run_query(sql)
