@@ -415,7 +415,7 @@ CREATE OR REPLACE VIEW "{network}".line_barriers_cycle AS
 
 TRUNCATE "{network}".edge_table;
 INSERT INTO "{network}".edge_table (id, fromnode, tonode, geom,
-cost, reverse_cost, wayid, segment)
+cost, reverse_cost, wayid, segment, planned)
 SELECT
   row_number() OVER (ORDER BY fromnode, tonode)::integer AS id,
   fromnode,
@@ -424,7 +424,8 @@ SELECT
   {cost} AS cost,
   {reverse_cost} AS reverse_cost,
   l.wayid,
-  l.segment
+  l.segment,
+  l.planned OR l.construction AS planned
 FROM "{network}".links l;
         """.format(network=self.network, cost=cost, reverse_cost=reverse_cost)
         self.run_query(sql)
@@ -438,12 +439,7 @@ FROM "{network}".links l;
 CREATE OR REPLACE VIEW "{network}".walk_cycle_network AS
 SELECT l.*
 FROM
-  "{network}".links_reached_without_planned l;
-
-CREATE OR REPLACE VIEW "{network}".walk_cycle_network_only_by_planned AS
-SELECT l.*
-FROM
-  "{network}".links_reached_only_by_planned l;
+  "{network}".links_reached l;
 """.format(network=self.network)
         self.run_query(sql)
 
@@ -477,8 +473,8 @@ if __name__ == '__main__':
                         dest="user", default='osm')
 
     parser.add_argument("--links-to-find", action="store",
-                        help="share of links to find", type=float,
-                        dest="links_to_find", default=0.25)
+                        help="minimum number of connected links to find", type=int,
+                        dest="links_to_find", default=10)
 
     parser.add_argument("--routing_walk", action='store_true',
                         help='routing for walking (cycling is the default',
@@ -488,18 +484,23 @@ if __name__ == '__main__':
                         help="corine landuse table",
                         dest="corine", default='clc18')
 
+    parser.add_argument("--detailed_network_area", action="store",
+                        help="detailed_network_area",
+                        dest="detailed_network_area", default='')
+
     options = parser.parse_args()
 
-    build_network = BuildNetworkWalkCycle(schema='osm',
-                                          network_schema='network_fr',
-                                          db=options.db,
-                                          limit=options.limit,
-                                          chunksize=options.chunksize,
-                                          links_to_find=options.links_to_find,
-                                          corine=options.corine,
-                                          routing_walk=options.routing_walk,
-                                          detailed_network_area=detailed_network_area,
-                                          )
+    build_network = BuildNetworkWalkCycle(
+        schema='osm',
+        network_schema='network_fr',
+        db=options.db,
+        limit=options.limit,
+        chunksize=options.chunksize,
+        links_to_find=options.links_to_find,
+        corine=options.corine,
+        routing_walk=options.routing_walk,
+        detailed_network_area=options.detailed_network_area,
+        )
     build_network.set_login(host=options.host,
                             port=options.port,
                             user=options.user)

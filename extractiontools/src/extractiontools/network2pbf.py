@@ -74,7 +74,7 @@ CREATE MATERIALIZED VIEW "{schema}".ways AS
     l.wayid AS way_id_original,
     st_transform(w.bbox, {srid}) AS bbox,
     st_transform(w.linestring, {srid}) AS linestring
-   FROM osm.ways w, {network}.links_reached_without_planned l
+   FROM osm.ways w, {network}.links_reached l
    WHERE w.id = l.wayid;
 CREATE INDEX way_id_idx ON "{schema}".ways
 USING btree(id);
@@ -326,13 +326,13 @@ CREATE MATERIALIZED VIEW "{schema}".ways AS
    FROM osm.ways w
    LEFT JOIN "{schema}".way_relations wr ON w.id = wr.id
    ,
-     {network}.links_reached_without_planned l,
+     {network}.links_reached l,
    (SELECT
    l.wayid, l.segment,
    array_agg(lp.nodeid ORDER BY lp.idx) AS nodes
    FROM
    {network}.link_points lp,
-   {network}.links_reached_without_planned l
+   {network}.links_reached l
    WHERE lp.wayid = l.wayid
    AND lp.segment = l.segment
    GROUP BY l.wayid, l.segment

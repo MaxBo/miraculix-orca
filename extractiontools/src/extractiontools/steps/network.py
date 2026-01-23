@@ -36,7 +36,7 @@ default_login = Login(
 def build_network_car(database: str,
                       chunksize: int,
                       limit4links: int,
-                      links_to_find: float,
+                      links_to_find: int,
                       corine: str,
                       network_schema: str):
     """
@@ -58,9 +58,10 @@ def build_network_car(database: str,
       'und ein größeres Gebiet mit grober Auflösung ')
 @orca.step()
 def build_graduated_network_car(database: str,
+                                include_planning: bool,
                                 chunksize: int,
                                 limit4links: int,
-                                links_to_find: float,
+                                links_to_find: int,
                                 corine: str,
                                 network_graduated_schema: str,
                                 detailed_area: ogr.Geometry,
@@ -73,6 +74,7 @@ def build_graduated_network_car(database: str,
                                           limit=limit4links,
                                           chunksize=chunksize,
                                           links_to_find=links_to_find,
+                                          include_planning=include_planning,
                                           corine=corine,
                                           logger=orca.logger,
                                           detailed_network_area=detailed_area,
@@ -86,9 +88,10 @@ def build_graduated_network_car(database: str,
       'Modi Fahrrad und optional zu Fuß (Parameter) bauen')
 @orca.step()
 def build_network_fr(database: str,
+                     include_planning: bool,
                      chunksize: int,
                      limit4links: int,
-                     links_to_find: float,
+                     links_to_find: int,
                      corine: str,
                      routing_walk: bool,
                      network_fr_schema: str,
@@ -106,6 +109,7 @@ def build_network_fr(database: str,
         corine=corine,
         routing_walk=routing_walk,
         logger=orca.logger,
+        include_planning=include_planning,
         detailed_network_area=detailed_area,
     )
     build_network.build()

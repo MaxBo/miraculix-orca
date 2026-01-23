@@ -14,14 +14,15 @@ class BuildNetwork(DBApp):
     role = 'group_osm'
 
     def __init__(self,
-                 schema='osm',
-                 network_schema='network',
-                 db='extract',
+                 schema: str='osm',
+                 network_schema: str='network',
+                 db: str='extract',
                  limit: int = None,
                  chunksize: int = 1000,
-                 links_to_find: float = 0.25,
+                 links_to_find: int = 10,
                  corine: str = 'clc18',
-                 routing_walk=False,
+                 include_planning: bool=False,
+                 routing_walk: bool=False,
                  **kwargs
                  ):
         super().__init__(**kwargs)
@@ -34,7 +35,8 @@ class BuildNetwork(DBApp):
         self.chunksize = chunksize
         self.links_to_find = links_to_find
         self.corine = corine
-        self.routing_walk = False
+        self.routing_walk = routing_walk
+        self.include_planning = include_planning
         self.pg_replacement = '_pg_replacement'
 
     def build(self):
@@ -83,17 +85,11 @@ class BuildNetwork(DBApp):
             self.update_egde_table()
             self.conn.commit()
             self.create_topology()
-            self.create_edge_reached()
+            self.create_views_reachable_edges()
             self.conn.commit()
-            # search accessible links including links reached by planned roads
-            self.try_startvertices(n=20, k=20)
-            self.copy_edge_reached_with_planned()
-            # search links accessible only by existing roads
-            self.update_edge_table_with_construction()
-            self.try_startvertices(n=20, k=20)
 
             # create the final views
-            self.create_view_accessible_links()
+            self.create_views_accessible_links()
             self.create_views_roadtypes()
             self.conn.commit()
             self.reset_authorization(self.conn)
@@ -1141,13 +1137,13 @@ CLUSTER "{network}".links USING idx_links_geom;
         """.format(network=self.network)
         self.run_query(sql)
 
-    def create_view_accessible_links(self):
+    def create_views_accessible_links(self):
         """
         Create the views for the accessible links
         """
         self.logger.info('Create View with accessible links')
         sql = """
-CREATE OR REPLACE VIEW "{network}".links_reached_without_planned AS
+CREATE OR REPLACE VIEW "{network}".links_reached AS
 SELECT l.*, lt.road_category
 FROM
   "{network}".links l,
@@ -1156,23 +1152,12 @@ FROM
 WHERE l.wayid=e.wayid AND l.segment=e.segment
 AND l.linktype = lt.id;
 
-CREATE OR REPLACE VIEW "{network}".links_reached_only_by_planned AS
-SELECT l.*, lt.road_category
-FROM
-  "{network}".links l,
-  classifications.linktypes lt,
-  "{network}".edges_reached_with_planned ep
-  LEFT JOIN "{network}".edges_reached e ON ep.id = e.id
-WHERE l.wayid=ep.wayid AND l.segment=ep.segment
-AND e.id IS NULL
-AND l.linktype = lt.id;
-
 CREATE OR REPLACE VIEW "{network}".unaccessible_links AS
 SELECT lt.road_category, l.*
 FROM
   classifications.linktypes lt,
   "{network}".links l LEFT JOIN
-  "{network}".edges_reached_with_planned e
+  "{network}".edges_reached e
   ON l.wayid=e.wayid AND l.segment=e.segment
 WHERE e.id IS NULL
 AND l.linktype=lt.id;
@@ -1188,49 +1173,25 @@ AND l.linktype=lt.id;
 CREATE OR REPLACE VIEW "{network}".autobahn AS
 SELECT l.*
 FROM
-  "{network}".links_reached_without_planned l
+  "{network}".links_reached l
   WHERE road_category='A';
 
 CREATE OR REPLACE VIEW "{network}".hauptstr AS
 SELECT l.*
 FROM
-  "{network}".links_reached_without_planned l
+  "{network}".links_reached l
   WHERE road_category='B';
 
 CREATE OR REPLACE VIEW "{network}".nebennetz AS
 SELECT l.*
 FROM
-  "{network}".links_reached_without_planned l
+  "{network}".links_reached l
   WHERE road_category='C';
 
 CREATE OR REPLACE VIEW "{network}".faehren AS
 SELECT l.*
 FROM
-  "{network}".links_reached_without_planned l
-  WHERE road_category='D';
-
-CREATE OR REPLACE VIEW "{network}".autobahn_accessible_only_by_planned AS
-SELECT l.*
-FROM
-  "{network}".links_reached_only_by_planned l
-  WHERE road_category='A';
-
-CREATE OR REPLACE VIEW "{network}".hauptstr_accessible_by_planned AS
-SELECT l.*
-FROM
-  "{network}".links_reached_only_by_planned l
-  WHERE road_category='B';
-
-CREATE OR REPLACE VIEW "{network}".nebennetz_accessible_by_planned AS
-SELECT l.*
-FROM
-  "{network}".links_reached_only_by_planned l
-  WHERE road_category='C';
-
-CREATE OR REPLACE VIEW "{network}".faehren_accessible_by_planned AS
-SELECT l.*
-FROM
-  "{network}".links_reached_only_by_planned l
+  "{network}".links_reached l
   WHERE road_category='D';
 
         """.format(network=self.network)
@@ -1254,7 +1215,8 @@ geom geometry(LineString,{srid}),
 cost float,
 reverse_cost float,
 wayid bigint,
-segment integer);
+segment integer,
+planned boolean);
 
 CREATE INDEX edge_table_geom_idx ON "{network}".edge_table USING gist(geom);
 CREATE INDEX edge_table_ft_idx ON "{network}".edge_table USING btree(fromnode, tonode);
@@ -1288,7 +1250,7 @@ e.fromnode=l.fromnode AND e.tonode=l.tonode AND
 
 TRUNCATE "{network}".edge_table;
 INSERT INTO "{network}".edge_table (id, fromnode, tonode, linkid, geom,
-cost, reverse_cost, wayid, segment)
+cost, reverse_cost, wayid, segment, planned)
 SELECT
   row_number() OVER (ORDER BY fromnode, tonode)::integer AS id,
   fromnode,
@@ -1298,7 +1260,8 @@ SELECT
   l.t_kfz AS cost,
   CASE WHEN l.oneway THEN -1 ELSE l.t_kfz END AS reverse_cost,
   l.wayid,
-  l.segment
+  l.segment,
+  l.planned OR l.construction AS planned
 FROM "{network}".links l;
         """.format(network=self.network)
         self.run_query(sql)
@@ -1309,228 +1272,76 @@ FROM "{network}".links l;
         """
         self.logger.info('Create Topology')
 
-        chunksize = 50000
-        cursor = self.conn.cursor()
-        sql = 'SELECT max(e.id) FROM "{network}".edge_table e;'
-        cursor.execute(sql.format(network=self.network))
-        n_edges = cursor.fetchone()[0]
-
-        for fromrow in range(0, n_edges, chunksize):
-            torow = fromrow + chunksize
-            sql = """
-SELECT pgr_createTopology(E'{network}.edge_table',
-    {tolerance},
-    'geom',
-    'id',
-    'source',
-    'target',
-    rows_where := 'id >= {fromrow} AND id < {torow}',
-    clean := false::boolean);
-COMMIT;
-""".format(tolerance=0.000001, network=self.network,
-                fromrow=fromrow, torow=torow)
-            self.logger.info(
-                'create topology for edges {} to {}'.format(fromrow, torow))
-            self.run_query(sql)
-
-        sql = """
-SELECT pgr_analyzeGraph(E'{network}.edge_table',{tolerance},
-'geom','id','source','target');
-        """.format(tolerance=0.000001, network=self.network)
-        self.logger.info('Analyze Graph')
+        sql = f'''
+        SELECT * INTO {self.network}.edge_table_vertices_pgr
+        FROM pgr_extractVertices(
+            'SELECT id, geom FROM {self.network}.edge_table'
+        );
+        '''
+        self.logger.info('Extracting vertices')
         self.run_query(sql)
 
-    def create_edge_reached(self):
-        """
-        """
-        self.logger.info(
-            'Create Materialized Views with edges reached from a start vertex')
+        update_st_sql = f'''
+        UPDATE {self.network}.edge_table AS e
+        SET source = v.id
+        FROM {self.network}.edge_table_vertices_pgr AS v
+        WHERE ST_StartPoint(e.geom) = v.geom;
+        UPDATE {self.network}.edge_table AS e
+        SET target = v.id
+        FROM {self.network}.edge_table_vertices_pgr AS v
+        WHERE ST_EndPoint(e.geom) = v.geom;
+        '''
+        self.logger.info('Setting source and target vertices to edges')
+        self.run_query(update_st_sql)
 
-        # init the driving distance queries
-        self.update_pgr_driving_distance()
-        # create queries
-        sql = """
-CREATE MATERIALIZED VIEW "{network}".reached_from_mat AS
-SELECT * FROM "{network}".reached_from
-WITH NO DATA;
+    def create_views_reachable_edges(self):
+        self.create_view_reachable_nodes('nodes_reached', planned=self.include_planning,
+                                         min_component_size=self.links_to_find)
+        self.create_view_reachable_edges('edges_reached', 'nodes_reached',
+                                         planned=self.include_planning)
 
-CREATE MATERIALIZED VIEW "{network}".reached_to_mat AS
-SELECT * FROM "{network}".reached_to
-WITH NO DATA;
+    def create_view_reachable_nodes(self, target_view_name, planned=False, min_component_size=10):
+        where = 'WHERE planned = FALSE' if not planned else ''
+        edge_query = f'SELECT id, source, target, cost, reverse_cost FROM {self.network}.edge_table {where};'
+        sql = f'''
+        CREATE OR REPLACE VIEW "{self.network}"."{target_view_name}" AS
+        WITH c AS (
+        SELECT * FROM pgr_strongComponents('{edge_query}')
+        ),
+        d AS (
+        SELECT c.component, count(*) AS cnt
+        FROM c
+        GROUP BY c.component)
 
-CREATE INDEX idx_node_reached_from ON "{network}".reached_from_mat
-USING btree(node);
-CREATE INDEX idx_node_reached_to ON "{network}".reached_to_mat
-USING btree(node);
-
-CREATE MATERIALIZED VIEW "{network}".edges_reached AS
--- edges reached in both directions
-SELECT e.id, e.fromnode, e.tonode, e.wayid, e.segment
-FROM
-    "{network}".edge_table e,
-    "{network}".reached_from_mat h,
-    "{network}".reached_to_mat r
-WHERE
-    e."source" = h.node AND
-    e."target" = r.node
-WITH NO DATA;
-
-CREATE INDEX idx_id_edges_reached ON "{network}".edges_reached
-USING btree(id);
-CREATE INDEX idx_nodes_edges_reached ON "{network}".edges_reached
-USING btree(fromnode, tonode);
-
-DROP TABLE IF EXISTS "{network}".edges_reached_with_planned CASCADE;
-CREATE TABLE "{network}".edges_reached_with_planned
-(id integer primary key,
-fromnode bigint,
-tonode bigint,
-wayid bigint,
-segment integer);
-CREATE INDEX idx_nodes_edges_reached_with_planned
-ON "{network}".edges_reached_with_planned
-USING btree(fromnode, tonode);
-
-CREATE OR REPLACE VIEW "{network}".vertexes_reached AS
--- vertexes reached in both directions
-SELECT h.node
-FROM
-  "{network}".reached_from_mat h,
-  "{network}".reached_to_mat r
-WHERE h.node = r.node;
-        """.format(network=self.network)
+        SELECT
+        c.node, c.component
+        FROM c, d
+        WHERE c.component = d.component
+        AND d.cnt > {min_component_size};
+        '''
         self.run_query(sql)
 
-    def try_startvertices(self, n=20, k=4):
-        """
-        search vertices in the surrounding of the centroid of the vertices
-        or the biggest cluster of vertices
-
-        Parameters
-        ----------
-        n : int
-            the total number of vertices to test
-        k : int
-            the number of clusters to test
-        """
-        self.logger.info('search from different clusters of vertices')
-
-        sql = """
-WITH cluster AS
-(SELECT c.s, c.geom
-FROM
-(SELECT
-  k.s,
-  k.kmeans,
-  row_number() OVER(PARTITION BY k.s ORDER BY count(*) DESC) rn,
-  ST_Centroid(ST_Collect(k.geom)) AS geom
-FROM (
-  SELECT
-    cl.s,
-    kmeans(ARRAY[ST_X(j.the_geom), ST_Y(j.the_geom)], cl.s) OVER (PARTITION BY cl.s),
-    j.the_geom AS geom
-  FROM "{network}".edge_table_vertices_pgr j,
-  (SELECT generate_series(1, {k}) s) cl
-) AS k
-GROUP BY k.s, k.kmeans) c
-WHERE c.rn = 1)
-
-SELECT e.id, e.geom, e.s, e.rn
-FROM (
-SELECT v.id , v.the_geom AS geom,
-cluster.s,
-row_number() OVER (PARTITION BY cluster.s ORDER BY v.the_geom <-> cluster.geom) AS rn
-FROM "{network}".edge_table_vertices_pgr v, cluster) e
-ORDER BY e.rn, e.s
-LIMIT {n};
-        """.format(n=n, k=k, network=self.network)
-        cursor = self.conn.cursor()
-        cursor.execute(sql)
-        vertices = cursor.fetchall()
-
-        sql = """
-SELECT count(*) FROM "{network}".links;
-        """.format(network=self.network)
-        cursor.execute(sql)
-        row = cursor.fetchone()
-        self.n_links = row.count
-        self.logger.info('{n} links in total'.format(n=self.n_links))
-
-        sql_count_result = """
-REFRESH MATERIALIZED VIEW "{network}".reached_from_mat;
-REFRESH MATERIALIZED VIEW "{network}".reached_to_mat;
-REFRESH MATERIALIZED VIEW "{network}".edges_reached;
-SELECT count(*) FROM "{network}".edges_reached;
-        """.format(network=self.network)
-
-        i = 0
-        msg = '{i} try to search accessible edges from vertex {v}'
-
-        for vertex in vertices:
-            i += 1
-            self.update_pgr_driving_distance(startvertex=vertex.id,
-                                             maxcosts=10000000)
-
-            self.logger.info(msg.format(i=i, v=vertex.id))
-            self.logger.debug(sql_count_result)
-            cursor.execute(sql_count_result)
-            row = cursor.fetchone()
-            links_reached = float(row.count)
-            msg2 = '{f} out of {n} edges reached'
-            self.logger.info(msg2.format(
-                f=int(links_reached), n=self.n_links))
-            if links_reached > self.n_links * self.links_to_find:
-                sql = 'ANALYZE "{network}".edges_reached;'.format(
-                    network=self.network)
-                self.run_query(sql)
-                return
-
-        msg = 'No Vertex has been found that is accessible at least by at least {n:0.0f}% of the links in the network'
-        raise ValueError(msg.format(n=self.links_to_find * 100))
-
-    def update_pgr_driving_distance(self, startvertex=1, maxcosts=10000000):
-        """
-        unreached nodes
-        """
-        sql = """
-
-CREATE OR REPLACE VIEW "{network}".reached_from AS
--- Knoten, die in Hinrichtung erreicht werden
-SELECT seq, node::integer, agg_cost AS cost
-FROM "{pg}".pgr_drivingDistance(
-E'SELECT id, source, target, cost, reverse_cost
-FROM "{network}".edge_table',
-{startvertex}, {maxcosts}, true
-);
-
-CREATE OR REPLACE VIEW "{network}".reached_to AS
--- Knoten, die in Hinrichtung erreicht werden
-SELECT seq, node::integer, agg_cost AS cost
-FROM "{pg}".pgr_drivingDistance(
-E'SELECT id, source, target, reverse_cost as cost, cost as reverse_cost
- FROM "{network}".edge_table',
-{startvertex}, {maxcosts}, true
-);
-""".format(startvertex=startvertex, maxcosts=maxcosts, network=self.network,
-           pg=self.pg_replacement)
-        self.run_query(sql)
-
-    def copy_edge_reached_with_planned(self):
-        """
-        copy edge_reached into new table
-        """
-        self.logger.info(
-            'Save edges reached with planned roads to table edges_reached')
-
-        sql = """
-TRUNCATE "{network}".edges_reached_with_planned;
-INSERT INTO "{network}".edges_reached_with_planned
-  (id, fromnode, tonode, wayid, segment)
-SELECT e.id, e.fromnode, e.tonode, e.wayid, e.segment
-FROM "{network}".edges_reached e;
-            """.format(network=self.network)
-        self.run_query(sql)
-
+    def create_view_reachable_edges(self, edges_target_view_name, nodes_view_name, planned=False):
+        edges_sql = f'''
+        CREATE OR REPLACE VIEW "{self.network}"."{edges_target_view_name}"(
+            id,
+            fromnode,
+            tonode,
+            wayid,
+            segment)
+        AS
+        SELECT e.id,
+            e.fromnode,
+            e.tonode,
+            e.wayid,
+            e.segment
+        FROM
+        "{self.network}".edge_table e,
+        "{self.network}"."{nodes_view_name}" h,
+        "{self.network}"."{nodes_view_name}" r
+        WHERE {'e.planned = FALSE AND ' if not planned else ''}e.source = h.node AND e.target = r.node;
+        '''
+        self.run_query(edges_sql)
 
 if __name__ == '__main__':
 
@@ -1561,8 +1372,8 @@ if __name__ == '__main__':
                         dest="user", default='osm')
 
     parser.add_argument("--links-to-find", action="store",
-                        help="share of links to find", type=float,
-                        dest="links_to_find", default=0.25)
+                        help="minimum number of connected links to find", type=int,
+                        dest="links_to_find", default=10)
 
     parser.add_argument("--corine", action="store",
                         help="corine landuse table",
@@ -1576,7 +1387,7 @@ if __name__ == '__main__':
                                  limit=options.limit,
                                  chunksize=options.chunksize,
                                  links_to_find=options.links_to_find,
-                                 corine=corine)
+                                 corine=options.corine)
     build_network.set_login(host=options.host,
                             port=options.port,
                             user=options.user)
