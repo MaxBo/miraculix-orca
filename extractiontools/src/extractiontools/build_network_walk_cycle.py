@@ -438,7 +438,7 @@ FROM "{network}".links l;
 CREATE OR REPLACE VIEW "{network}".walk_cycle_network AS
 SELECT l.*
 FROM
-  "{network}".links_reached_without_planned l;
+  "{network}".links_reached l;
 
 CREATE OR REPLACE VIEW "{network}".walk_cycle_network_only_by_planned AS
 SELECT l.*
