@@ -1372,8 +1372,8 @@ if __name__ == '__main__':
                         dest="user", default='osm')
 
     parser.add_argument("--links-to-find", action="store",
-                        help="share of links to find", type=float,
-                        dest="links_to_find", default=0.25)
+                        help="minimum number of connected links to find", type=int,
+                        dest="links_to_find", default=10)
 
     parser.add_argument("--corine", action="store",
                         help="corine landuse table",
@@ -1387,7 +1387,7 @@ if __name__ == '__main__':
                                  limit=options.limit,
                                  chunksize=options.chunksize,
                                  links_to_find=options.links_to_find,
-                                 corine=corine)
+                                 corine=options.corine)
     build_network.set_login(host=options.host,
                             port=options.port,
                             user=options.user)

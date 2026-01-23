@@ -473,8 +473,8 @@ if __name__ == '__main__':
                         dest="user", default='osm')
 
     parser.add_argument("--links-to-find", action="store",
-                        help="share of links to find", type=float,
-                        dest="links_to_find", default=0.25)
+                        help="minimum number of connected links to find", type=int,
+                        dest="links_to_find", default=10)
 
     parser.add_argument("--routing_walk", action='store_true',
                         help='routing for walking (cycling is the default',

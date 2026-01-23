@@ -401,7 +401,7 @@ def links_to_find() -> int:
 
 
 @meta(group='(3) Netzwerk', title='inkl. Planung/Konstruktion',
-      description="Füge  geplante oder im Bau befindliche Straßen zu dem zu bauenden Netzwerk hinzu (ja) oder schließe sie aus (nein).")
+      description="Füge geplante oder im Bau befindliche Straßen zu dem zu bauenden Netzwerk hinzu (ja) oder schließe sie aus (nein).")
 @orca.injectable()
 def include_planning() -> bool:
     """include planned roads and roads under construction in the built car network if true"""
