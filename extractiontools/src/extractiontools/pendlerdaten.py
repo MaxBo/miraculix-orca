@@ -51,7 +51,7 @@ class ExtractRegionalstatistik(Extract):
         FROM {self.temp}.svb_jahr s,
         {self.gemeindelayer} g
         WHERE
-        g.gf = 4
+        g.gf IN (4, 9)
         AND g.ags = s.ags
         AND s.jahr=ANY(%s)
         """
@@ -71,7 +71,7 @@ class ExtractRegionalstatistik(Extract):
         FROM {self.temp}.kfz s,
         {self.gemeindelayer} g
         WHERE
-        g.gf = 4
+        g.gf IN (4, 9)
         AND g.ags = s.ags
         AND s.jahr=ANY(%s)
         """
@@ -91,7 +91,7 @@ class ExtractRegionalstatistik(Extract):
         FROM {self.temp}.arbeitslose s,
         {self.gemeindelayer} g
         WHERE
-        g.gf = 4
+        g.gf IN (4, 9)
         AND g.ags = s.ags8
         AND s.jahr=ANY(%s)
         """
