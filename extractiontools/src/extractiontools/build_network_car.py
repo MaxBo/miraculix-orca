@@ -628,7 +628,7 @@ PARALLEL UNSAFE
 COST 10000 ROWS 10000
 AS'
     SELECT seq, component, node
-    FROM _pgr_strongComponents(_pgr_get_statement($1));
+    FROM public._pgr_strongComponents(public._pgr_get_statement($1));
 ';
 
 COMMENT ON FUNCTION "{self.pg_replacement}".pgr_strongcomponents(text, out seq bigint, out component bigint, out node bigint)
