@@ -613,6 +613,33 @@ COMMENT ON FUNCTION "{self.pg_replacement}".pgr_drivingdistance(text, bigint, do
 - Documentation:
    - https://docs.pgrouting.org/latest/en/pgr_drivingDistance.html
 ';
+
+CREATE OR REPLACE FUNCTION "{self.pg_replacement}".pgr_strongcomponents (
+  text,
+  out seq bigint,
+  out component bigint,
+  out node bigint
+)
+RETURNS SETOF record LANGUAGE 'sql'
+VOLATILE
+RETURNS NULL ON NULL INPUT
+SECURITY INVOKER
+PARALLEL UNSAFE
+COST 10000 ROWS 10000
+AS'
+    SELECT seq, component, node
+    FROM _pgr_strongComponents(_pgr_get_statement($1));
+';
+
+COMMENT ON FUNCTION "{self.pg_replacement}".pgr_strongcomponents(text, out seq bigint, out component bigint, out node bigint)
+IS 'pgr_strongComponents
+- Directed graph
+- Parameters:
+  - Edges SQL with columns: id, source, target, cost [,reverse_cost]
+- Documentation:
+  - https://docs.pgrouting.org/latest/en/pgr_strongComponents.html
+';
+
 '''
         cur.execute(sql)
 
@@ -1306,7 +1333,7 @@ FROM "{network}".links l;
         sql = f'''
         CREATE OR REPLACE VIEW "{self.network}"."{target_view_name}" AS
         WITH c AS (
-        SELECT * FROM pgr_strongComponents('{edge_query}')
+        SELECT * FROM "{self.pg_replacement}".pgr_strongComponents('{edge_query}')
         ),
         d AS (
         SELECT c.component, count(*) AS cnt
