@@ -185,14 +185,14 @@ class ExtractGTFS():
                          (tt['trip_id'] == tt['next_trip_id']) &
                          ~(tt['stop_id'] == tt['next_stop_id']))
         # get the next stops as well
-        second_dup_idx = first_dup_idx.shift(1).fillna(False)
+        second_dup_idx = first_dup_idx.shift(1, fill_value=False)
         chained_dup = tt[second_dup_idx | first_dup_idx]
         # exclude those stops from merging with other stops
         # paying attention to route type
         exclude = chained_dup.groupby(
             ['stop_id','route_type']).size().reset_index()[
                 ['stop_id','route_type']]
-        ex_idx = np.array([False] * len(duplicated))
+        ex_idx = np.zeros(len(duplicated), dtype=bool)
         # that seems a little excessive, no idea how to do it without a loop
         # it isn't a thing that happens a lot though
         # alternatively we could build and use type_stop_id
@@ -215,6 +215,7 @@ class ExtractGTFS():
         # handle this per route type because some stops that are flagged
         # for removal might already have been split by route type
         reassign_map_union = {}
+        tt_with_rt['stop_id_revised'] = tt_with_rt['stop_id']
         for route_type in stops_to_remove['route_type'].unique():
             if route_type is None or gp.np.isnan(route_type):
                 r_idx = stops_to_remove['route_type'].isna()
