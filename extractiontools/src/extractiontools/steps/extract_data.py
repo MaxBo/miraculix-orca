@@ -190,7 +190,7 @@ def create_osm_views(database: str):
     attention: drops already existing OSM views and dependent views cascadingly
     """
     copy2fgdb = CopyOSM2FGDB(destination_db=database,
-                             layers=osm_layers,
+                             layers=osm_layers(),
                              filename='osm_layers.gdb',
                              schema='osm_layer',
                              logger=orca.logger)

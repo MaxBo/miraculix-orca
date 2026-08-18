@@ -1,10 +1,6 @@
-"""convert bytestring with html to unicode"""
+"""Convert a CP1252 byte string containing HTML entities to Unicode."""
 
-from html.entities import entitydefs, codepoint2name, name2codepoint
-
-name2codepoint['apos'] = 39
-entitydefs['apos'] = '\x27'
-codepoint2name[39] = 'apos'
+from html import unescape
 
 
 def htmlentitydecode(string_cp1252: bytes) -> str:
@@ -13,12 +9,7 @@ def htmlentitydecode(string_cp1252: bytes) -> str:
     and replace some special characters
     """
     try:
-        ustr = string_cp1252.decode('cp1252')
-        for key, value in entitydefs.items():
-            if value.startswith('&'):
-                ustr = ustr.replace(value, chr(name2codepoint[key]))
-        for key in codepoint2name:
-            ustr = ustr.replace(f'&#{key};', chr(key))
+        ustr = unescape(string_cp1252.decode('cp1252'))
     except UnicodeDecodeError:
         ustr = string_cp1252
     return ustr
