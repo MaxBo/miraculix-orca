@@ -27,7 +27,7 @@ CREATE OR REPLACE VIEW
 SELECT
 v.cellcode,
 v.pnt_laea,
-z.einwohner
+z.einwohner2022 AS einwohner
 FROM
 laea.zensus_ew_hectar z,
 laea.laea_vector_100 v
